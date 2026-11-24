@@ -418,16 +418,22 @@ static int test_opening(void) {
                      "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
                      "\"re2:logic/104-0\":{\"type\":\"RoomLogic\","
                      "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
-                     "\"re2:room/100\":{\"type\":\"ImageSet\"}}\n", sha, sha);
+                     "\"re2:logic/100-1\":{\"type\":\"RoomLogic\","
+                     "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
+                     "\"re2:logic/104-1\":{\"type\":\"RoomLogic\","
+                     "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
+                     "\"re2:room/100\":{\"type\":\"ImageSet\"}}\n", sha, sha, sha, sha);
     EXPECT(!fclose(catalog));
 
-    enum { LEON_A, LEON_B = 2 };
+    enum { LEON_A, CLAIRE_A, LEON_B, CLAIRE_B };
     static const struct {
         int choice, skip, load_save;
         unsigned missing, stops;
     } cases[] = {
         {LEON_A, 0, 0, 0, 2},
         {LEON_B, 1, 0, 0, 2},
+        {CLAIRE_A, 0, 0, 0, 2},
+        {CLAIRE_B, 1, 0, 0, 2},
         {LEON_B, 0, 0, 1, 1},   /* first missing */
         {LEON_A, 0, 0, 2, 1},   /* second missing */
         {LEON_A, 0, 0, 3, 0},   /* both missing */
@@ -445,7 +451,9 @@ static int test_opening(void) {
         s.choice = cases[i].choice;
         s.busy = 0;
         frames(2, RE_HOST_CROSS);
-        EXPECT(!strcmp(s.movie_assets[0], "re2:movie/opn1stl"));
+        const int claire = cases[i].choice == CLAIRE_A || cases[i].choice == CLAIRE_B;
+        const int scenario_b = cases[i].choice == LEON_B || cases[i].choice == CLAIRE_B;
+        EXPECT(!strcmp(s.movie_assets[0], claire ? "re2:movie/opn1stc" : "re2:movie/opn1stl"));
         if (cases[i].skip) {
             EXPECT(!s.active && s.movie_locked && s.movie_muted);
             frames(1, RE_HOST_CROSS);  /* the menu press must not skip */
@@ -472,10 +480,12 @@ static int test_opening(void) {
         if (cases[i].load_save) {
             EXPECT(!s.active && !s.rooms && s.movie_starts == 1 && !s.movie_muted);
         } else {
-            const int leon_b = cases[i].choice == LEON_B;
+            static const char *const second[] = {
+                "re2:movie/opn2ndl", "re2:movie/opn2ndc", "re2:movie/opn2ndrl", "re2:movie/opn2ndrc",
+            };
             EXPECT(s.movie_starts == 2);
-            EXPECT(!strcmp(s.movie_assets[1], leon_b ? "re2:movie/opn2ndrl" : "re2:movie/opn2ndl"));
-            EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, leon_b ? "re2:room/104" : "re2:room/100"));
+            EXPECT(!strcmp(s.movie_assets[1], second[cases[i].choice]));
+            EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, scenario_b ? "re2:room/104" : "re2:room/100"));
             EXPECT(!s.movie_muted_at_room_start);
         }
         pe_mod_pe_re_play.shutdown();

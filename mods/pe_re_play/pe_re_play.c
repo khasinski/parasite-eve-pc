@@ -590,27 +590,27 @@ static void stop_movie(void) {
 }
 
 typedef struct {
-    const char *asset;
+    const char *asset, *claire_asset;
     unsigned start_sector, last_frame;
     int leon_only, silent;
 } ReMovie;
 
 enum {
     RE2_MOVIE_OPENING_FIRST = 3,
-    RE2_MOVIE_LEON_A_OPENING_SECOND = 15,
-    RE2_MOVIE_LEON_B_OPENING_SECOND = 16
+    RE2_MOVIE_A_OPENING_SECOND = 15,
+    RE2_MOVIE_B_OPENING_SECOND = 16
 };
 
-/* OPENING.C selects timelines A and B for Leon's two scenarios. */
-static const unsigned s_leon_a_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_LEON_A_OPENING_SECOND, 0};
-static const unsigned s_leon_b_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_LEON_B_OPENING_SECOND, 0};
+/* OPENING.C selects the second clip by scenario. FILECODE.H maps the clip IDs to each disc. */
+static const unsigned s_scenario_a_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_A_OPENING_SECOND, 0};
+static const unsigned s_scenario_b_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_B_OPENING_SECOND, 0};
 
 /* Entries from Movie_tbl. The alternate excerpts seek to five
  * sectors per table offset unit. Character-specific names are verified for Leon. */
 static const ReMovie s_movies[] = {
     [1] = {.asset = "re2:movie/r200", .last_frame = 250},
     [2] = {.asset = "re2:movie/r200", .last_frame = 146},
-    [RE2_MOVIE_OPENING_FIRST] = {.asset = "re2:movie/opn1stl", .leon_only = 1},
+    [RE2_MOVIE_OPENING_FIRST] = {.asset = "re2:movie/opn1stl", .claire_asset = "re2:movie/opn1stc"},
     [4] = {.asset = "re2:movie/r10b"},
     [5] = {.asset = "re2:movie/r200", .last_frame = 90},
     [6] = {.asset = "re2:movie/r505", .last_frame = 598},
@@ -622,8 +622,8 @@ static const ReMovie s_movies[] = {
     [12] = {.asset = "re2:movie/r700l", .leon_only = 1},
     [13] = {.asset = "re2:movie/r703l", .leon_only = 1},
     [14] = {.asset = "re2:movie/r704l", .last_frame = 9187, .leon_only = 1},
-    [RE2_MOVIE_LEON_A_OPENING_SECOND] = {.asset = "re2:movie/opn2ndl", .leon_only = 1},
-    [RE2_MOVIE_LEON_B_OPENING_SECOND] = {.asset = "re2:movie/opn2ndrl", .leon_only = 1},
+    [RE2_MOVIE_A_OPENING_SECOND] = {.asset = "re2:movie/opn2ndl", .claire_asset = "re2:movie/opn2ndc"},
+    [RE2_MOVIE_B_OPENING_SECOND] = {.asset = "re2:movie/opn2ndrl", .claire_asset = "re2:movie/opn2ndrc"},
     [17] = {.asset = "re2:movie/r704l", .start_sector = 4589 * 5, .last_frame = 9247, .leon_only = 1, .silent = 1},
 };
 
@@ -641,9 +641,14 @@ static void movie_input(unsigned buttons) {
 static int start_movie(unsigned id) {
     const ReHost *host = re_host();
     const ReMovie *movie = id < sizeof s_movies / sizeof *s_movies ? &s_movies[id] : NULL;
-    if (s_movie_playing || !movie || !movie->asset || (movie->leon_only && s_session.player != 0) ||
+    const char *asset = movie ? movie->asset : NULL;
+    if (movie && s_session.player == 1) {
+        if (movie->claire_asset) asset = movie->claire_asset;
+        else if (movie->leon_only) asset = NULL;
+    }
+    if (s_movie_playing || !asset ||
         !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) || !RE_HOST_HAS(host, movie_stop) ||
-        !host->movie_start(movie->asset, movie->start_sector, movie->last_frame, movie->silent)) {
+        !host->movie_start(asset, movie->start_sector, movie->last_frame, movie->silent)) {
         pe_mod_log(MOD_ID, "Movie %u unavailable for player %u", id, (unsigned)s_session.player);
         return 0;
     }
@@ -832,11 +837,9 @@ static void tick_title(void)
         s_title = TITLE_CLOSED;
         if (s_title_choice == TITLE_CONTINUE) resume();
         else {
-            const unsigned *opening = NULL;
-            if (s_title_choice == TITLE_LEON_A) opening = s_leon_a_opening;
-            if (s_title_choice == TITLE_LEON_B) opening = s_leon_b_opening;
-            start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2,
-                       s_title_choice >= TITLE_LEON_B, opening);
+            const int scenario_b = s_title_choice >= TITLE_LEON_B;
+            start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2, scenario_b,
+                       scenario_b ? s_scenario_b_opening : s_scenario_a_opening);
         }
         return;
     }
