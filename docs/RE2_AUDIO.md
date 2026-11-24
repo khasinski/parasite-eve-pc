@@ -49,6 +49,21 @@ refer to the room's main script.
 | 7-00 | 7 | 12 | R700C | 3043 |
 | 7-03 | 13 | 13 | R703C | 2345 |
 
+Room 1-08 checks for scenario B and camera 7 before starting R108C.
+The Windows test has yet to reach that camera through gameplay.
+
+In Claire A, event zone 7 in room 2-04 starts the cutscene that plays
+R204C. The Windows test reached the clip through that event.
+
+In Claire A, event zone 6 in room 4-08 starts the cutscene whose
+dialogue leads to R408. The Windows test reached that clip and
+continued the dialogue after a skip.
+
+The 7-00 exit event (zone 2) is registered only in scenario A. In the
+Windows test, using that zone started R700C, and skipping it handed off
+to Claire A's ending movie. Claire B instead uses the train-controls
+event in 7-03 to start R703C.
+
 MOV3 imports
 preserve STR frame numbers as well as the video and XA sector positions.
 This lets R200, R505 and Leon's R704 play the excerpt requested by the room
