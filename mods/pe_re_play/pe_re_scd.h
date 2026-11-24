@@ -118,6 +118,7 @@ typedef struct PeReSceneActor {
     uint8_t absolute_parts;
     uint8_t field_pose;              /* field clip laid over the actor's simulated position */
     uint8_t direct, room_clip, reverse, start_frame, destination_pose;
+    uint8_t loop;                    /* a direct clip that loops (Sce_flg 0x04) rather than holding its last frame */
     char bank[PE_IMP_ID_MAX];
 } PeReSceneActor;
 
@@ -128,10 +129,17 @@ typedef struct PeReEffect {
     uint8_t id, type, handle, scale, attachment, target, loop, tagged;
 } PeReEffect;
 
+/* A scripted clip (plc_motion). For the player, the partner and people (0x40 up) the mode picks the
+ * bank as Spl_Scenario does (SPL_SCE.C): 0 the room's clips, 1 the actor's own, 2 and 3 its two sub
+ * banks; 10-13 the same with authored root motion (not applied yet). Sce_flg: 0x04 loops it (else it
+ * holds its last frame), 0x08 plays it at double speed, 0x10 at half (EM_SUB.H SCE_FLG_*). */
+enum { PE_RE_CLIP_ROOM, PE_RE_CLIP_OWN, PE_RE_CLIP_SUB0, PE_RE_CLIP_SUB1, PE_RE_CLIP_LEGACY = 0xFF };
 typedef struct {
     uint8_t active, move, reverse, next;
-    uint16_t elapsed;
+    uint16_t elapsed;                          /* clip frames played (60 Hz steps, by its speed) */
     uint8_t reset_parts, direct, start_frame;
+    uint8_t mode, bank, loop, speed, half;     /* plc_motion's mode, PE_RE_CLIP_*, loop, 2 double 0 half 1 normal */
+    uint16_t ticks;                            /* frames since it started, whatever its speed */
 } PeReSceneMotion;
 
 typedef struct {
@@ -205,6 +213,7 @@ typedef struct {
     uint8_t em_alerted[16];                    /* room-local awareness survives movement and camera cuts */
     uint16_t em_idle_ticks[16];                /* standing zombie's time since script release */
     PeReSceneMotion scene[16];
+    PeReSceneMotion pl_motion[2];              /* the player's and the partner's scripted clips (works 0, 1) */
     int nenemy;
     int naot_on;
     PeReEffect effects[PE_RE_EFFECT_MAX];

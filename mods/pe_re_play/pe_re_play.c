@@ -118,11 +118,21 @@ static void advance_enemies(double x, double z, int floor);
 
 static int scene_locked(void) { return s_movie_playing || s_session.run.movie_request || pe_re_session_controls_locked(&s_session); }
 
+/* Aya's pose while a scene has her: a scripted walk's mode, else a scripted clip from her sub bank 0,
+ * which holds the walk (move 0), run (1) and idle (2) as Spl_sce04-06 play them (SPL_SCE.C); other
+ * clips (the room's, her own) can't be shown on Aya's model, so she stands. */
+static int scene_move_mode(void) {
+    const PeReScdRun *r = &s_session.run;
+    if (r->actor_stopped[0]) return 0;
+    if (r->player_dest.moving) return r->player_dest.mode;
+    const PeReSceneMotion *m = &r->pl_motion[0];
+    if (m->active && m->bank == PE_RE_CLIP_SUB0) return m->move == 0 ? 4 : m->move == 1 ? 5 : 0;
+    return 0;
+}
 static void sync_scene_controls(void) {
     const ReHost *host = re_host();
     if (host->struct_size >= offsetof(ReHost, scene_controls) + sizeof host->scene_controls && host->scene_controls)
-        host->scene_controls(scene_locked(), s_session.run.player_dest.moving && !s_session.run.actor_stopped[0] ?
-                             s_session.run.player_dest.mode : 0);
+        host->scene_controls(scene_locked(), scene_move_mode());
 }
 static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
 static int prepare_boss(uint8_t slot);

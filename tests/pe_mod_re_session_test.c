@@ -190,6 +190,45 @@ static void test_licker_variants(const PeReGame *game, unsigned player) {
     }
 }
 
+/* 2-02's Marvin scene (proc 3): the player's plc_motion 02 02 04 is her sub bank's idle, looping; Marvin's
+ * 02 00 14 a sub-bank clip that loops at half speed (SPL_SCE.C modes, EM_SUB.H SCE_FLG_*). */
+static void test_scripted_clips(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession scene = {.game = game, .stage = 1, .room = 2};
+    PeReFlags *flags = &scene.progress.flags;
+    if (player) return;                                       /* Leon's room file */
+    pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+    if (!scene.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = scene.stage;
+    flags->work[PE_RE_WORK_ROOM] = scene.room;
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    CHECK(scene.run.works[2][0] && scene.run.works[2][PE_RE_MEMBER_ID] == 0x4a);
+    pe_re_scd_exec(scene.logic, &scene.run, 2, 3);
+    int player_seen = 0, marvin_seen = 0;
+    for (int tick = 0; tick < 400 && !(player_seen && marvin_seen); tick++) {
+        scene_tick(scene.logic, flags, NULL, &scene.run);
+        const PeReSceneMotion *pl = &scene.run.pl_motion[0], *m = &scene.run.scene[0];
+        if (pl->active && pl->mode == 2) {
+            CHECK(pl->bank == PE_RE_CLIP_SUB0 && pl->move == 2 && pl->loop && pl->speed == 1);
+            player_seen = 1;
+        }
+        if (m->active && m->direct && m->mode == 2) {
+            const uint16_t before = m->elapsed;
+            scene_tick(scene.logic, flags, NULL, &scene.run);
+            scene_tick(scene.logic, flags, NULL, &scene.run);
+            CHECK(m->bank == PE_RE_CLIP_SUB0 && m->move == 0 && m->loop && m->speed == 0);
+            CHECK(m->elapsed == before + 1);                    /* half speed: one clip frame in two */
+            PeReSceneActor actors[16];
+            const int n = pe_re_scd_scene_actors(&scene.run, actors, 16);
+            CHECK(n >= 1 && actors[0].slot == 0 && actors[0].direct && actors[0].loop && !actors[0].room_clip);
+            marvin_seen = 1;
+        }
+    }
+    CHECK(player_seen && marvin_seen);
+    pe_re_session_end(&scene);
+}
+
 /* 1-07's entry script swaps cameras 0/6 and 1/7 in its switch zones once Common 0x03 is set (cut_replace),
  * and every room entry rolls the scripts' random value (Sce_random). */
 static void test_cut_replace(const PeReGame *game, unsigned player) {
@@ -1017,6 +1056,7 @@ int main(int argc, char **argv) {
     test_licker(g, scenario);
     test_licker_variants(g, scenario);
     test_adult_g(g, scenario);
+    test_scripted_clips(g, scenario);
     test_cut_replace(g, scenario);
     test_alligator(g, scenario);
     test_lift_boss(g, scenario);

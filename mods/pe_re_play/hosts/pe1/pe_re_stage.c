@@ -1322,8 +1322,9 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                 const PeImpMove *move = &moves->move[scene->move];
                 if (move->frames) {
                     const unsigned step = scene->direct ? scene->start_frame + scene->frame * moves->fps / 60u : scene->frame;
-                    unsigned frame = scene->field_pose && !scene->direct ? step % move->frames :
-                        step < move->frames ? step : move->frames - 1;
+                    /* a direct clip holds its last frame unless the script asked it to loop (Sce_flg 0x04) */
+                    unsigned frame = (scene->field_pose && !scene->direct) || (scene->direct && scene->loop) ?
+                        step % move->frames : step < move->frames ? step : move->frames - 1;
                     if (scene->reverse) frame = move->frames - 1 - frame;
                     field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data,
                                scene->field_pose ? NULL : scene, pose);

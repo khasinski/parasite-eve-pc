@@ -106,6 +106,24 @@ static void roll_random(PeReFlags *flags) {
     flags->work[PE_RE_WORK_RANDOM] = (int16_t)s_random_base;
 }
 
+/* plc_motion's clip as Spl_Scenario plays it: mode -> bank (SPL_SCE.C Spl_sce00-0d), Sce_flg -> loop and
+ * speed (Spl_sce_mv00/04: HOLD_STEP loops, DUAL_MOVE steps twice, SKIP_GATE every other frame). */
+static PeReSceneMotion scripted_clip(const uint8_t *ins, int by_mode) {
+    const unsigned mode = ins[1], flags = ins[3];
+    return (PeReSceneMotion){
+        .active = 1, .direct = 1, .move = ins[2], .mode = (uint8_t)mode,
+        .bank = by_mode ? (uint8_t)(mode >= 10 ? mode - 10 : mode) : PE_RE_CLIP_LEGACY,
+        .loop = (flags & 4) != 0, .speed = (uint8_t)(flags & 8 ? 2 : flags & 0x10 ? 0 : 1)
+    };
+}
+static void clip_step(PeReSceneMotion *m) {
+    if (!m->active || !m->direct) return;
+    if (m->ticks < UINT16_MAX) m->ticks++;
+    const unsigned step = m->speed == 2 ? 2u : m->speed == 1 ? 1u : (m->half ^= 1);
+    m->elapsed = (uint16_t)(m->elapsed + step < UINT16_MAX ? m->elapsed + step : UINT16_MAX);
+}
+static int clip_mode_ok(unsigned mode) { return mode <= 3 || (mode >= 10 && mode <= 13); }   /* 4-9: plc_dest's walks */
+
 static int16_t *member(Vm *vm, const PeReScdTask *t, unsigned m) {
     static int16_t scratch;
     if (t->work < 0 || m >= PE_RE_MEMBERS) { scratch = 0; return &scratch; }
@@ -451,8 +469,18 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_PLC_MOTION:
         /* SCE2.C Plc_motion takes any mode (Routine_1); here the other modes only for people (0x40 up),
          * whose scripted move clears Type bit 0x200 when it's played (enemy_standins) */
-        if (!enemy_work(t->work) || (ins[1] && (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) < 0x40)) goto unsupported;
-        vm->run->scene[t->work - 2] = (PeReSceneMotion){.active = 1, .direct = 1, .move = ins[2]};
+        if ((t->work == 0 || t->work == 1) && clip_mode_ok(ins[1])) {   /* the player, the partner: Spl_Scenario */
+            vm->run->pl_motion[t->work] = scripted_clip(ins, 1);
+            *member(vm, t, PE_RE_MEMBER_SCE_FLAGS) = ins[3];
+            vm->run->actor_stopped[t->work] = 0;
+            vm->run->arrived[t->work] = 0;
+            if (t->work == 0) vm->run->player_dest.moving = 0;      /* the clip replaces a walk (Routine_1) */
+            t->pc += n;
+            return CONTINUE;
+        }
+        if (!enemy_work(t->work) || (ins[1] && (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) < 0x40) || !clip_mode_ok(ins[1]))
+            goto unsupported;
+        vm->run->scene[t->work - 2] = scripted_clip(ins, (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) >= 0x40);
         *member(vm, t, PE_RE_MEMBER_SCE_FLAGS) = ins[3];
         vm->run->actor_stopped[t->work] = 0;
         vm->run->arrived[t->work] = 0;
@@ -475,6 +503,13 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return CONTINUE;
     case OP_PLC_CNT:
+        if (t->work == 0 || t->work == 1) {
+            if (!vm->run->pl_motion[t->work].direct) goto unsupported;
+            vm->run->pl_motion[t->work].start_frame = ins[1];
+            vm->run->pl_motion[t->work].elapsed = 0;
+            t->pc += n;
+            return CONTINUE;
+        }
         if (!enemy_work(t->work) || !vm->run->scene[t->work - 2].direct) goto unsupported;
         vm->run->scene[t->work - 2].start_frame = ins[1];
         vm->run->scene[t->work - 2].elapsed = 0;
@@ -497,6 +532,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             r->actor_stopped[t->work] = 0;
             pe_re_flag_set(vm->flags, 5, ins[3], 0);
             if (t->work && r->scene[t->work - 2].direct) r->scene[t->work - 2] = (PeReSceneMotion){0};
+            if (t->work == 0) r->pl_motion[0] = (PeReSceneMotion){0};
         } else if (t->work > 0) {
             /* Keep legacy placement for destination modes without a movement routine. */
             if (x || z) {
@@ -530,6 +566,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             vm->run->actor_stopped[t->work] = 0;
         }
         if (t->work == 0) vm->run->player_dest.moving = 0;
+        if (t->work == 0 || t->work == 1) vm->run->pl_motion[t->work] = (PeReSceneMotion){0};
         if (enemy_work(t->work)) {
             vm->run->enemy_dest[t->work - 2] = (PeReActorDestination){0};
             if (vm->run->scene[t->work - 2].direct) vm->run->scene[t->work - 2] = (PeReSceneMotion){0};
@@ -807,7 +844,9 @@ int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) 
             .frame = (uint16_t)(!motion->direct && motion->reverse ?
                                scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
             .direct = motion->direct, .start_frame = motion->start_frame, .destination_pose = destination_pose,
-            .room_clip = motion->direct && (work[PE_RE_MEMBER_SCE_FLAGS] & 8),
+            .room_clip = motion->direct && (motion->bank == PE_RE_CLIP_LEGACY ? (work[PE_RE_MEMBER_SCE_FLAGS] & 8) != 0 :
+                                            motion->bank == PE_RE_CLIP_ROOM),
+            .loop = motion->direct && motion->loop,
             .reverse = motion->direct && (work[PE_RE_MEMBER_SCE_FLAGS] & 0x80),
             .x = work[PE_RE_MEMBER_POS_X], .y = work[PE_RE_MEMBER_POS_Y], .z = work[PE_RE_MEMBER_POS_Z],
             .dir = work[PE_RE_MEMBER_CDIR_Y], .field_pose = field_pose
@@ -1011,11 +1050,11 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int order = 0, frames = 0;
         PeReSceneMotion *motion = &run->scene[n];
         if (run->actor_stopped[2 + n]) continue;
-        if (motion->direct && motion->active && motion->elapsed < UINT16_MAX) motion->elapsed++;
+        clip_step(motion);
         /* a person (0x40 up, e.g. Marvin 0x4A in 2-02) given a scripted move with Type bit 0x200 set: the bit
          * clears once the move has played (about two seconds), which the scene waits for */
         if (w[0] && w[PE_RE_MEMBER_ID] >= 0x40 && (w[PE_RE_MEMBER_TYPE] & 0x200) && motion->direct && motion->active &&
-            motion->elapsed >= 60) {
+            motion->ticks >= 60) {
             w[PE_RE_MEMBER_TYPE] &= ~0x200;
             *motion = (PeReSceneMotion){0};
         }
@@ -1093,6 +1132,8 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
     for (int w = 0; w < PE_RE_WORKS; w++)                  /* repeat arrival flags until that actor gets a new order */
         if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w] - 1, 1);   /* set again after each frame's clear */
     enemy_standins(run, flags);
+    for (int w = 0; w < 2; w++)                            /* the player's and partner's scripted clips */
+        if (!run->actor_stopped[w]) clip_step(&run->pl_motion[w]);
     int kept = 0;
     for (int i = 0; i < run->effect_count; i++) {
         PeReEffect e = run->effects[i];
