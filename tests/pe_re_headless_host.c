@@ -429,6 +429,15 @@ static int play(unsigned scenario) {
     s.busy = 0;
     s.give_ribbon();                                          /* the checkpoint is from before the ribbon */
     s.typewriter();
+    frames(1, 0);
+    frames(1, RE_HOST_CROSS);
+    EXPECT(s.busy && !strcmp(s.text, "Use an Ink Ribbon to save?"));
+    frames(1, 0);
+    /* No, picked with Cross: that Cross is the box's, so it mustn't examine the typewriter again */
+    s.busy = 0, s.choice = 1;
+    frames(3, RE_HOST_CROSS);
+    EXPECT(!s.busy && s.saves == 0);
+    frames(1, 0);
     frames(1, RE_HOST_CROSS);
     EXPECT(s.busy && !strcmp(s.text, "Use an Ink Ribbon to save?"));
     s.busy = 0;

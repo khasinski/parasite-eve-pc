@@ -74,8 +74,10 @@ This lets R10B and R109 end at their retail frame cutoffs (150 and 676).
 The Windows mixed-store check resolved both clips to their numbered copies.
 Using both Red Jewels in room 1-0B in Claire A started R10B.
 In Claire B, the Valve Handle sequence in room 1-08 changes door zone 1
-into an event for R109. The Windows test reached that event position, but
-the interaction has yet to start the clip.
+into an event for R109. The sequence also opens the item pocket, as retail
+does: the script's Aot_on sets off the socket's status zone (Sce_Status in
+SCE_AT.C). Close it before examining the door, or the pocket takes the Cross.
+With the pocket closed, the Windows test started R109 and let it finish.
 It also lets R200, R505 and Leon's R704 play the excerpt requested by the room
 script, using the seek and end frame from the original movie table. Rescan
 the original raw disc to enable excerpts. Clips that start at sector zero retain whole-movie

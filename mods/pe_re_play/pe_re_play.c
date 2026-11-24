@@ -54,6 +54,11 @@ static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_start_held, s_select_held;          /* Start: the status screen; Select: the pause menu */
 static const unsigned *s_opening_movies;
 static int s_climbing;
+/* The buttons that closed a box (or were down while it was up): they reach the field only once let go,
+ * so the Cross that picks something in a box doesn't also examine the spot she's on (a typewriter or
+ * a socket would open its box again). */
+static uint16_t s_box_buttons;
+static int s_box_was_up;
 enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING, TITLE_STARTING };
 static int s_title, s_title_choice, s_title_wait;
 static char s_status[200] = "Not playing.";
@@ -1110,7 +1115,12 @@ static int on_frame(void *ctx, void *user) {
     if (movie_frame() || tick_ending()) return 0;
     s_session.talking = re_host()->dialogue_busy;
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
-        const uint16_t pad = re_host()->dialogue_busy() ? 0 : re_host()->held_buttons();
+        const int up = re_host()->dialogue_busy();
+        const uint16_t held = re_host()->held_buttons();
+        if (up || s_box_was_up) s_box_buttons = held;
+        else s_box_buttons &= held;
+        s_box_was_up = up;
+        const uint16_t pad = up ? 0 : held & (uint16_t)~s_box_buttons;
         const uint32_t key = pe_re_scd_keys(pad) & (scene_locked() ? 0x3C00u : 0xFFFFu);
         s_session.key_trg = key & ~s_session.key;
         s_session.key = key;
@@ -1167,13 +1177,14 @@ static int on_frame(void *ctx, void *user) {
         /* Select works while a scene holds her too (Unstick scene), but not over a box or a movie */
         const int pausable = !s_climbing && !re_host()->dialogue_busy() && s_pick == PICK_NONE && !s_movie_playing &&
                              !s_session.run.movie_request;
-        if (square && !s_square_held && free) open_pocket();
+        if (square && !s_square_held && free && !(s_box_buttons & RE_HOST_SQUARE)) open_pocket();
         else if (start && !s_start_held && free) open_status(0);
         else if (select && !s_select_held && pausable) open_pause();
         s_square_held = square, s_start_held = start, s_select_held = select;
     }
     const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
-    const int pressed = cross && !s_cross_held && !locked && !re_host()->dialogue_busy();   /* a box's Cross is the box's */
+    const int pressed = cross && !s_cross_held && !locked && !re_host()->dialogue_busy() &&
+                        !(s_box_buttons & RE_HOST_CROSS);   /* a box's Cross is the box's */
     s_cross_held = cross;
     const ReHost *host = re_host();
     if (host->struct_size >= offsetof(ReHost, climb) + sizeof host->climb && host->climb) {
