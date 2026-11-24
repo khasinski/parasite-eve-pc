@@ -68,10 +68,18 @@ event in 7-03 to start R703C.
 
 MOV3 imports
 preserve STR frame numbers as well as the video and XA sector positions.
-This lets R200, R505 and Leon's R704 play the excerpt requested by the room
+When the catalog has multiple copies, the player prefers STR frame numbers
+and then sector timing.
+This lets R10B and R109 end at their retail frame cutoffs (150 and 676).
+The Windows mixed-store check resolved both clips to their numbered copies.
+Using both Red Jewels in room 1-0B in Claire A started R10B.
+In Claire B, the Valve Handle sequence in room 1-08 changes door zone 1
+into an event for R109. The Windows test reached that event position, but
+the interaction has yet to start the clip.
+It also lets R200, R505 and Leon's R704 play the excerpt requested by the room
 script, using the seek and end frame from the original movie table. Rescan
-the original raw disc to enable excerpts. Older MOV2 imports retain
-whole-movie playback with audio, and MOV1 imports play silently at 15 fps.
+the original raw disc to enable excerpts. Clips that start at sector zero retain whole-movie
+playback on older imports. MOV2 includes audio, and MOV1 plays silently at 15 fps.
 
 Rescan raw discs to correct previously imported STR clips whose directory
 entries use 2,336-byte XA extent units. The importer uses the same sector

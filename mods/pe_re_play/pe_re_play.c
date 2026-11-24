@@ -655,12 +655,12 @@ static const ReMovie s_movies[] = {
     [1] = {.asset = "re2:movie/r200", .last_frame = 250},
     [2] = {.asset = "re2:movie/r200", .last_frame = 146},
     [RE2_MOVIE_OPENING_FIRST] = {.asset = "re2:movie/opn1stl", .claire_asset = "re2:movie/opn1stc"},
-    [4] = {.asset = "re2:movie/r10b"},
+    [4] = {.asset = "re2:movie/r10b", .last_frame = 150},
     [5] = {.asset = "re2:movie/r200", .last_frame = 90},
     [6] = {.asset = "re2:movie/r505", .last_frame = 598},
     [7] = {.asset = "re2:movie/r505", .start_sector = 407 * 5, .last_frame = 598},
     [8] = {.asset = "re2:movie/r108l", .claire_asset = "re2:movie/r108c", .last_frame = 1326},
-    [9] = {.asset = "re2:movie/r109"},
+    [9] = {.asset = "re2:movie/r109", .last_frame = 676},
     [10] = {.asset = "re2:movie/r204l", .claire_asset = "re2:movie/r204c", .last_frame = 500},
     [11] = {.asset = "re2:movie/r409", .claire_asset = "re2:movie/r408", .last_frame = 4287},
     [12] = {.asset = "re2:movie/r700l", .claire_asset = "re2:movie/r700c", .last_frame = 2125, .claire_last_frame = 3043},
@@ -1225,7 +1225,18 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
     double bx = 0, bz = 0;
     int found = 0;
     if (s_battle_paused) return;
-    if (!s_playing || !pe_imp_logic_section(s_session.logic, tag, &n, NULL)) {
+    if (!s_playing) {
+        snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
+        return;
+    }
+    pe_imp_logic_section(s_session.logic, tag, &n, NULL);
+    const uint32_t stored_zones = n;
+    if (tag == PE_IMP_LOGIC_TRIG && kind == PE_RE_ZONE_EVENT) {
+        uint32_t doors = 0;
+        pe_imp_logic_section(s_session.logic, PE_IMP_LOGIC_DOOR, &doors, NULL);
+        n += doors;
+    }
+    if (!n) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
     }
@@ -1255,6 +1266,15 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
                 pe_re_pickup_gone(s_session.logic, &s_session.run, &s_session.progress, &pk))
                 continue;
             zone = &pk.zone;
+        } else if (tag == PE_IMP_LOGIC_TRIG && i >= stored_zones) {
+            PeReZoneHit hit;
+            /* Aot_reset can turn a door into a temporary scripted event. */
+            if (pe_imp_logic_door(s_session.logic, i - stored_zones, &d) ||
+                !pe_re_scd_live(&s_session.run, d.at) ||
+                pe_re_zone_by_id(s_session.logic, &s_session.run, &s_session.progress, d.zone.id, &hit) ||
+                hit.sce != PE_RE_ZONE_EVENT)
+                continue;
+            front = (hit.sat & (PE_RE_SAT_UNDER | PE_RE_SAT_FRONT)) == PE_RE_SAT_FRONT;
         } else if (tag == PE_IMP_LOGIC_TRIG) {
             if (pe_imp_logic_trigger(s_session.logic, i, &t) || !pe_re_scd_live(&s_session.run, t.at) ||
                 pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, t.data) != kind)

@@ -28,8 +28,8 @@ static struct {
     int test_ending, test_room_movies;
     unsigned movie_missing;
     int movie_enabled, movie_muted, movie_locked, movie_muted_at_room_start;
-    char movie_assets[5][PE_IMP_ID_MAX];
-    unsigned movie_cutoffs[5];
+    char movie_assets[7][PE_IMP_ID_MAX];
+    unsigned movie_cutoffs[7];
     int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
@@ -574,7 +574,7 @@ static int test_opening(void) {
         [8 + 17 * 4] = 100,
         [100] = 4, 0, 6, 0,
         0x01, 0,
-        0x6f, 8, 0x6f, 10, 0x6f, 11, 0x6f, 12, 0x6f, 13,
+        0x6f, 4, 0x6f, 8, 0x6f, 9, 0x6f, 10, 0x6f, 11, 0x6f, 12, 0x6f, 13,
         0x01, 0
     };
     builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
@@ -586,11 +586,17 @@ static int test_opening(void) {
     free(logic);
     EXPECT(!room_saved);
 
-    static const char *const assets[][5] = {
-        {"re2:movie/r108l", "re2:movie/r204l", "re2:movie/r409", "re2:movie/r700l", "re2:movie/r703l"},
-        {"re2:movie/r108c", "re2:movie/r204c", "re2:movie/r408", "re2:movie/r700c", "re2:movie/r703c"},
+    static const char *const assets[][7] = {
+        {"re2:movie/r10b", "re2:movie/r108l", "re2:movie/r109",
+         "re2:movie/r204l", "re2:movie/r409", "re2:movie/r700l", "re2:movie/r703l"},
+        {"re2:movie/r10b", "re2:movie/r108c", "re2:movie/r109",
+         "re2:movie/r204c", "re2:movie/r408", "re2:movie/r700c", "re2:movie/r703c"},
     };
-    static const unsigned cutoffs[][5] = {{1326, 500, 4287, 2125, 3115}, {1326, 500, 4287, 3043, 2345}};
+    static const unsigned cutoffs[][7] = {
+        {150, 1326, 676, 500, 4287, 2125, 3115},
+        {150, 1326, 676, 500, 4287, 3043, 2345},
+    };
+    const unsigned count = sizeof cutoffs[0] / sizeof *cutoffs[0];
     for (unsigned player = LEON_A; player <= CLAIRE_A; ++player) {
         memset(&s, 0, sizeof s);
         s.store = store;
@@ -598,9 +604,9 @@ static int test_opening(void) {
         EXPECT(!pe_mod_pe_re_play.init());
         *s.scenario = (int)player;
         s.start();
-        for (unsigned frame = 0; frame < 90 && s.movie_stops < 5; ++frame) frames(1, 0);
-        EXPECT(s.active && s.movie_starts == 5 && s.movie_stops == 5 && !s.movie_locked);
-        for (unsigned i = 0; i < 5; ++i) {
+        for (unsigned frame = 0; frame < 90 && s.movie_stops < count; ++frame) frames(1, 0);
+        EXPECT(s.active && s.movie_starts == count && s.movie_stops == count && !s.movie_locked);
+        for (unsigned i = 0; i < count; ++i) {
             EXPECT(!strcmp(s.movie_assets[i], assets[player][i]));
             EXPECT(s.movie_cutoffs[i] == cutoffs[player][i]);
         }

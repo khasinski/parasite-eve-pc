@@ -560,8 +560,8 @@ int pe_imp_catalog_assets(const char *root, const char *game, PeImpAsset **out) 
     return n;
 }
 
-static int catalog_path(const char *root, const char *asset_id, uint32_t type,
-                        char path[PE_IMP_PATH_MAX], char *why, size_t n) {
+static int catalog_lookup(const char *root, const char *asset_id, uint32_t type,
+                          char path[PE_IMP_PATH_MAX], PeImpMovie **movie, char *why, size_t n) {
     char game[16] = "";
     const char *colon = strchr(asset_id, ':');
     if (!colon || colon == asset_id || (size_t)(colon - asset_id) >= sizeof game) {
@@ -585,15 +585,40 @@ static int catalog_path(const char *root, const char *asset_id, uint32_t type,
         if (why && n) snprintf(why, n, "%s is a %s, expected %s", asset_id, e->type, pe_imp_type_name(type));
     } else {
         qsort(e->src, (size_t)e->srcs, sizeof *e->src, src_cmp);
-        Source *src = &e->src[0];
-        if (strlen(src->sha) == 64 && strspn(src->sha, "0123456789abcdef") == 64 &&
-            *src->dir && strspn(src->dir, "0123456789") == strlen(src->dir) &&
-            snprintf(path, PE_IMP_PATH_MAX, "%s/%s/%s/%s", root, game, src->sha, src->dir) < PE_IMP_PATH_MAX)
+        const int count = movie ? e->srcs : 1;
+        for (int i = 0; i < count; ++i) {
+            const Source *src = &e->src[i];
+            if (strlen(src->sha) != 64 || strspn(src->sha, "0123456789abcdef") != 64 ||
+                !*src->dir || strspn(src->dir, "0123456789") != strlen(src->dir) ||
+                snprintf(path, PE_IMP_PATH_MAX, "%s/%s/%s/%s", root, game, src->sha, src->dir) >= PE_IMP_PATH_MAX) {
+                if (rc && why && n) snprintf(why, n, "%s has an invalid catalog location", asset_id);
+                continue;
+            }
+            if (!movie) {
+                rc = 0;
+                break;
+            }
+            PeImpMovie *candidate;
+            if (pe_imp_movie_load(path, &candidate, rc ? why : NULL, rc ? n : 0)) continue;
+            /* Keep normal catalog order among equally capable copies. */
+            if (!*movie || candidate->frame_number ||
+                (candidate->frame_sector && !(*movie)->frame_sector)) {
+                pe_imp_movie_free(*movie);
+                *movie = candidate;
+            } else {
+                pe_imp_movie_free(candidate);
+            }
             rc = 0;
-        else if (why && n) snprintf(why, n, "%s has an invalid catalog location", asset_id);
+            if ((*movie)->frame_number) break;
+        }
     }
     free(cat.e);
     return rc;
+}
+
+static int catalog_path(const char *root, const char *asset_id, uint32_t type,
+                        char path[PE_IMP_PATH_MAX], char *why, size_t n) {
+    return catalog_lookup(root, asset_id, type, path, NULL, why, n);
 }
 
 int pe_imp_catalog_model(const char *root, const char *id, PeImpModel *model, char *why, size_t n) {
@@ -653,8 +678,7 @@ int pe_imp_catalog_itemtable(const char *root, const char *id, PeImpRoomLogic **
 int pe_imp_catalog_movie(const char *root, const char *id, PeImpMovie **out, char *why, size_t n) {
     char path[PE_IMP_PATH_MAX];
     *out = NULL;
-    if (catalog_path(root, id, PE_IMP_MOVIE, path, why, n)) return -1;
-    return pe_imp_movie_load(path, out, why, n);
+    return catalog_lookup(root, id, PE_IMP_MOVIE, path, out, why, n);
 }
 
 int pe_imp_catalog_pictures(const char *root, const char *id, PeImpRoomLogic **out, char *why, size_t n) {

@@ -894,6 +894,8 @@ int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned l
     }
     const PeImpMovie *m = s_movie.asset;
     const PeImpMovieClip *clip = &s_movie.clip;
+    /* Older imports can play from the beginning, but cannot seek or match STR frame numbers. */
+    if (!start_sector && !m->frame_number) last_frame = 0;
     if (!pe_imp_movie_clip(m, start_sector, last_frame, &s_movie.clip)) {
         pe_mod_log(NULL, "%s: clip at sector %u through frame %u unavailable (rescan raw disc for movie timing)",
                    asset, start_sector, last_frame);

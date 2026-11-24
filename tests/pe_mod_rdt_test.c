@@ -263,6 +263,31 @@ static void test_movie_timeline(void) {
     assert(pe_imp_movie_clip(back, 0, 0, &clip));
     assert(!pe_imp_movie_pcm(back, &clip, 1, 1, &frames, &rate, &channels));
     pe_imp_movie_free(back);
+    /* The older disc source sorts first. Prefer the copy that supports excerpts. */
+    const char *store = "pe-rdt-test/mixed-movie-store";
+    char sha[65], source[180];
+    memset(sha, 'a', 64);
+    sha[64] = 0;
+    snprintf(source, sizeof source, "%s/re2/%s/0", store, sha);
+    assert(!pe_imp_mkdirs(source));
+    assert(!pe_imp_movie_save(&legacy, source, NULL, 0));
+    snprintf(source, sizeof source, "%s/re2/%s/1", store, sha);
+    assert(!pe_imp_mkdirs(source));
+    assert(!pe_imp_movie_save(movie, source, NULL, 0));
+    FILE *catalog = fopen("pe-rdt-test/mixed-movie-store/re2/catalog.json", "wb");
+    assert(catalog);
+    assert(fprintf(catalog, "{\"re2:movie/mixed\":{\"type\":\"Movie\",\"sources\":["
+                   "{\"sha256\":\"%s\",\"item\":\"0\",\"image\":\"Disc 1\"},"
+                   "{\"sha256\":\"%s\",\"item\":\"1\",\"image\":\"Disc 2\"}]},"
+                   "\"re2:movie/legacy\":{\"type\":\"Movie\",\"sources\":["
+                   "{\"sha256\":\"%s\",\"item\":\"0\"}]}}", sha, sha, sha) > 0);
+    assert(!fclose(catalog));
+    assert(!pe_imp_catalog_movie(store, "re2:movie/mixed", &back, NULL, 0));
+    assert(back->frame_number && pe_imp_movie_clip(back, 8, 2, &clip));
+    pe_imp_movie_free(back);
+    assert(!pe_imp_catalog_movie(store, "re2:movie/legacy", &back, NULL, 0));
+    assert(!back->frame_number && pe_imp_movie_clip(back, 0, 0, &clip));
+    pe_imp_movie_free(back);
     pe_imp_movie_free(movie);
 }
 
