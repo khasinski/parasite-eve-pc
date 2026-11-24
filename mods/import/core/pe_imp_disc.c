@@ -12,6 +12,7 @@
 
 #define RAW 2352u
 #define COOKED 2048u
+#define XA_EXTENT_UNIT (RAW - 16u)
 #define MAX_DEPTH 32
 #define MAX_FILES 65536
 #define MAX_DIRS 8192
@@ -20,7 +21,7 @@
 
 static const unsigned char k_sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
 
-typedef struct { char name[NAME_MAX_LEN]; uint32_t lba, size; int arch; } File;
+typedef struct { char name[NAME_MAX_LEN]; uint32_t lba, size; int arch; unsigned xa_attributes; } File;
 
 #define ROFS_MAX 32                                   /* rofs1.dat .. rofs32.dat */
 struct PeImpDisc {
@@ -123,6 +124,7 @@ static int add_file(PeImpDisc *d, const char *name, uint32_t lba, uint32_t size)
     File *f = &d->file[d->files++];
     snprintf(f->name, sizeof f->name, "%s", name);
     f->lba = lba, f->size = size;
+    f->xa_attributes = 0;
     return 0;
 }
 
@@ -179,6 +181,10 @@ static int walk(PeImpDisc *d, char *why, size_t n) {
             } else if (add_file(d, full, elba, esize)) {
                 rc = fail(why, n, "%s has too many files", d->label);
                 break;
+            } else {
+                const unsigned system_use = 33 + nl + !(nl & 1);
+                if (len >= system_use + 14 && !memcmp(rec + system_use + 6, "XA", 2))
+                    d->file[d->files - 1].xa_attributes = rec[system_use + 4] << 8 | rec[system_use + 5];
             }
         }
     }
@@ -303,6 +309,61 @@ int pe_imp_disc_read(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *
     if (sectors(d, f->lba, secs, buf, why, n)) { free(buf); return -1; }
     *data = buf, *size = f->size;
     return 0;
+}
+
+int pe_imp_disc_str(PeImpDisc *d, int i, uint8_t **video, uint32_t *size,
+                    uint8_t **xa, uint32_t *xa_size, char *why, size_t n) {
+    *video = *xa = NULL;
+    *size = *xa_size = 0;
+    if (d->rofs || d->sector != RAW) return pe_imp_disc_read(d, i, video, size, why, n);
+    if (i < 0 || i >= d->files) return fail(why, n, "%s", "no such file");
+    const File *f = &d->file[i];
+    if (f->size > PE_IMP_FILE_MAX) return fail(why, n, "%s is too large", f->name);
+    if (!f->size) return 0;
+    if (f->lba >= d->count) return fail(why, n, "%s", "sectors outside the image");
+
+    uint8_t sector[RAW];
+    if (fseek(d->f, (long)(f->lba * (long long)RAW), SEEK_SET) ||
+        fread(sector, 1, RAW, d->f) != RAW)
+        return fail(why, n, "%s", "read error in the image");
+    /* Raw XA movie extents can count the 2336 bytes after the sync and
+     * address. Ordinary 2048-byte ISO extents still use cooked units. */
+    const int form2 = (f->xa_attributes & 0x1000) || (sector[15] == 2 && (sector[18] & 0x20));
+    const unsigned unit = form2 && f->size % XA_EXTENT_UNIT == 0 ? XA_EXTENT_UNIT : COOKED;
+    const uint32_t count = (f->size + unit - 1) / unit;
+    if (count > d->count - f->lba) return fail(why, n, "%s", "sectors outside the image");
+    if ((uint64_t)count * PE_IMP_XA_RECORD > PE_IMP_FILE_MAX)
+        return fail(why, n, "%s is too large", f->name);
+    uint8_t *pictures = calloc(count, COOKED);
+    uint8_t *audio = calloc(count, PE_IMP_XA_RECORD);
+    const char *error = "out of memory";
+    if (!pictures || !audio) goto bad;
+    for (uint32_t k = 0; k < count; k++) {
+        if (k && fread(sector, 1, RAW, d->f) != RAW) {
+            error = "read error in the image";
+            goto bad;
+        }
+        if (memcmp(sector, k_sync, sizeof k_sync)) {
+            error = "a sector has no sync pattern";
+            goto bad;
+        }
+        if (sector[15] == 2 && (sector[18] & 0x24) == 0x24) {
+            uint8_t *record = audio + (size_t)k * PE_IMP_XA_RECORD;
+            memcpy(record, sector + 16, 4);
+            memcpy(record + 4, sector + 24, 2304);
+        } else {
+            memcpy(pictures + (size_t)k * COOKED, sector + (sector[15] == 2 ? 24 : 16), COOKED);
+        }
+    }
+    *video = pictures;
+    *size = count * COOKED;
+    *xa = audio;
+    *xa_size = count * PE_IMP_XA_RECORD;
+    return 0;
+bad:
+    free(pictures);
+    free(audio);
+    return fail(why, n, "%s", error);
 }
 
 static int disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n, int indexed) {

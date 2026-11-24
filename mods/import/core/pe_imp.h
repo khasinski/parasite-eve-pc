@@ -60,6 +60,10 @@ int pe_imp_disc_sectors(PeImpDisc *d, uint32_t lba, uint32_t count, uint8_t *out
 #define PE_IMP_XA_RECORD 2308u
 int pe_imp_disc_xa_indexed(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n);
 int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n);
+/* Read an STR extent as 2048-byte video sectors and optional indexed XA.
+ * Both returned buffers are owned by the caller. */
+int pe_imp_disc_str(PeImpDisc *d, int i, uint8_t **video, uint32_t *size,
+                    uint8_t **xa, uint32_t *xa_size, char *why, size_t n);
 
 /* ---- Model: a skeleton, parts bound to bones, an 8-bit indexed texture ----
  * As the source stores it: y down, its own units. Part p's vertices are in bone p's frame; parts

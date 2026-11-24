@@ -266,6 +266,72 @@ static void test_movie_timeline(void) {
     pe_imp_movie_free(movie);
 }
 
+static void str_dir_record(uint8_t *rec, const char *name, unsigned lba, unsigned size, int directory, int xa) {
+    const unsigned len = (unsigned)strlen(name);
+    const unsigned system_use = 33 + len + !(len & 1);
+    rec[0] = (uint8_t)(system_use + (xa ? 14 : 0));
+    rec[2] = (uint8_t)lba;
+    rec[10] = (uint8_t)size;
+    rec[11] = (uint8_t)(size >> 8);
+    rec[25] = directory ? 2 : 0;
+    rec[32] = (uint8_t)len;
+    memcpy(rec + 33, name, len);
+    if (xa) {
+        rec[system_use + 4] = 0x3d;
+        rec[system_use + 5] = 0x55;
+        memcpy(rec + system_use + 6, "XA", 2);
+    }
+}
+
+static void test_raw_movie_extents(void) {
+    enum { raw = 2352, cooked = 2048, xa_extent = 2336, data = 24, count = 24 };
+    uint8_t image[count][raw] = {{0}};
+    for (unsigned i = 0; i < count; i++) {
+        memset(image[i] + 1, 0xff, 10);
+        image[i][15] = 2;
+    }
+    memcpy(image[16] + data, "\1CD001\1", 7);
+    str_dir_record(image[16] + data + 156, ".", 18, cooked, 1, 0);
+    str_dir_record(image[18] + data, "ZMOVIE", 19, cooked, 1, 0);
+    uint8_t *dir = image[19] + data;
+    /* The first clip uses XA extent units even though it starts with Form 1. */
+    str_dir_record(dir, "FIRST.STR;1", 20, 2 * xa_extent, 0, 1);
+    dir += dir[0];
+    str_dir_record(dir, "SECOND.STR;1", 22, 2 * cooked, 0, 0);
+
+    const uint8_t frame[] = {0x60, 1, 1, 0x80, 0, 0, 1, 0, 0, 0, 0, 0, 12, 0, 0, 0, 16, 0, 16, 0};
+    const uint8_t audio[] = {1, 1, 0x64, 1};
+    memcpy(image[20] + data, frame, sizeof frame);
+    memcpy(image[22] + data, frame, sizeof frame);
+    image[22][18] = 0x62;  /* Form 2 even though this extent uses cooked units. */
+    image[22][data + 8] = 7;
+    memcpy(image[21] + 16, audio, sizeof audio);
+    memcpy(image[23] + 16, audio, sizeof audio);
+
+    const char *path = "pe-rdt-test/adjacent-movies.bin";
+    const char *store = "pe-rdt-test/adjacent-movie-store";
+    assert(!pe_imp_mkdirs("pe-rdt-test"));
+    FILE *disc = fopen(path, "wb");
+    assert(disc);
+    assert(fwrite(image, sizeof image, 1, disc) == 1);
+    assert(!fclose(disc));
+
+    extern const PeImpReader g_re2_movies_ps1;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_movies_ps1));
+    PeImpScan scan;
+    assert(!pe_imp_scan(store, path, "re2", &scan) && !scan.refused);
+    PeImpMovie *first, *second;
+    assert(!pe_imp_catalog_movie(store, "re2:movie/first", &first, NULL, 0));
+    assert(!pe_imp_catalog_movie(store, "re2:movie/second", &second, NULL, 0));
+    assert(first->sectors == 2 && first->frames == 1 && first->frame_number[0] == 0);
+    assert(second->sectors == 2 && second->frames == 1 && second->frame_number[0] == 7);
+    assert(first->audio_records == 1 && first->audio_sector[0] == 1);
+    assert(second->audio_records == 1 && second->audio_sector[0] == 1);
+    pe_imp_movie_free(first);
+    pe_imp_movie_free(second);
+}
+
 /* one movie: read from the disc, saved and loaded, a frame from its middle decoded
  * (PE_TEST_MOVIE_PPM=<folder> writes that frame as <name>.ppm) */
 static void movie(const char *label, const char *cue, const char *path) {
@@ -276,8 +342,7 @@ static void movie(const char *label, const char *cue, const char *path) {
     assert(i >= 0);
     uint8_t *str, *xa = NULL;
     uint32_t size, xa_size = 0;
-    assert(!pe_imp_disc_read(d, i, &str, &size, why, sizeof why));
-    pe_imp_disc_xa_indexed(d, i, &xa, &xa_size, why, sizeof why);
+    assert(!pe_imp_disc_str(d, i, &str, &size, &xa, &xa_size, why, sizeof why));
     pe_imp_disc_close(d);
     PeImpMovie *m = pe_imp_movie_from_indexed_str(str, size, xa, xa_size);
     free(str), free(xa);
@@ -852,6 +917,7 @@ static void audit_room_enemies(const char *store) {
 
 int main(void) {
     test_movie_timeline();
+    test_raw_movie_extents();
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
     check_room_effects();

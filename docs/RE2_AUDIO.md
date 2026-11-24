@@ -38,6 +38,10 @@ script, using the seek and end frame from the original movie table. Rescan
 the original raw disc to enable excerpts. Older MOV2 imports retain
 whole-movie playback with audio, and MOV1 imports play silently at 15 fps.
 
+Rescan raw discs to correct previously imported STR clips whose directory
+entries use 2,336-byte XA extent units. The importer uses the same sector
+boundary for video and XA audio, so neighboring files stay out of the clip.
+
 Playback places XA file 1, channel 1 on the 150-sector-per-second STR
 timeline and selects video frames from the audio stream's consumed source
 samples. If the track or audio device is unavailable, the host uses its

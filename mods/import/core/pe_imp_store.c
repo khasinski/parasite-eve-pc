@@ -282,8 +282,12 @@ static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDi
     const char *path = pe_imp_disc_name(d, i);
     uint8_t *data;
     uint32_t size;
+    uint8_t *companion = NULL;
+    uint32_t companion_size = 0;
     int read_error;
-    if (rd->xa == PE_IMP_XA_INDEXED) read_error = pe_imp_disc_xa_indexed(d, i, &data, &size, why, sizeof why);
+    if (rd->xa == PE_IMP_XA_BOTH)
+        read_error = pe_imp_disc_str(d, i, &data, &size, &companion, &companion_size, why, sizeof why);
+    else if (rd->xa == PE_IMP_XA_INDEXED) read_error = pe_imp_disc_xa_indexed(d, i, &data, &size, why, sizeof why);
     else if (rd->xa == 1) read_error = pe_imp_disc_xa(d, i, &data, &size, why, sizeof why);
     else read_error = pe_imp_disc_read(d, i, &data, &size, why, sizeof why);
     if (read_error) {
@@ -291,11 +295,7 @@ static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDi
         snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
         return;
     }
-    uint8_t *companion = NULL;
-    uint32_t companion_size = 0;
-    if (rd->xa == PE_IMP_XA_BOTH) {                     /* keep XA at its source sector on the STR timeline */
-        if (pe_imp_disc_xa_indexed(d, i, &companion, &companion_size, why, sizeof why)) companion = NULL, companion_size = 0;
-    } else if (rd->find_companion) {
+    if (rd->xa != PE_IMP_XA_BOTH && rd->find_companion) {
         int index = rd->find_companion(d, path);
         if (index >= 0 && pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
             out->refused++;
@@ -303,7 +303,7 @@ static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDi
             free(data);
             return;
         }
-    } else if (rd->companion) {
+    } else if (rd->xa != PE_IMP_XA_BOTH && rd->companion) {
         char sibling[PE_IMP_PATH_MAX];
         const char *name = rd->companion;
         if (name[0] == '.') {
