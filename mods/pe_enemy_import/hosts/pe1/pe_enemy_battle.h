@@ -2,7 +2,7 @@
 #ifndef PE_ENEMY_BATTLE_H
 #define PE_ENEMY_BATTLE_H
 #include <stddef.h>
-#include "pe_enemy_pack.h"
+#include "../../pe_enemy_pack.h"
 
 #define PE_ENEMY_PACKS_MAX 512
 

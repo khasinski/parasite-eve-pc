@@ -6,7 +6,7 @@
 #include "pe_re_session.h"
 #include "re_host.h"
 #include "pe_mod_api.h"
-#include "pe_services.h"
+#include "re_field_audio.h"
 
 #define FADE_OUT 12                       /* frames */
 #define HOLD 45
@@ -38,13 +38,11 @@ void pe_re_door_begin(const char *game, const PeImpDoor *door) {
 }
 
 static void play(int i) {
-    const PeAssetsApi *a = pe_service_get("assets", 1);
-    const PeAudioApi *au = pe_service_get("audio", 1);
-    if (s_played[i] || !s_wave[i] || !a || !au) return;
-    const int ready = a->status(s_wave[i]);
-    if (ready < 0) { s_played[i] = 1; return; }          /* not imported: the door is silent */
-    if (ready != 1) return;
-    const int played = au->preview_clip(s_wave[i]);
+    const PeFieldAudioApi *audio = pe_service_get(PE_FIELD_AUDIO_SERVICE, PE_FIELD_AUDIO_VERSION);
+    if (s_played[i] || !s_wave[i] || !audio ||
+        audio->struct_size < offsetof(PeFieldAudioApi, play_clip) + sizeof audio->play_clip ||
+        !audio->play_clip) return;
+    const int played = audio->play_clip(s_wave[i], 1.0f);
     if (played != 0) s_played[i] = 1;
     if (played > 0) {
         pe_mod_log("pe_re_play", "door: wave %d playing", i + 1);

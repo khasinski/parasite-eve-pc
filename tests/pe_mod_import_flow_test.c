@@ -33,7 +33,6 @@
 #include "pe_enemy_build.h"
 
 extern const PeMod pe_mod_pe_src_re1, pe_mod_pe_src_re2, pe_mod_pe_src_re3, pe_mod_pe_src_dc1;
-void pe_enemy_packs_changed(void) {}
 
 #ifndef PE_SOURCE_DIR
 #define PE_SOURCE_DIR "."

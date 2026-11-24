@@ -7,7 +7,7 @@ file(GLOB_RECURSE readers "${mods}/pe_src_re[123]/*.c" "${mods}/pe_src_re[123]/*
 # The import mod's menu and job; its adapter is under pe_import/hosts/.
 file(GLOB import_mod "${mods}/pe_import/*.c" "${mods}/pe_import/*.h")
 # The contract other mods read about a game being played.
-file(GLOB contracts "${mods}/host/re_play_api.h")
+file(GLOB contracts "${mods}/host/re_play_api.h" "${mods}/host/pe_trip_result.*" "${mods}/host/re_field_audio.h")
 
 set(literal [=[("[^"\\]*(\\.[^"\\]*)*"|'[^'\\]*(\\.[^'\\]*)*')]=])
 set(block_comment [=[/\*([^*]|\*+[^*/])*\*+/]=])

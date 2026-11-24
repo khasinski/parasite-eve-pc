@@ -10,6 +10,7 @@
 #include "pe_imp_akao.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
+#include "re_field_audio.h"
 
 #define MOD_ID "pe_assets"
 #define SLOTS 4
@@ -331,13 +332,12 @@ static void stop_effects(void)
     }
 }
 
-enum { FIELD_MUSIC_VOICES = 4 };
 static struct FieldSong {
     SDL_AudioStream *stream;
     PeImpSeqPlayer *player;
     PeImpXaPlayer *xa;
     SDL_AtomicInt done;
-} s_field_song[FIELD_MUSIC_VOICES];
+} s_field_song[PE_FIELD_AUDIO_SLOTS];
 
 static void SDLCALL feed_field_song(void *user, SDL_AudioStream *stream, int additional, int total)
 {
@@ -359,7 +359,7 @@ static void SDLCALL feed_field_song(void *user, SDL_AudioStream *stream, int add
 
 static void stop_field_song(unsigned slot)
 {
-    if (slot >= FIELD_MUSIC_VOICES) return;
+    if (slot >= PE_FIELD_AUDIO_SLOTS) return;
     struct FieldSong *song = &s_field_song[slot];
     if (song->stream && SDL_WasInit(SDL_INIT_AUDIO)) SDL_DestroyAudioStream(song->stream);
     song->stream = NULL;
@@ -372,16 +372,16 @@ static void stop_field_song(unsigned slot)
 
 static int play_field_song(unsigned slot, PeAssetHandle handle, unsigned sequence, unsigned loops)
 {
-    if (slot >= FIELD_MUSIC_VOICES || sequence >= 2) return -1;
+    if (slot >= PE_FIELD_AUDIO_SLOTS || sequence >= 2) return -1;
     PeSongView view;
     const int ready = song_view(handle, &view);
     if (ready != 1) return ready;
     if (!view.sequence[sequence] ||
-        (slot == 3 ? view.format != PE_SONG_PSX_XA : view.format != PE_SONG_PSX_SEQ_VAB)) return -1;
+        (slot == PE_FIELD_DIALOGUE ? view.format != PE_SONG_PSX_XA : view.format != PE_SONG_PSX_SEQ_VAB)) return -1;
     stop_field_song(slot);
     struct FieldSong *song = &s_field_song[slot];
     char why[160] = "";
-    if (slot == 3)
+    if (slot == PE_FIELD_DIALOGUE)
         song->xa = pe_imp_xa_open(view.sequence[0], view.sequence_size[0], view.samples, view.sample_size, 1, why, sizeof why);
     else song->player = pe_imp_seq_open(view.sequence[sequence], view.sequence_size[sequence], view.instruments,
                                    view.instrument_size, view.samples, view.sample_size, loops, why, sizeof why);
@@ -401,7 +401,7 @@ static int play_field_song(unsigned slot, PeAssetHandle handle, unsigned sequenc
 
 static void pause_field_songs(int paused)
 {
-    for (unsigned slot = 0; slot < FIELD_MUSIC_VOICES; ++slot) {
+    for (unsigned slot = 0; slot < PE_FIELD_AUDIO_SLOTS; ++slot) {
         SDL_AudioStream *stream = s_field_song[slot].stream;
         if (!stream) continue;
         if (paused) SDL_PauseAudioStreamDevice(stream);
@@ -421,7 +421,7 @@ static int play_field_clip(PeAssetHandle handle, float gain)
 
 static int field_song_active(unsigned slot)
 {
-    if (slot >= FIELD_MUSIC_VOICES || !s_field_song[slot].stream) return 0;
+    if (slot >= PE_FIELD_AUDIO_SLOTS || !s_field_song[slot].stream) return 0;
     struct FieldSong *song = &s_field_song[slot];
     if (!SDL_GetAtomicInt(&song->done) || SDL_GetAudioStreamQueued(song->stream) > 0) return 1;
     stop_field_song(slot);
@@ -430,25 +430,35 @@ static int field_song_active(unsigned slot)
 
 static void set_field_song_gain(unsigned slot, float gain)
 {
-    if (slot < FIELD_MUSIC_VOICES && s_field_song[slot].stream)
+    if (slot < PE_FIELD_AUDIO_SLOTS && s_field_song[slot].stream)
         SDL_SetAudioStreamGain(s_field_song[slot].stream, gain * (float)Psyz_AudioGetOutputVolume() / 100.0f);
 }
 
-static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip, play_song, stop_song, song_playing,
-                                   play_effect, stop_effects, play_field_song, stop_field_song,
-                                   pause_field_songs, play_field_clip, field_song_active, set_field_song_gain};
+static const PeAudioApi k_audio = {sizeof k_audio, preview_clip, play_song, stop_song, song_playing,
+                                   play_effect, stop_effects};
+
+static const PeFieldAudioApi k_field_audio = {
+    .struct_size = sizeof k_field_audio,
+    .play_song = play_field_song,
+    .stop_song = stop_field_song,
+    .pause_songs = pause_field_songs,
+    .play_clip = play_field_clip,
+    .song_active = field_song_active,
+    .set_song_gain = set_field_song_gain,
+};
 
 static int init(void)
 {
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
     return pe_service_publish("assets", 1, &k_assets, MOD_ID) ||
-           pe_service_publish("audio", 1, &k_audio, MOD_ID);
+           pe_service_publish("audio", 1, &k_audio, MOD_ID) ||
+           pe_service_publish(PE_FIELD_AUDIO_SERVICE, PE_FIELD_AUDIO_VERSION, &k_field_audio, MOD_ID);
 }
 
 static void shutdown(void)
 {
     stop_song();
-    for (unsigned i = 0; i < FIELD_MUSIC_VOICES; i++) stop_field_song(i);
+    for (unsigned i = 0; i < PE_FIELD_AUDIO_SLOTS; i++) stop_field_song(i);
     stop_effects();
     /* SDL also destroys all audio streams when the audio subsystem quits. */
     if (s_preview && SDL_WasInit(SDL_INIT_AUDIO))

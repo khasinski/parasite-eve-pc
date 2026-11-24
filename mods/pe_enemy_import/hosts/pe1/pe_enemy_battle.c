@@ -32,8 +32,8 @@
 #include <SDL3/SDL.h>
 
 #include "pe_enemy_battle.h"
-#include "pe_enemy_build.h"
-#include "pe_enemy_pack.h"
+#include "../../pe_enemy_build.h"
+#include "../../pe_enemy_pack.h"
 #include "pe_imp_enemy.h"
 #include "pe_imp_json.h"
 #include "pe_game.h"

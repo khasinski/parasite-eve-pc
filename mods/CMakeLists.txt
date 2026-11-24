@@ -113,6 +113,7 @@ set(pe_debug_sources
 )
 
 set(pe_host_sources
+    host/pe_trip_result.c
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
@@ -167,9 +168,14 @@ set(pe_mod_refs "")
 foreach(mod IN LISTS pe_enabled_mods)
     if(mod STREQUAL "pe_re_play")
         list(APPEND pe_mod_sources
+            pe_re_play/hosts/pe1/pe_re_play_mod.c
             pe_re_play/hosts/pe1/re_host_pe1.c
             pe_re_play/hosts/pe1/pe_re_stage.c
             pe_re_play/hosts/pe1/pe_re_box.c)
+    elseif(mod STREQUAL "pe_enemy_import")
+        file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_enemy_import/*.c)
+        list(APPEND pe_mod_sources ${mod_files}
+            pe_enemy_import/hosts/pe1/pe_enemy_import.c pe_enemy_import/hosts/pe1/pe_enemy_battle.c)
     elseif(mod STREQUAL "pe_import")
         file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_import/*.c)
         list(APPEND pe_mod_sources ${mod_files} pe_import/hosts/pe1/import_host_pe1.c)   # the menu, then its PE1 adapter
@@ -424,20 +430,22 @@ if(BUILD_TESTING)
     # RE2's rooms walked door by door from the street.
     pe_feature_test(re-session ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_session_test.c
         ${PROJECT_SOURCE_DIR}/tests/pe_re_headless_host.c
+        pe_re_play/hosts/pe1/pe_re_play_mod.c
         $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
         pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
-    target_sources(test-mod-re-session PRIVATE pe_enemy_import/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
+    target_sources(test-mod-re-session PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-session PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
     set_tests_properties(mod-re-session PROPERTIES TIMEOUT 600)
     # A scripted run through RE2 from the street with the real session (tests/pe_re_route_test.c):
     # doors, locks, pickups and item use as a player meets them; reports how far it gets.
     pe_feature_test(re-route ${PROJECT_SOURCE_DIR}/tests/pe_re_route_test.c
         ${PROJECT_SOURCE_DIR}/tests/pe_re_headless_host.c
+        pe_re_play/hosts/pe1/pe_re_play_mod.c
         $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
         pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
-    target_sources(test-mod-re-route PRIVATE pe_enemy_import/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
+    target_sources(test-mod-re-route PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-route PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
     set_tests_properties(mod-re-route PROPERTIES TIMEOUT 900)
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV

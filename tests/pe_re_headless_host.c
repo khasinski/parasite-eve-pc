@@ -13,6 +13,7 @@
 #include "pe_trip_result.h"
 #include "re_play_api.h"
 #include "re_host.h"
+#include "pe_re_play_runtime.h"
 
 extern const PeMod pe_mod_pe_re_play;
 
@@ -374,14 +375,15 @@ int re_headless_smoke(const char *store, unsigned scenario) {
     memset(&s, 0, sizeof s);
     s.store = store;
     s_exploration_only = 1;
-    const int init_result = pe_mod_pe_re_play.init();
+    const int init_result = pe_re_play_init(store);
     int explored = 0;
     if (!init_result) {
-        *s.scenario = (int)scenario;
-        s.start();
+        const PeRePlayControls *controls = pe_re_play_controls();
+        *controls->player = (int)scenario;
+        controls->start();
         frames(2, 0);
-        explored = s.active && !s.progress && !s.saves && !strcmp(s.room, "re2:room/100");
-        pe_mod_pe_re_play.shutdown();
+        explored = s.active && !s.start && !s.progress && !s.saves && !strcmp(s.room, "re2:room/100");
+        pe_re_play_shutdown();
     }
     s_exploration_only = 0;
     EXPECT(explored);

@@ -29,6 +29,8 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
 int pe_enemy_pack_name(const char *asset_id, char *out, size_t n);
 /* The "enemies" target for F1 > Import ("Build as an enemy"). */
 int pe_enemy_target_register(void);
+/* Install during host initialization. The callback can run on an import worker. */
+void pe_enemy_target_on_changed(void (*callback)(void));
 int pe_enemy_add_room_move(PeEnemyPack *pack, const PeImpAnimation *moves, unsigned move, const char *name);
 extern const PeImpTarget g_pe_enemy_target;
 

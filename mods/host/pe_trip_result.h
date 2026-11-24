@@ -32,6 +32,10 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
 #define PE_TRIP_APPROACH_REARM 2600
 int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
                      int (*reachable)(double, double, double, double), PeReEnemyPlacement *out);
+/* Select from the source-room snapshot using the same rules on each native host. */
+int pe_trip_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z, int floor,
+                            PeReEnemyPlacement *out);
+int pe_trip_select_boss(const PeRePlayApi *api, const PeReRoomEvent *room, PeReEnemyPlacement *out);
 void pe_trip_defeated(PeTripResult *t, unsigned defeated);
 /* Records consecutive defeats for callers that only have a count. */
 void pe_trip_won(PeTripResult *t, int defeated);

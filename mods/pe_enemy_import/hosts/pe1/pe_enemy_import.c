@@ -18,7 +18,7 @@
 
 #include "pe_encounter.h"
 #include "pe_enemy_battle.h"
-#include "pe_enemy_build.h"
+#include "../../pe_enemy_build.h"
 #include "pe_imp_guess.h"
 #include "pe_imp_fit.h"
 #include <SDL3/SDL.h>
@@ -369,20 +369,6 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
     return 1;
 }
 
-static int pe_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z, int floor,
-                              PeReEnemyPlacement *close) {
-    return pe_trip_approach(room, x, z, floor,
-                           api->struct_size >= offsetof(PeRePlayApi, encounter_boss) ? api->encounter_reachable : NULL, close);
-}
-
-static int pe_select_boss(const PeRePlayApi *api, const PeReRoomEvent *room, PeReEnemyPlacement *out) {
-    if (api->struct_size < offsetof(PeRePlayApi, prepare_boss) || !api->encounter_boss) return 0;
-    const int slot = api->encounter_boss();
-    for (int i = 0; slot >= 0 && i < room->count; i++)
-        if (room->enemies[i].slot == slot) { *out = room->enemies[i]; return 1; }
-    return 0;
-}
-
 static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
@@ -393,8 +379,8 @@ static int pe_room_creature(const PeRePlayApi *api) {
         if (api->struct_size < offsetof(PeRePlayApi, encounter_reachable) || !api->encounter_position ||
             room.stage != s_approach.stage || room.room != s_approach.room ||
             api->encounter_position(&x, &z, &floor)) return 0;
-        room.count = s.automatic == PE_SCRIPTED_FIGHT ? pe_select_boss(api, &room, close) :
-                     pe_select_approach(api, &room, x, z, floor, close);
+        room.count = s.automatic == PE_SCRIPTED_FIGHT ? pe_trip_select_boss(api, &room, close) :
+                     pe_trip_select_approach(api, &room, x, z, floor, close);
         room.enemies = close;
         if (!room.count) return 0;
     }
@@ -549,7 +535,7 @@ static void pe_check_approach(void) {
     const int same_room = room.stage == s_approach.stage && room.room == s_approach.room;
     if (!same_room) s_approach.retry = 0;
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
-    const int scripted = pe_select_boss(api, &room, close);
+    const int scripted = pe_trip_select_boss(api, &room, close);
     if (s_approach.retry > 0) { s_approach.retry--; return; }
     if (s_approach.latched) {
         const double dx = x - s_approach.x, dz = z - s_approach.z;
@@ -561,7 +547,7 @@ static void pe_check_approach(void) {
     }
     if (!scripted && api->struct_size >= sizeof *api && api->advance_enemies)
         api->advance_enemies(x, z, floor);
-    if (!scripted && !pe_select_approach(api, &room, x, z, floor, close)) return;
+    if (!scripted && !pe_trip_select_approach(api, &room, x, z, floor, close)) return;
     const int effect = scripted && api->struct_size >= offsetof(PeRePlayApi, defeated_by_canister) && api->prepare_boss ?
         api->prepare_boss(close[0].slot) : PE_RE_BOSS_STANDARD;
     if (effect == PE_RE_BOSS_WAIT) return;
@@ -835,6 +821,7 @@ static void pe_enemy_text(char *out, unsigned size) { pe_enemy_status_text(out, 
 
 static int enemy_import_init(void) {
     pe_enemy_battle_init();
+    pe_enemy_target_on_changed(pe_enemy_packs_changed);
     if (pe_enemy_target_register()) pe_mod_log(MOD_ID, "the importer refused the enemies builder");
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_NORMAL, MOD_ID);

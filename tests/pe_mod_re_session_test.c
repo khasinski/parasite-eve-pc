@@ -591,7 +591,8 @@ static void test_ground_enemy_variants(void) {
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "--host-store")) return re_headless_smoke(argv[2], 0) != 0;
     test_ground_enemy_variants();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {

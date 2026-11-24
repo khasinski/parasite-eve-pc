@@ -8,12 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "pe_enemy_battle.h"
 #include "pe_imp_guess.h"
 #include "pe_imp_json.h"
 #include "pe_imp_fit.h"
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
+
+static void (*s_packs_changed)(void);
+
+void pe_enemy_target_on_changed(void (*callback)(void))
+{
+    s_packs_changed = callback;
+}
 
 static int pack_coverage(const char *id, const PeEnemyPack *pack, char *out, unsigned size) {
     const PeImpEnemyBody body = pe_imp_enemy_body(id);
@@ -171,7 +177,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
         snprintf(path, sizeof path, "%s/profile.applied", folder);
         rc = save_sha(path, profile_sha, why, n);
     }
-    if (!rc) pe_enemy_packs_changed();
+    if (!rc && s_packs_changed) s_packs_changed();
     if (!rc && log && logn) {
         char coverage[64];
         pack_coverage(asset_id, &p, coverage, sizeof coverage);

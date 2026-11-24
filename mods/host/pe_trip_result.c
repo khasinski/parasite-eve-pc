@@ -127,3 +127,17 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     }
     return reported ? reported : -1;
 }
+
+int pe_trip_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z, int floor,
+                              PeReEnemyPlacement *close) {
+    return pe_trip_approach(room, x, z, floor,
+                           api->struct_size >= offsetof(PeRePlayApi, encounter_boss) ? api->encounter_reachable : NULL, close);
+}
+
+int pe_trip_select_boss(const PeRePlayApi *api, const PeReRoomEvent *room, PeReEnemyPlacement *out) {
+    if (api->struct_size < offsetof(PeRePlayApi, prepare_boss) || !api->encounter_boss) return 0;
+    const int slot = api->encounter_boss();
+    for (int i = 0; slot >= 0 && i < room->count; i++)
+        if (room->enemies[i].slot == slot) { *out = room->enemies[i]; return 1; }
+    return 0;
+}

@@ -26,7 +26,7 @@
 #include <string.h>
 
 #include "pe_mod_api.h"
-#include "pe_mod_menu.h"
+#include "pe_re_play_runtime.h"
 #include "pe_re_door.h"
 #include "pe_re_music.h"
 #include "pe_re_save.h"
@@ -35,7 +35,6 @@
 #include "re_encounter_rooms.h"
 
 #define MOD_ID "pe_re_play"
-#define PAGE "Play imported games"
 
 static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
@@ -922,52 +921,15 @@ static int valid_host(const ReHost *host)
         host->consume_native_interact && host->native_menu_active;
 }
 
-static int init(void) {
+int pe_re_play_init(const char *store) {
     const ReHost *host = re_host();
     if (!valid_host(host)) {
         pe_mod_log(MOD_ID, "missing required RE host callbacks");
         return 1;
     }
-    if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
+    if (!store || strlen(store) >= sizeof s_store) return 1;
+    strcpy(s_store, store);
     re_host()->init(MOD_ID, s_store);
-    pe_menu_begin(PAGE);
-    pe_menu_top_page(PAGE, "Walk the rooms of a game you imported, as Aya.", 63);
-    pe_menu_register_dynamic_choice(0, "Game", "A game imported from your own disc (F1 > Import).", &s_pick,
-                                    PE_RE_GAMES, game_count, game_name);
-    pe_menu_register_int(0, "Scenario", "RE2: 0 Leon, 1 Claire.", &s_player, 0, 1, 1);
-    pe_menu_register_toggle(0, "Foreground", "Let the room's foreground cover Aya.", &s_masks, NULL);
-    pe_menu_register_int(0, "Aya's size", "Percent of an RE person's height (100: as tall as Leon).", &s_size, 50, 200, 5);
-    pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", start);
-    pe_menu_register_action(0, "Continue", "Back where you left this save's imported game.", resume);
-    pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", stop);
-    pe_menu_register_toggle("Testing", "Placement markers", "Mark enemy positions using the room camera.", &s_placement_markers, NULL);
-    pe_menu_register_toggle("Testing", "Placement meshes", "Draw imported enemy meshes at their placements.", &s_placement_meshes, NULL);
-    pe_menu_register_toggle("Testing", "Placement idle animation", "Animate supported placement meshes in place.", &s_placement_idle, NULL);
-    pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
-    pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
-    pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);
-    pe_menu_register_action("Testing", "Go to a climbable ledge", "Puts Aya in front of a one-level ledge in this room.", to_ledge);
-    pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
-    pe_menu_register_action("Testing", "Go to the next place to use an item", "Puts Aya facing where the room takes an item (a jewel in a statue), one after another.", to_item_spot);
-    pe_menu_register_action("Testing", "Give the item used there", "Puts the item that place takes in the pocket.", give_use_here);
-    pe_menu_register_action("Testing", "Go to the next typewriter", "Puts Aya at the room's typewriter: press Cross.", to_typewriter);
-    pe_menu_register_action("Testing", "Give an Ink Ribbon", "One Ink Ribbon into the pocket, for a typewriter.", give_ribbon);
-    pe_menu_register_action("Testing", "Go to the next item box", "Puts Aya at the room's item box: press Cross.", to_item_box);
-    pe_menu_register_action("Testing", "Go to the next event zone", "Puts Aya where the room's events start (examined: press Cross), one after another.", to_event);
-    pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
-    pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);
-    pe_menu_register_action("Testing", "Go to that room", "Jumps there, camera 0, keeping what's been picked up.", to_room);
-    pe_menu_register_int("Testing", "Door", "A door of this room by its number (0 first), for Go to that door.", &s_door_pick, 0, 31, 1);
-    pe_menu_register_action("Testing", "Go to that door", "Puts Aya in that doorway (or the next one the scripts set up).", to_that_door);
-    pe_menu_register_action(0, "Refresh the list", "Looks for games imported since the game started.", refresh);
-    pe_menu_register_info("Testing", "Scene control", "Who controls Aya while a room script plays.", text_scene);
-    pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
-    pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
-    pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
-    pe_menu_register_info(0, "Enemies", "Live enemy placements reported to the encounter mod.", text_enemies);
-    pe_menu_register_int("Testing", "Enemy slot", "Choose a slot for movement details. -1 shows the room summary.",
-                         &s_enemy_debug_slot, -1, 15, 1);
-    pe_menu_register_info("Testing", "Enemy movement", "Enemy position, script routine and movement status in this room.", text_enemy_movement);
     re_host()->bind_lifecycle(MOD_ID, on_frame, on_save_read, on_new_game);
     s_enabled = 0;
     s_registered = host->open_save_screen && RE_HOST_HAS(host, register_progress) &&
@@ -978,9 +940,50 @@ static int init(void) {
     return 0;
 }
 
-static void shutdown_play(void) {
+void pe_re_play_shutdown(void) {
     stop();
     re_host()->shutdown();
 }
 
-const PeMod pe_mod_pe_re_play = {MOD_ID, "Play imported games", "0.1", NULL, init, shutdown_play};
+const PeRePlayControls *pe_re_play_controls(void)
+{
+    static const PeRePlayControls controls = {
+        .pick = &s_pick,
+        .game_count = game_count,
+        .game_name = game_name,
+        .player = &s_player,
+        .masks = &s_masks,
+        .size = &s_size,
+        .start = start,
+        .resume = resume,
+        .stop = stop,
+        .placement_markers = &s_placement_markers,
+        .placement_meshes = &s_placement_meshes,
+        .placement_idle = &s_placement_idle,
+        .to_door = to_door,
+        .to_pickup = to_pickup,
+        .to_ramp = to_ramp,
+        .to_ledge = to_ledge,
+        .to_message = to_message,
+        .to_item_spot = to_item_spot,
+        .give_use_here = give_use_here,
+        .to_typewriter = to_typewriter,
+        .give_ribbon = give_ribbon,
+        .to_item_box = to_item_box,
+        .to_event = to_event,
+        .jump_stage = &s_jump_stage,
+        .jump_room = &s_jump_room,
+        .to_room = to_room,
+        .door_pick = &s_door_pick,
+        .to_that_door = to_that_door,
+        .refresh = refresh,
+        .text_scene = text_scene,
+        .text_status = text_status,
+        .text_pocket = text_pocket,
+        .text_scripts = text_scripts,
+        .text_enemies = text_enemies,
+        .enemy_debug_slot = &s_enemy_debug_slot,
+        .text_enemy_movement = text_enemy_movement,
+    };
+    return &controls;
+}

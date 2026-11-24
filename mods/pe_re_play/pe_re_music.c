@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "pe_mod_api.h"
-#include "pe_services.h"
+#include "re_field_audio.h"
 #include "re_host.h"
 
 /* PS1 RE2 INIT_TBL.DAT, the room cue map at offset 0x22c in each scenario
@@ -98,7 +98,7 @@ static const uint16_t k_room_music[5][142] = {
     },
 };
 
-enum { MUSIC_SLOTS = 3, VOICE_SLOT = 3, PENDING_EFFECTS = 16 };
+enum { MUSIC_SLOTS = PE_FIELD_DIALOGUE, VOICE_SLOT = PE_FIELD_DIALOGUE, PENDING_EFFECTS = 16 };
 static PeAssetHandle s_voice;
 static PeAssetHandle s_effects[PENDING_EFFECTS];
 typedef struct {
@@ -113,11 +113,11 @@ static MusicSlot s_slots[MUSIC_SLOTS];
 static unsigned s_stage, s_room, s_scenario;
 static int s_selected, s_muted, s_suspended;
 
-static const PeAudioApi *audio_api(void)
+static const PeFieldAudioApi *audio_api(void)
 {
-    const PeAudioApi *audio = pe_service_get("audio", 1);
-    return audio && audio->struct_size >= offsetof(PeAudioApi, pause_field_songs) + sizeof audio->pause_field_songs &&
-        audio->play_field_song && audio->stop_field_song && audio->pause_field_songs ? audio : NULL;
+    const PeFieldAudioApi *audio = pe_service_get(PE_FIELD_AUDIO_SERVICE, PE_FIELD_AUDIO_VERSION);
+    return audio && audio->struct_size >= offsetof(PeFieldAudioApi, pause_songs) + sizeof audio->pause_songs &&
+        audio->play_song && audio->stop_song && audio->pause_songs ? audio : NULL;
 }
 
 static void mute_native(int muted)
@@ -129,18 +129,18 @@ static void mute_native(int muted)
     s_muted = muted;
 }
 
-static void clear_slot(unsigned slot, const PeAudioApi *audio, const PeAssetsApi *assets)
+static void clear_slot(unsigned slot, const PeFieldAudioApi *audio, const PeAssetsApi *assets)
 {
     MusicSlot *song = &s_slots[slot];
-    if (song->attempted && audio) audio->stop_field_song(slot);
+    if (song->attempted && audio) audio->stop_song(slot);
     if (song->handle && assets) assets->release(song->handle);
     song->handle = 0;
     song->attempted = 0;
 }
 
-static void clear_scene_audio(const PeAudioApi *audio, const PeAssetsApi *assets)
+static void clear_scene_audio(const PeFieldAudioApi *audio, const PeAssetsApi *assets)
 {
-    if (audio) audio->stop_field_song(VOICE_SLOT);
+    if (audio) audio->stop_song(VOICE_SLOT);
     if (assets) {
         if (s_voice) assets->release(s_voice);
         for (unsigned i = 0; i < PENDING_EFFECTS; ++i)
@@ -150,14 +150,14 @@ static void clear_scene_audio(const PeAudioApi *audio, const PeAssetsApi *assets
     memset(s_effects, 0, sizeof s_effects);
 }
 
-static void script_audio(PeReSession *session, const PeAudioApi *audio, const PeAssetsApi *assets)
+static void script_audio(PeReSession *session, const PeFieldAudioApi *audio, const PeAssetsApi *assets)
 {
     PeReScdRun *run = &session->run;
     run->voice_managed = 1;
     if (run->voice_pending) {
         run->voice_pending = 0;
         if (s_voice) assets->release(s_voice);
-        audio->stop_field_song(VOICE_SLOT);
+        audio->stop_song(VOICE_SLOT);
         char id[40];
         snprintf(id, sizeof id, "re2:voice/%u/%u/%u", session->player,
                  run->voice_mode ? 0 : session->stage + 1, run->voice_track);
@@ -165,21 +165,21 @@ static void script_audio(PeReSession *session, const PeAudioApi *audio, const Pe
         pe_mod_log("pe_re_play", "script voice cue %s", id);
     }
     if (s_voice) {
-        const int status = audio->play_field_song(VOICE_SLOT, s_voice, 0, 1);
+        const int status = audio->play_song(VOICE_SLOT, s_voice, 0, 1);
         if (status) {
             pe_mod_log("pe_re_play", "script voice %s", status > 0 ? "playing" : "unavailable");
             assets->release(s_voice);
             s_voice = 0;
         }
     }
-    if (audio->struct_size >= offsetof(PeAudioApi, set_field_song_gain) + sizeof audio->set_field_song_gain &&
-        audio->field_song_active && audio->set_field_song_gain) {
-        run->voice_busy = s_voice || audio->field_song_active(VOICE_SLOT);
+    if (audio->struct_size >= offsetof(PeFieldAudioApi, set_song_gain) + sizeof audio->set_song_gain &&
+        audio->song_active && audio->set_song_gain) {
+        run->voice_busy = s_voice || audio->song_active(VOICE_SLOT);
         if (run->voice_busy && run->voice_volume_set)
-            audio->set_field_song_gain(VOICE_SLOT, run->voice_volume / 127.0f);
+            audio->set_song_gain(VOICE_SLOT, run->voice_volume / 127.0f);
     } else run->voice_busy = s_voice != 0;
-    if (audio->struct_size >= offsetof(PeAudioApi, play_field_clip) + sizeof audio->play_field_clip &&
-        audio->play_field_clip && assets->acquire_sound) {
+    if (audio->struct_size >= offsetof(PeFieldAudioApi, play_clip) + sizeof audio->play_clip &&
+        audio->play_clip && assets->acquire_sound) {
         unsigned free_slot = 0;
         for (unsigned cue = 0; cue < run->sound_count; ++cue) {
             while (free_slot < PENDING_EFFECTS && s_effects[free_slot]) ++free_slot;
@@ -192,7 +192,7 @@ static void script_audio(PeReSession *session, const PeAudioApi *audio, const Pe
         }
         for (unsigned i = 0; i < PENDING_EFFECTS; ++i) {
             if (!s_effects[i]) continue;
-            const int status = audio->play_field_clip(s_effects[i], 1.0f);
+            const int status = audio->play_clip(s_effects[i], 1.0f);
             if (!status) continue;
             pe_mod_log("pe_re_play", "script sound %s", status > 0 ? "playing" : "unavailable");
             assets->release(s_effects[i]);
@@ -205,15 +205,15 @@ static void script_audio(PeReSession *session, const PeAudioApi *audio, const Pe
 void pe_re_music_suspend(void)
 {
     if (!s_muted) return;
-    const PeAudioApi *audio = audio_api();
-    if (audio) audio->pause_field_songs(1);
+    const PeFieldAudioApi *audio = audio_api();
+    if (audio) audio->pause_songs(1);
     s_suspended = 1;
     mute_native(0);
 }
 
 void pe_re_music_stop(void)
 {
-    const PeAudioApi *audio = audio_api();
+    const PeFieldAudioApi *audio = audio_api();
     const PeAssetsApi *assets = pe_service_get("assets", 1);
     for (unsigned slot = 0; slot < MUSIC_SLOTS; ++slot) clear_slot(slot, audio, assets);
     clear_scene_audio(audio, assets);
@@ -254,7 +254,7 @@ void pe_re_music_update(PeReSession *session)
     }
     const unsigned scenario = session->player_id == 12 ? 4 :
         session->player * 2 + pe_re_flag(&session->progress.flags, PE_RE_FG_STATUS, 1);
-    const PeAudioApi *audio = audio_api();
+    const PeFieldAudioApi *audio = audio_api();
     const PeAssetsApi *assets = pe_service_get("assets", 1);
     if (!s_selected || s_stage != session->stage || s_room != session->room || s_scenario != scenario) {
         for (unsigned slot = 0; slot < MUSIC_SLOTS; ++slot) clear_slot(slot, audio, assets);
@@ -264,7 +264,7 @@ void pe_re_music_update(PeReSession *session)
     }
     mute_native(1);
     if (s_suspended) {
-        if (audio) audio->pause_field_songs(0);
+        if (audio) audio->pause_songs(0);
         s_suspended = 0;
         pe_mod_log("pe_re_play", "field music: resumed after combat");
     }
@@ -292,7 +292,7 @@ void pe_re_music_update(PeReSession *session)
             song->attempted = 1;
         }
         if (!song->handle) continue;
-        const int status = audio->play_field_song(slot, song->handle, slot == 2, song->loops);
+        const int status = audio->play_song(slot, song->handle, slot == 2, song->loops);
         if (!status) continue;
         if (status > 0) pe_mod_log("pe_re_play", "field music: %s sequence %u", song->id, slot == 2);
         assets->release(song->handle);
