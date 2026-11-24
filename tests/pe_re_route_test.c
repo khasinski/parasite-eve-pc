@@ -183,11 +183,20 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
         if (s->run.reset[i].id == zone->id) { sat = s->run.reset[i].sat; break; }
     if (getenv("PE_TEST_RE_SAT")) printf("    examine zone %u: sat %02x as left %02x, kind %d\n", (unsigned)zone->id, (unsigned)zone->sat, sat,
                                          pe_re_zone_kind(&s->run, zone->id, zone->sce, NULL));
+    int sides[4] = {0, 1, 2, 3};                          /* the sides nearest her first, as a player walks up to it */
+    for (int i = 1; i < 4; i++)                           /* (4-0E's scene walks her only from the south) */
+        for (int j = i; j > 0; j--) {
+            double ax, az, bx, bz;
+            pe_re_front(cx, cz, sides[j] * 1024 + 2048, &ax, &az);
+            pe_re_front(cx, cz, sides[j - 1] * 1024 + 2048, &bx, &bz);
+            if (hypot(ax - s->x, az - s->z) >= hypot(bx - s->x, bz - s->z)) break;
+            const int t = sides[j]; sides[j] = sides[j - 1], sides[j - 1] = t;
+        }
     for (int k = 0; k < 5; k++) {
         double x = cx, z = cz;
         int facing = 0;
         if (k < 4) {                                      /* stand back, facing it (the stage's yaw) */
-            facing = k * 1024;
+            facing = sides[k] * 1024;
             pe_re_front(cx, cz, facing + 2048, &x, &z);
         }
         s->facing = facing;
@@ -723,6 +732,37 @@ static int walk_where_waited(PeReSession *s, FILE *log) {
     return 0;
 }
 
+/* Walk through each of the room's camera views, as a player crossing it would: a scene may wait for a
+ * view (3-09's G entrance starts on camera 1 in Claire A). Once a room; 1 when that started something. */
+static int tour_cameras(PeReSession *s, FILE *log) {
+    static int toured[ROOMS];
+    uint32_t n = 0;
+    char a[8], why[200];
+    if (toured[key_of(s)]++ || !pe_imp_logic_section(s->logic, PE_IMP_LOGIC_CAMZ, &n, NULL)) return 0;
+    const int from = key_of(s);
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpCameraZone c;
+        if (pe_imp_logic_camera_zone(s->logic, i, &c) || c.to == c.from) continue;
+        if (s->run.ran && s->run.camera_lock) break;          /* the scripts hold the view */
+        uint8_t before[2][32];
+        int tasks = 0;
+        memcpy(before[0], s->progress.flags.bits[3], 32), memcpy(before[1], s->progress.flags.bits[4], 32);
+        for (int t = 2; t < PE_RE_TASKS; t++) tasks += s->run.task[t].status != 0;
+        const double x = (c.x[0] + c.x[1] + c.x[2] + c.x[3]) / 4.0, z = (c.z[0] + c.z[1] + c.z[2] + c.z[3]) / 4.0;
+        s->x = x, s->z = z;
+        if (pe_re_session_step(s, s_store, x, z, 0, why, sizeof why) == PE_RE_ZONE) handed(s);
+        settle(s, 60);
+        if (key_of(s) != from) return 1;
+        int now = 0;
+        for (int t = 2; t < PE_RE_TASKS; t++) now += s->run.task[t].status != 0;
+        if (now > tasks || memcmp(before[0], s->progress.flags.bits[3], 32) || memcmp(before[1], s->progress.flags.bits[4], 32)) {
+            fprintf(log, "  %s: walked into camera %u's view, a scene went on\n", room_name(key_of(s), a, sizeof a), (unsigned)s->camera);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int door_count(const PeReSession *s) {
     uint32_t n = 0;
     pe_imp_logic_section(s->logic, PE_IMP_LOGIC_DOOR, &n, NULL);
@@ -859,6 +899,23 @@ int main(void) {
             static int stuck_at = -1, stuck_in[ROOMS];          /* progress+1 when stuck in each room */
             if (stuck_at == s_progress && stuck_in[here] == s_progress + 1) {   /* nothing new since, and here before: done */
                 fprintf(log, "  stuck in %s again: the run ends here\n", room_name(here, a, sizeof a));
+                /* where things stand, for a scene waiting on the player, the partner or an enemy */
+                fprintf(log, "    status: scenario B %d, player %d\n", pe_re_flag(&s.progress.flags, 1, 1),
+                        pe_re_flag(&s.progress.flags, 1, 0));
+                fprintf(log, "    partner: on %d at %d %d y %d floor %d; F/U_atari %d %d\n", s.run.works[1][0],
+                        s.run.works[1][PE_RE_MEMBER_POS_X], s.run.works[1][PE_RE_MEMBER_POS_Z], s.run.works[1][PE_RE_MEMBER_POS_Y], s.run.works[1][PE_RE_MEMBER_NFLOOR],
+                        s.progress.flags.work[0], s.progress.flags.work[1]);
+                fprintf(log, "    player: at %.0f %.0f floor %d camera %d%s; dest moving %d mode %02x to %d %d; stopped %d\n", s.x, s.z,
+                        s.floor, s.camera, s.run.camera_lock ? " (locked)" : "", s.run.player_dest.moving,
+                        s.run.player_dest.mode, s.run.player_dest.x, s.run.player_dest.z, s.run.actor_stopped[0]);
+                for (int k = 0; k < 4; k++) {                    /* the first enemies' state, for a scene waiting on one */
+                    const int16_t *w = s.run.works[2 + k];
+                    if (w[0])
+                        fprintf(log, "    enemy %d: id %02x type %04x routine %d/%d free0 %d; motion active %d direct %d move %d elapsed %d; stopped %d\n",
+                                k, (unsigned)w[PE_RE_MEMBER_ID], (unsigned)(uint16_t)w[PE_RE_MEMBER_TYPE], w[PE_RE_MEMBER_ROUTINE0],
+                                w[PE_RE_MEMBER_ROUTINE1], w[PE_RE_MEMBER_SCE_FREE0], s.run.scene[k].active, s.run.scene[k].direct,
+                                s.run.scene[k].move, s.run.scene[k].elapsed, s.run.actor_stopped[2 + k]);
+                }
                 for (int k = 0; k < PE_RE_TASKS; k++)
                     if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u (work %d)\n", k, s.run.task[k].proc,
                                                       (unsigned)s.run.task[k].pc, s.run.task[k].work);
@@ -878,7 +935,7 @@ int main(void) {
                 if (s_progress == was)
                     for (int k = 0; k < ROOMS; k++) if (s_room[k].seen && s_room[k].foes && k != here) s_room[k].fight = 1;
             }
-            if (walk_where_waited(&s, log)) { s_progress++; continue; }
+            if (walk_where_waited(&s, log) || tour_cameras(&s, log)) { s_progress++; continue; }
             for (int k = 0; k < ROOMS; k++)                       /* rooms seen before: search them again */
                 if (s_room[k].seen && k != here) s_room[k].unfinished = 1, s_room[k].searched_at = 0;
             for (int i = 0; i < DOORS; i++)

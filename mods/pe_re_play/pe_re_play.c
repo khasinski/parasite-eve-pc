@@ -49,8 +49,8 @@ static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERS
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_climbing;
-enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING };
-static int s_title;
+enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING, TITLE_STARTING };
+static int s_title, s_title_choice, s_title_wait;
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -609,16 +609,26 @@ static void tick_title(void)
         return;
     }
 
+    if (s_title == TITLE_STARTING) {
+        /* the choice box closes over the next frames: start once the field is free again (a few seconds at most) */
+        const int ready = !host->dialogue_busy() && !host->native_menu_active() &&
+                          (host->start_ready ? host->start_ready() : host->field_free());
+        if (!ready && ++s_title_wait < 300) return;
+        s_title = TITLE_CLOSED;
+        if (s_title_choice == TITLE_CONTINUE) resume();
+        else start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2, s_title_choice >= TITLE_LEON_B);
+        return;
+    }
     const int choice = host->dialogue_choice();
     if (choice == -1 && host->dialogue_busy()) return;
     if (choice >= TITLE_LEON_A && choice <= TITLE_CLAIRE_B) {
-        start_game(pe_re_game_named("re2"), (unsigned)choice % 2, choice >= TITLE_LEON_B);
+        s_title = TITLE_STARTING, s_title_choice = choice, s_title_wait = 0;
         return;
     }
     if (choice == TITLE_CONTINUE) {
         PeReSaved saved;
         if (!pe_re_save_decode(s_saved, &saved) && saved.game == pe_re_game_named("re2")) {
-            resume();
+            s_title = TITLE_STARTING, s_title_choice = choice, s_title_wait = 0;
             return;
         }
         pe_toast("No RE2 progress in the current save. Load a card in Parasite Eve first.");

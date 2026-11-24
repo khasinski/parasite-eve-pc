@@ -195,7 +195,7 @@ static int play(unsigned scenario) {
     EXPECT(s.busy && !s.active && !strcmp(s.text, "Resident Evil 2"));
     s.choice = 4;  /* Continue current save */
     s.busy = 0;
-    frames(2, 0);
+    frames(3, 0);   /* the choice, the field free again, the room */
     EXPECT(s.active && !s.api->room(&room) && room.room == 0);
     EXPECT(s.api->enemy_archive && !strcmp(s.api->enemy_archive(), scenario ? "cdemd1" : "cdemd0"));
     PeTripResult trip;
@@ -398,7 +398,7 @@ int re_headless_smoke(const char *store, unsigned scenario) {
         explored = explored && s.busy && !s.active;
         s.choice = 2 + (int)scenario;  /* select the B scenario on the imported disc */
         s.busy = 0;
-        frames(2, 0);
+        frames(3, 0);
         explored = explored && s.active && !strcmp(s.room, "re2:room/104");
         pe_re_play_shutdown();
     }

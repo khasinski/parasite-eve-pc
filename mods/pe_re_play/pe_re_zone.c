@@ -91,8 +91,8 @@ int pe_re_zone_by_id(const PeImpRoomLogic *room, const PeReScdRun *run, const Pe
     return found;
 }
 
-int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
-                     int facing, int floor, int manual, int16_t *work, PeReZoneHit *hits, int max) {
+static int zone_check_as(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                         int facing, int floor, unsigned attribute, int manual, int16_t *work, PeReZoneHit *hits, int max) {
     Candidate *c = NULL;
     double fx, fz;
     int found = 0;
@@ -106,7 +106,7 @@ int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const Pe
         if (pe_re_zone_placed(run, &c[i].zone, &placed)) continue;   /* on an object or enemy not there */
         const PeImpZone *zn = &placed;
         const int16_t old_f = work ? work[PE_RE_WORK_F_ATARI] : 0, old_u = work ? work[PE_RE_WORK_U_ATARI] : 0;
-        if (!(h->sat & PE_RE_SAT_PLAYER) || (h->sat & PE_RE_SAT_MANUAL) != want) continue;
+        if (!(h->sat & attribute) || (h->sat & PE_RE_SAT_MANUAL) != want) continue;
         if (!(zn->floor & 0x80) && zn->floor != floor) continue;
         if ((h->sat & PE_RE_SAT_UNDER) && pe_re_in_quad(zn->x, zn->z, x, z)) {
             if (work) work[PE_RE_WORK_U_ATARI] = h->id;
@@ -125,4 +125,14 @@ int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const Pe
     }
     free(c);
     return found < max ? found : max;
+}
+
+int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                     int facing, int floor, int manual, int16_t *work, PeReZoneHit *hits, int max) {
+    return zone_check_as(room, run, p, x, z, facing, floor, PE_RE_SAT_PLAYER, manual, work, hits, max);
+}
+
+int pe_re_zone_check_actor(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                           int facing, int floor, unsigned attribute, int16_t *work) {
+    return zone_check_as(room, run, p, x, z, facing, floor, attribute, 0, work, NULL, 0);
 }

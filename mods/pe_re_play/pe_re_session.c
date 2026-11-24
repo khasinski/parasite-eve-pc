@@ -279,7 +279,9 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
     PeReZoneHit hits[16];
     if (!s->game || !s->logic) return PE_RE_STAY;
     s->x = x, s->z = z;
-    if (pe_re_session_controls_locked(s)) goto camera;
+    /* locked (a scene walks her, or holds the pad): no examine, but the zones that need no button still
+     * count, as GAME.C runs Sce_at every frame whatever the scene (6-01's lift walks her into its door) */
+    if (pe_re_session_controls_locked(s)) goto every_frame;
     if (action) {
         s->said[0] = 0;
         /* an examine: the game's own check (the point in front, or underfoot, by the zone's bits) */
@@ -380,6 +382,15 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         s->moved = 1;
     }
     step_player_destination(s);
+    /* Sce_at (SCE_AT.C) after the moves: the enemies' zones (bit 0x02), then the partner's (0x08). Their
+     * floors from their height; the partner's height isn't kept here, and she follows, so it's the player's. */
+    for (int w = 1; w < 18; w++) {
+        const int16_t *e = s->run.works[w];
+        if (!e[0]) continue;
+        pe_re_zone_check_actor(s->logic, &s->run, &s->progress, e[PE_RE_MEMBER_POS_X], e[PE_RE_MEMBER_POS_Z],
+                               pe_re_facing_of(e[PE_RE_MEMBER_CDIR_Y]), w == 1 ? s->floor : pe_re_floor_of(e[PE_RE_MEMBER_POS_Y]),
+                               w == 1 ? PE_RE_SAT_PARTNER : PE_RE_SAT_ENEMY, s->progress.flags.work);
+    }
     for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */
         PeReZoneHit h;
         if (pe_re_zone_by_id(s->logic, &s->run, &s->progress, s->run.aot_on[i], &h)) continue;

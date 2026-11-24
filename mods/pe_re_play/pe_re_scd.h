@@ -59,6 +59,7 @@
 #define PE_RE_STOP_PAD_LOCK 7
 #define PE_RE_STOP_EVENTS 6
 #define PE_RE_STAT_CINESCO 27
+#define PE_RE_STAT_BG_JUST_DRAWN 11          /* (1 << 20): set by Cut_chg / Cut_old (SCE1.C) */
 #define PE_RE_FG_ITEM 8
 #define PE_RE_FG_ITEM2 34                      /* Item_flg2: taken items from stage 5 on (SCE_AT.C, Stage_no >= 4) */
 #define PE_RE_WORK 256
@@ -133,7 +134,8 @@ typedef struct {
 } PeReSceneMotion;
 
 typedef struct {
-    uint8_t moving, owned, mode, arrival;
+    uint8_t moving, owned, mode;
+    uint16_t arrival;                          /* the Room_flg bit to set on arrival, plus one (0 none) */
     int16_t x, z;
 } PeReActorDestination;
 
@@ -177,8 +179,10 @@ typedef struct {
     uint8_t bgm_command[3];
     int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
-    uint8_t arrived[PE_RE_WORKS];              /* plc_dest's arrival flag (Room_flg bit) per walker, set every
-                                                * frame from the next one until plc_dest / plc_ret again; 0 none */
+    int bg_drawn, bg_camera;                   /* STAT_BG_JUST_DRAWN's ticks left, the camera it last saw */
+    uint16_t arrived[PE_RE_WORKS];             /* plc_dest's arrival flag (Room_flg bit) plus one per walker, set
+                                                * every frame from the next one until plc_dest / plc_ret again; 0 none.
+                                                * Bit 0 counts: SCE2.C Plc_dest keeps Set_no as given (2-02, 4-09). */
     PeReActorDestination player_dest;
     PeReActorDestination enemy_dest[PE_RE_ENEMIES_MAX];
     uint8_t actor_stopped[PE_RE_WORKS];         /* plc_stop suspends the active scripted action */

@@ -29,6 +29,8 @@ enum {                                  /* zone kinds (SCENARIO.H SCE_*) */
     PE_RE_ZONE_STATUS = 12, PE_RE_ZONE_DRAWER = 13, PE_RE_ZONE_WINDOWS = 14
 };
 #define PE_RE_SAT_PLAYER 0x01u
+#define PE_RE_SAT_ENEMY 0x02u
+#define PE_RE_SAT_PARTNER 0x08u           /* SCE_08: Sce_at checks the partner (pEnemy[1]) with it */
 #define PE_RE_SAT_MANUAL 0x10u
 #define PE_RE_SAT_FRONT 0x20u
 #define PE_RE_SAT_UNDER 0x40u
@@ -56,6 +58,12 @@ int pe_re_zone_placed(const PeReScdRun *run, const PeImpZone *z, PeImpZone *out)
  * already (pe_re_pickup_gone) don't count. Fills up to `max` hits in id order; how many. */
 int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
                      int facing, int floor, int manual, int16_t *work, PeReZoneHit *hits, int max);
+
+/* The same every-frame check for another actor: `attribute` is the bit its zones need (PE_RE_SAT_ENEMY,
+ * PE_RE_SAT_PARTNER). Only F_atari / U_atari change (work[0] / work[1]), which scenes wait on (Claire B's
+ * 3-0A waits for Sherry to reach zone 3); what the zones themselves do isn't run for them. Hits; how many. */
+int pe_re_zone_check_actor(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                           int facing, int floor, unsigned attribute, int16_t *work);
 
 /* The zone the scripts hold under `id` (aot_on sets it off): 0 and the zone, or -1. */
 int pe_re_zone_by_id(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, uint8_t id,

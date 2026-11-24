@@ -368,6 +368,8 @@ static int step(Vm *vm, PeReScdTask *t) {
         PeReScdRun *r = vm->run;
         const int to = code == OP_CUT_CHG ? ins[1] & 0x7F : r->camera_old;
         r->camera_old = r->camera, r->camera = to, r->camera_lock = code == OP_CUT_CHG;
+        r->bg_drawn = 2, r->bg_camera = to;                  /* STAT_BG_JUST_DRAWN, which scenes wait on (4-09) */
+        pe_re_flag_set(vm->flags, PE_RE_FG_STATUS, PE_RE_STAT_BG_JUST_DRAWN, 1);
         t->pc += n;
         return CONTINUE;
     }
@@ -419,7 +421,9 @@ static int step(Vm *vm, PeReScdTask *t) {
         return CONTINUE;
     }
     case OP_PLC_MOTION:
-        if (!enemy_work(t->work) || ins[1]) goto unsupported;
+        /* SCE2.C Plc_motion takes any mode (Routine_1); here the other modes only for people (0x40 up),
+         * whose scripted move clears Type bit 0x200 when it's played (enemy_standins) */
+        if (!enemy_work(t->work) || (ins[1] && (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) < 0x40)) goto unsupported;
         vm->run->scene[t->work - 2] = (PeReSceneMotion){.active = 1, .direct = 1, .move = ins[2]};
         *member(vm, t, PE_RE_MEMBER_SCE_FLAGS) = ins[3];
         vm->run->actor_stopped[t->work] = 0;
@@ -458,12 +462,12 @@ static int step(Vm *vm, PeReScdTask *t) {
         const int16_t x = s16(ins + 4), z = s16(ins + 6);
         if (t->work == 0 || (enemy_work(t->work) && walking_mode(ins[2]))) {
             PeReActorDestination *dest = t->work == 0 ? &r->player_dest : &r->enemy_dest[t->work - 2];
-            *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = ins[3], .x = x, .z = z};
+            *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = (uint16_t)(ins[3] + 1), .x = x, .z = z};
             *member(vm, t, PE_RE_MEMBER_DEST_X) = x;
             *member(vm, t, PE_RE_MEMBER_DEST_Z) = z;
             r->arrived[t->work] = 0;
             r->actor_stopped[t->work] = 0;
-            if (ins[3]) pe_re_flag_set(vm->flags, 5, ins[3], 0);
+            pe_re_flag_set(vm->flags, 5, ins[3], 0);
             if (t->work && r->scene[t->work - 2].direct) r->scene[t->work - 2] = (PeReSceneMotion){0};
         } else if (t->work > 0) {
             /* Keep legacy placement for destination modes without a movement routine. */
@@ -471,7 +475,7 @@ static int step(Vm *vm, PeReScdTask *t) {
                 *member(vm, t, PE_RE_MEMBER_POS_X) = x;
                 *member(vm, t, PE_RE_MEMBER_POS_Z) = z;
             }
-            r->arrived[t->work] = ins[3];
+            r->arrived[t->work] = (uint16_t)(ins[3] + 1);
         }
         t->pc += n;
         return CONTINUE;
@@ -976,6 +980,13 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         PeReSceneMotion *motion = &run->scene[n];
         if (run->actor_stopped[2 + n]) continue;
         if (motion->direct && motion->active && motion->elapsed < UINT16_MAX) motion->elapsed++;
+        /* a person (0x40 up, e.g. Marvin 0x4A in 2-02) given a scripted move with Type bit 0x200 set: the bit
+         * clears once the move has played (about two seconds), which the scene waits for */
+        if (w[0] && w[PE_RE_MEMBER_ID] >= 0x40 && (w[PE_RE_MEMBER_TYPE] & 0x200) && motion->direct && motion->active &&
+            motion->elapsed >= 60) {
+            w[PE_RE_MEMBER_TYPE] &= ~0x200;
+            *motion = (PeReSceneMotion){0};
+        }
         if (w[0] && w[PE_RE_MEMBER_ID] >= 0x10 && w[PE_RE_MEMBER_ID] < 0x20) {
             if (!motion->direct && !run->enemy_dest[n].owned &&
                 (w[PE_RE_MEMBER_ROUTINE0] == 8 || !zombie_rise(run, n))) zombie_scene(run, n);
@@ -998,6 +1009,12 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
             continue;
         }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x23 && alligator) {
+            /* 4-0A's proc 3 holds the player (plc_stop) until the view is camera 1, the alligator's approach,
+             * which EM23 cuts to (no script does). Inferred from the scripts: EM23.C isn't in the sources read. */
+            if (*f && !run->em_dead[n] && run->actor_stopped[0] && pe_re_scd_running(run, 3) && run->camera != 1) {
+                run->camera_old = run->camera, run->camera = 1, run->camera_lock = 1;
+                continue;
+            }
             /* EM23.C: after the damage defeat, return to the unlocked exit view. */
             if (*f && run->em_dead[n] == 1) {
                 run->camera = 8;
@@ -1035,9 +1052,13 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
+    /* STAT_BG_JUST_DRAWN: the game sets it as a new background is drawn and clears it a frame later;
+     * here it's kept through one whole tick, so a task scheduled before the setter sees it too */
+    if (run->camera != run->bg_camera) run->bg_drawn = 2, run->bg_camera = run->camera;
+    if (run->bg_drawn) pe_re_flag_set(flags, PE_RE_FG_STATUS, PE_RE_STAT_BG_JUST_DRAWN, --run->bg_drawn > 0);
     step_enemy_destinations(run);
     for (int w = 0; w < PE_RE_WORKS; w++)                  /* repeat arrival flags until that actor gets a new order */
-        if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
+        if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w] - 1, 1);   /* set again after each frame's clear */
     enemy_standins(run, flags);
     int kept = 0;
     for (int i = 0; i < run->effect_count; i++) {
