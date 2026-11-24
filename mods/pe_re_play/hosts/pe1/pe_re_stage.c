@@ -1484,13 +1484,16 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
 /* Native actor texture pages are live while imported effects are drawn. */
 enum { EFFECT_PAGE_Y = 256, EFFECT_FIRST_ROW = 24, EFFECT_PIXEL_END = 240, EFFECT_CLUT_Y = 244,
        EFFECT_BANK_SIZE = 8, EFFECT_PACKET_MAX = 256 };
-static const int s_effect_page_x[] = {640, 704};
+/* effect pages: 64-wide columns of VRAM's lower half, used where empty; the first two are free
+ * under Carnegie Hall's room, the last two also under Central Park's (whose Aya fills 640-767) */
+#define EFFECT_PAGES 4
+static const int s_effect_page_x[EFFECT_PAGES] = {640, 704, 832, 896};
 static const PeImpRoomLogic *s_effect_room;
 static PeReEffect s_effects[PE_RE_EFFECT_MAX];
 static int s_effect_count;
 static struct {
     unsigned height, palettes;
-} s_effect_pages[2];
+} s_effect_pages[EFFECT_PAGES];
 typedef struct {
     PeImpRe2RoomEffect asset;
     uint8_t *frame_data;
@@ -1503,7 +1506,7 @@ static RenderTexturedQuad s_effect_packets[2][EFFECT_PACKET_MAX];
 
 static void clear_effects(int restore) {
     for (unsigned i = 0; i < s_effect_texture_count; i++) free(s_effect_textures[i].frame_data);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < EFFECT_PAGES; i++) {
         if (restore && s_effect_pages[i].height) {
             RECT pixels = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_FIRST_ROW, 64, s_effect_pages[i].height};
             RECT clut = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y, 16, s_effect_pages[i].palettes};
@@ -1535,7 +1538,7 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
     const unsigned w = effect_word(image + 8), h = effect_word(image + 10);
     const unsigned palettes = (clut_size - 12) / 32;
     if (w > 64) return;
-    for (unsigned i = 0; i < 2; i++) {
+    for (unsigned i = 0; i < EFFECT_PAGES; i++) {
         const unsigned v = EFFECT_FIRST_ROW + s_effect_pages[i].height, p = s_effect_pages[i].palettes;
         if (v + h > EFFECT_PIXEL_END || p + palettes > 256 - EFFECT_CLUT_Y) continue;
         RECT reserved = {s_effect_page_x[i], EFFECT_PAGE_Y + v, 64, h};
