@@ -233,6 +233,7 @@ typedef struct {
     void *ctx;
     void (*lose)(void *ctx, uint16_t item, uint16_t count);   /* count 0: all of it */
     void (*give)(void *ctx, uint16_t item, uint16_t count);
+    int (*set_room_bgm)(void *ctx, unsigned stage, unsigned room, uint16_t cue);
 } PeReScdHost;
 
 /* Enter room `l`: start its init and main tasks and run every task until it yields. RE2 only;

@@ -56,6 +56,9 @@ int pe_re_door_at(const PeImpRoomLogic *l, const PeReScdRun *run, double x, doub
 int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z, int radius, int reach);
 
 /* ---- the session ---- */
+enum { PE_RE2_BGM_ROOMS = 142 };
+int pe_re2_bgm_room_index(unsigned stage, unsigned room);
+
 typedef struct {
     const PeReGame *game;
     uint32_t stage, room, player;
@@ -66,6 +69,11 @@ typedef struct {
     PeImpRoomLogic *logic;            /* the room's record (owned) */
     PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
     PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */
+    uint16_t bgm_override[PE_RE2_BGM_ROOMS];
+    uint8_t bgm_overridden[PE_RE2_BGM_ROOMS];
+    uint16_t entry_bgm;
+    int entry_bgm_overridden;
+    unsigned room_loads;
     PeReScdRun run;                   /* what this room's scripts set up when the player came in */
     PeReEnemyState enemy_state[16];   /* last field update, indexed by room enemy slot */
     char said[200];                   /* the last thing to tell the player ("" if nothing) */

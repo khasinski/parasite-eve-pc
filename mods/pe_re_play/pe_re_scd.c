@@ -16,7 +16,7 @@ enum {
     OP_GOSUB = 0x18, OP_RETURN = 0x19, OP_BREAK = 0x1A, OP_FOR2 = 0x1B,
     OP_CK = 0x21, OP_SET = 0x22, OP_CMP = 0x23, OP_SAVE = 0x24, OP_COPY = 0x25, OP_CALC = 0x26, OP_CALC2 = 0x27,
     OP_MESSAGE_ON = 0x2B, OP_AOT_SET = 0x2C, OP_DOOR_AOT_SE = 0x3B, OP_AOT_RESET = 0x46, OP_ITEM_AOT_SET = 0x4E,
-    OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_BGM_CONTROL = 0x51, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
+    OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_BGM_CONTROL = 0x51, OP_BGM_TABLE_SET = 0x57, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
     OP_CUT_AUTO = 0x3C, OP_ESPR_ON = 0x3A, OP_ESPR_KILL = 0x4C,
     OP_ESPR_ON2 = 0x64, OP_ESPR_KILL2 = 0x65,
@@ -637,6 +637,14 @@ static int step(Vm *vm, PeReScdTask *t) {
         }
         t->pc += n;
         return CONTINUE;
+    case OP_BGM_TABLE_SET: {
+        /* Stage is one-based. Each bank ID has a separate control byte. */
+        const uint16_t cue = (uint16_t)((ins[4] | ins[6]) | (ins[5] | ins[7]) << 8);
+        if (!ins[3] || (vm->host && vm->host->set_room_bgm &&
+            vm->host->set_room_bgm(vm->host->ctx, ins[3] - 1u, ins[2], cue))) goto unsupported;
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_BGM_CONTROL:
         if (ins[1] >= 3 || ins[2] > 5) goto unsupported;
         if (ins[2]) {

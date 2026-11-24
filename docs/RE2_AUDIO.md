@@ -67,3 +67,13 @@ results cue (`MAIN2A`). The cue stops when the player returns to the title.
 Retail score calculations, clear-save unlocks and results art remain pending.
 A missing ending movie still advances to the
 completion screen.
+
+
+## Scripted room music table
+
+The room loader uses the scenario's starting cue table. The `Sce_bgmtbl_set`
+opcode can replace the entry for the current room or a different room. The
+change applies the next time the target room loads, without interrupting a
+cue already playing. The sequence enable flags and silent banks follow the
+script operands. Overrides live in the imported play session. Reloading a
+native save rebuilds this table from the scenario defaults and room scripts.

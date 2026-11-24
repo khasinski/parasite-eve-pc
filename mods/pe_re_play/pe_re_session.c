@@ -121,8 +121,26 @@ static int has_item(void *ctx, uint16_t item) { return pe_re_has(&((PeReSession 
 static int talking(void *ctx) { const PeReSession *s = ctx; return s->talking && s->talking(); }
 static void lose_item(void *ctx, uint16_t item, uint16_t count) { pe_re_lose(&((PeReSession *)ctx)->progress, item, count); }
 static void give_item(void *ctx, uint16_t item, uint16_t count) { pe_re_give(&((PeReSession *)ctx)->progress, item, count); }
+int pe_re2_bgm_room_index(unsigned stage, unsigned room)
+{
+    /* RE2 SND.C's nroom[] gives each stage's first entry. */
+    static const unsigned first[] = {0x00, 0x1f, 0x3d, 0x4d, 0x60, 0x6c, 0x86, PE_RE2_BGM_ROOMS};
+    if (stage >= sizeof first / sizeof *first - 1 || room >= first[stage + 1] - first[stage]) return -1;
+    return (int)(first[stage] + room);
+}
+
+static int set_room_bgm(void *ctx, unsigned stage, unsigned room, uint16_t cue)
+{
+    const int index = pe_re2_bgm_room_index(stage, room);
+    if (index < 0) return -1;
+    PeReSession *s = ctx;
+    s->bgm_override[index] = cue;
+    s->bgm_overridden[index] = 1;
+    return 0;
+}
+
 static PeReScdHost host_of(PeReSession *s) {
-    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s, lose_item, give_item};
+    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s, lose_item, give_item, set_room_bgm};
     return h;
 }
 
@@ -136,6 +154,11 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     }
     free(s->logic);
     s->logic = l, s->stage = stage, s->room = room;
+    /* Set_room loads the sound bank before it runs the new room's scripts. */
+    const int bgm_index = pe_re2_bgm_room_index(stage, room);
+    s->entry_bgm_overridden = bgm_index >= 0 && s->bgm_overridden[bgm_index];
+    if (s->entry_bgm_overridden) s->entry_bgm = s->bgm_override[bgm_index];
+    ++s->room_loads;
     s->progress.item_group = stage >= 4 ? PE_RE_FG_ITEM2 : PE_RE_FG_ITEM;   /* Item_flg2 from stage 5 on */
     const PeReScdHost host = host_of(s);
     memset(s->progress.flags.bits[PE_RE_FG_USE], 0, sizeof s->progress.flags.bits[PE_RE_FG_USE]);   /* Sce_work_clr */

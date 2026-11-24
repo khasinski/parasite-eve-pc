@@ -9,8 +9,7 @@
 
 /* PS1 RE2 INIT_TBL.DAT, the room cue map at offset 0x22c in each scenario
  * record. Low byte is the main bank, high byte is the two-sequence sub bank. */
-static const uint8_t k_stage_base[] = {0x00, 0x1f, 0x3d, 0x4d, 0x60, 0x6c, 0x86, 142};
-static const uint16_t k_room_music[5][142] = {
+static const uint16_t k_room_music[5][PE_RE2_BGM_ROOMS] = {
     { /* Leon A */
         0x010b, 0xc041, 0xff00, 0x0500, 0x010b, 0x0500, 0xc3ff, 0x0500, 0xc200, 0xc308,
         0xff04, 0xff08, 0xff08, 0xffff, 0xff08, 0xff0c, 0xff05, 0xcbff, 0xff02, 0xff08,
@@ -110,7 +109,7 @@ typedef struct {
 } MusicSlot;
 
 static MusicSlot s_slots[MUSIC_SLOTS];
-static unsigned s_stage, s_room, s_scenario;
+static unsigned s_room_loads, s_scenario;
 static int s_selected, s_muted, s_suspended, s_results;
 
 static const PeFieldAudioApi *audio_api(void)
@@ -223,15 +222,18 @@ void pe_re_music_stop(void)
     s_results = 0;
 }
 
-static void select_room(unsigned stage, unsigned room, unsigned scenario)
+static void select_room(const PeReSession *session, unsigned scenario)
 {
+    const int index = pe_re2_bgm_room_index(session->stage, session->room);
     uint16_t cue = 0xffff;
-    if (scenario < 5 && stage < sizeof k_stage_base - 1 &&
-        room < (unsigned)(k_stage_base[stage + 1] - k_stage_base[stage]))
-        cue = k_room_music[scenario][k_stage_base[stage] + room];
-
-    s_stage = stage;
-    s_room = room;
+    if (session->entry_bgm_overridden) {
+        cue = session->entry_bgm;
+        pe_mod_log("pe_re_play", "room music override %u-%02x: %04x",
+                   (unsigned)session->stage + 1, (unsigned)session->room, (unsigned)cue);
+    } else if (scenario < 5 && index >= 0) {
+        cue = k_room_music[scenario][index];
+    }
+    s_room_loads = session->room_loads;
     s_scenario = scenario;
     s_selected = 1;
     memset(s_slots, 0, sizeof s_slots);
@@ -295,11 +297,11 @@ void pe_re_music_update(PeReSession *session)
         session->player * 2 + pe_re_flag(&session->progress.flags, PE_RE_FG_STATUS, 1);
     const PeFieldAudioApi *audio = audio_api();
     const PeAssetsApi *assets = song_assets();
-    if (!s_selected || s_stage != session->stage || s_room != session->room || s_scenario != scenario) {
+    if (!s_selected || s_room_loads != session->room_loads || s_scenario != scenario) {
         for (unsigned slot = 0; slot < MUSIC_SLOTS; ++slot) clear_slot(slot, audio, assets);
         clear_scene_audio(audio, assets);
         s_suspended = 0;
-        select_room(session->stage, session->room, scenario);
+        select_room(session, scenario);
     }
     mute_native(1);
     if (s_suspended) {

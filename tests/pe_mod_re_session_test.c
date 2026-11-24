@@ -702,10 +702,53 @@ static void test_movie_script(void) {
     free(logic);
 }
 
+typedef struct {
+    unsigned count, stage, room;
+    uint16_t cue;
+} MusicTableWrite;
+
+static int capture_music_table(void *ctx, unsigned stage, unsigned room, uint16_t cue)
+{
+    if (pe_re2_bgm_room_index(stage, room) < 0) return -1;
+    MusicTableWrite *write = ctx;
+    *write = (MusicTableWrite){write->count + 1, stage, room, cue};
+    return 0;
+}
+
+static void test_music_table_script(void)
+{
+    const uint8_t rdt[] = {
+        [8 + 17 * 4] = 100,
+        [100] = 4, 0, 6, 0,
+        0x01, 0,
+        0x57, 0, 0x09, 0x01, 0x1e, 0x07, 0x40, 0x80,
+        0x57, 0, 0xff, 0x01, 0xff, 0x00, 0, 0,
+        0x01, 0
+    };
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
+    CHECK(builder);
+    if (!builder) return;
+    CHECK(!pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    PeImpRoomLogic *logic = pe_imp_logic_finish(builder);
+    CHECK(logic);
+    if (!logic) return;
+    PeReFlags flags = {0};
+    PeReScdRun run;
+    MusicTableWrite write = {0};
+    const PeReScdHost host = {.ctx = &write, .set_room_bgm = capture_music_table};
+    pe_re_scd_run(logic, &flags, &host, &run);
+    pe_re_scd_tick(logic, &flags, &host, &run);
+    CHECK(write.count == 1 && write.stage == 0 && write.room == 9 && write.cue == 0x875e);
+    CHECK(run.skipped_by_op[0x57] == 1);
+    CHECK(pe_re2_bgm_room_index(6, 7) == 141 && pe_re2_bgm_room_index(6, 8) == -1);
+    free(logic);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "--host-store")) return re_headless_smoke(argv[2], 0) != 0;
     test_ground_enemy_variants();
     test_movie_script();
+    test_music_table_script();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);
