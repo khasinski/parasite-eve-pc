@@ -37,7 +37,9 @@ A fresh Cross press skips the current clip. If an asset is missing, the
 sequence advances to the next clip or room.
 
 The room-script mapping covers IDs 1, 2, 4Ã¢â‚¬â€œ14 and 17. Character-specific
-entries (8, 10, 12Ã¢â‚¬â€œ14 and 17) use verified Leon filenames. MOV3 imports
+entries (8, 10-14 and 17) use filenames from the respective retail discs.
+Claire uses R408 for ID 11, and her R700 and R703 clips have their own end frames.
+MOV3 imports
 preserve STR frame numbers as well as the video and XA sector positions.
 This lets R200, R505 and Leon's R704 play the excerpt requested by the room
 script, using the seek and end frame from the original movie table. Rescan
@@ -52,7 +54,7 @@ Playback places XA file 1, channel 1 on the 150-sector-per-second STR
 timeline and selects video frames from the audio stream's consumed source
 samples. If the track or audio device is unavailable, the host uses its
 video clock. Verify the timing, excerpt boundaries, and channel choice on
-retail discs. Several Claire-specific room movies remain unmapped.
+retail discs.
 
 ## Ending and credits
 

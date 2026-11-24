@@ -25,10 +25,11 @@ static struct {
     int facing, camera, floor, active, shade, curtain, hold, backdrop;
     unsigned rooms, placements, saves;
     unsigned movie_starts, movie_stops, movie_frames;
-    int test_ending;
+    int test_ending, test_room_movies;
     unsigned movie_missing;
     int movie_enabled, movie_muted, movie_locked, movie_muted_at_room_start;
-    char movie_assets[2][PE_IMP_ID_MAX];
+    char movie_assets[5][PE_IMP_ID_MAX];
+    unsigned movie_cutoffs[5];
     int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
@@ -115,11 +116,14 @@ static int start_movie(const char *asset, unsigned start_sector, unsigned last_f
     const unsigned index = s.movie_starts++;
     if (index >= sizeof s.movie_assets / sizeof *s.movie_assets) return 0;
     snprintf(s.movie_assets[index], sizeof s.movie_assets[index], "%s", asset);
+    s.movie_cutoffs[index] = last_frame;
     if (s.movie_missing & (1u << index)) return 0;
     if (s.test_ending) {
         const int scenario_b = s.test_ending == 2;
         if (!s.active || start_sector != (scenario_b ? 0u : 4589u * 5u) ||
             last_frame != (scenario_b ? 9187u : 9247u) || silent != !scenario_b) return 0;
+    } else if (s.test_room_movies) {
+        if (!s.active || start_sector || !last_frame || silent) return 0;
     } else if (s.active || start_sector || last_frame || silent) return 0;
     s.movie_frames = 4;
     return 1;
@@ -564,6 +568,42 @@ static int test_opening(void) {
         s.busy = 0;
         frames(2, 0);
         EXPECT(!s.active && s.busy && !strcmp(s.text, "Resident Evil 2"));
+        pe_mod_pe_re_play.shutdown();
+    }
+    const uint8_t rdt[] = {
+        [8 + 17 * 4] = 100,
+        [100] = 4, 0, 6, 0,
+        0x01, 0,
+        0x6f, 8, 0x6f, 10, 0x6f, 11, 0x6f, 12, 0x6f, 13,
+        0x01, 0
+    };
+    builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
+    EXPECT(builder);
+    EXPECT(!pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    logic = pe_imp_logic_finish(builder);
+    EXPECT(logic);
+    const int room_saved = pe_imp_logic_save(logic, folder, NULL, 0);
+    free(logic);
+    EXPECT(!room_saved);
+
+    static const char *const assets[][5] = {
+        {"re2:movie/r108l", "re2:movie/r204l", "re2:movie/r409", "re2:movie/r700l", "re2:movie/r703l"},
+        {"re2:movie/r108c", "re2:movie/r204c", "re2:movie/r408", "re2:movie/r700c", "re2:movie/r703c"},
+    };
+    static const unsigned cutoffs[][5] = {{1326, 500, 4287, 2125, 3115}, {1326, 500, 4287, 3043, 2345}};
+    for (unsigned player = LEON_A; player <= CLAIRE_A; ++player) {
+        memset(&s, 0, sizeof s);
+        s.store = store;
+        s.movie_enabled = s.test_room_movies = 1;
+        EXPECT(!pe_mod_pe_re_play.init());
+        *s.scenario = (int)player;
+        s.start();
+        for (unsigned frame = 0; frame < 90 && s.movie_stops < 5; ++frame) frames(1, 0);
+        EXPECT(s.active && s.movie_starts == 5 && s.movie_stops == 5 && !s.movie_locked);
+        for (unsigned i = 0; i < 5; ++i) {
+            EXPECT(!strcmp(s.movie_assets[i], assets[player][i]));
+            EXPECT(s.movie_cutoffs[i] == cutoffs[player][i]);
+        }
         pe_mod_pe_re_play.shutdown();
     }
     return 0;

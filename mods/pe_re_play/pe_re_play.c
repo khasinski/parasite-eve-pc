@@ -633,8 +633,8 @@ static void stop_movie(void) {
 
 typedef struct {
     const char *asset, *claire_asset;
-    unsigned start_sector, last_frame;
-    int leon_only, silent;
+    unsigned start_sector, last_frame, claire_last_frame;
+    int silent;
 } ReMovie;
 
 enum {
@@ -650,7 +650,7 @@ static const unsigned s_scenario_a_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOV
 static const unsigned s_scenario_b_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_B_OPENING_SECOND, 0};
 
 /* Entries from Movie_tbl. The alternate excerpts seek to five
- * sectors per table offset unit. Character-specific names are verified for Leon. */
+ * sectors per table offset unit. FILECODE.H maps character-specific names. */
 static const ReMovie s_movies[] = {
     [1] = {.asset = "re2:movie/r200", .last_frame = 250},
     [2] = {.asset = "re2:movie/r200", .last_frame = 146},
@@ -659,12 +659,12 @@ static const ReMovie s_movies[] = {
     [5] = {.asset = "re2:movie/r200", .last_frame = 90},
     [6] = {.asset = "re2:movie/r505", .last_frame = 598},
     [7] = {.asset = "re2:movie/r505", .start_sector = 407 * 5, .last_frame = 598},
-    [8] = {.asset = "re2:movie/r108l", .leon_only = 1},
+    [8] = {.asset = "re2:movie/r108l", .claire_asset = "re2:movie/r108c", .last_frame = 1326},
     [9] = {.asset = "re2:movie/r109"},
-    [10] = {.asset = "re2:movie/r204l", .leon_only = 1},
-    [11] = {.asset = "re2:movie/r409"},
-    [12] = {.asset = "re2:movie/r700l", .leon_only = 1},
-    [13] = {.asset = "re2:movie/r703l", .leon_only = 1},
+    [10] = {.asset = "re2:movie/r204l", .claire_asset = "re2:movie/r204c", .last_frame = 500},
+    [11] = {.asset = "re2:movie/r409", .claire_asset = "re2:movie/r408", .last_frame = 4287},
+    [12] = {.asset = "re2:movie/r700l", .claire_asset = "re2:movie/r700c", .last_frame = 2125, .claire_last_frame = 3043},
+    [13] = {.asset = "re2:movie/r703l", .claire_asset = "re2:movie/r703c", .last_frame = 3115, .claire_last_frame = 2345},
     [RE2_MOVIE_B_ENDING] = {.asset = "re2:movie/r704l", .claire_asset = "re2:movie/r704c", .last_frame = 9187},
     [RE2_MOVIE_A_OPENING_SECOND] = {.asset = "re2:movie/opn2ndl", .claire_asset = "re2:movie/opn2ndc"},
     [RE2_MOVIE_B_OPENING_SECOND] = {.asset = "re2:movie/opn2ndrl", .claire_asset = "re2:movie/opn2ndrc"},
@@ -687,18 +687,20 @@ static int start_movie(unsigned id) {
     const ReHost *host = re_host();
     const ReMovie *movie = id < sizeof s_movies / sizeof *s_movies ? &s_movies[id] : NULL;
     const char *asset = movie ? movie->asset : NULL;
-    if (movie && s_session.player == 1) {
-        if (movie->claire_asset) asset = movie->claire_asset;
-        else if (movie->leon_only) asset = NULL;
+    unsigned last_frame = movie ? movie->last_frame : 0;
+    if (movie && s_session.player == 1 && movie->claire_asset) {
+        asset = movie->claire_asset;
+        if (movie->claire_last_frame) last_frame = movie->claire_last_frame;
     }
     if (s_movie_playing || !asset ||
         !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) || !RE_HOST_HAS(host, movie_stop) ||
-        !host->movie_start(asset, movie->start_sector, movie->last_frame, movie->silent)) {
+        !host->movie_start(asset, movie->start_sector, last_frame, movie->silent)) {
         pe_mod_log(MOD_ID, "Movie %u unavailable for player %u", id, (unsigned)s_session.player);
         return 0;
     }
     pe_re_music_stop();
     if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(1);
+    pe_mod_log(MOD_ID, "Movie %u: playing %s", id, asset);
     host->forget_dialogue();
     s_movie_playing = 1;
     movie_input(host->held_buttons());
