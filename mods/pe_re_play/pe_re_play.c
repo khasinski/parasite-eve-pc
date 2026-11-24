@@ -49,7 +49,7 @@ static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERS
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_start_held, s_select_held;          /* Start: the status screen; Select: the pause menu */
-enum { START_IDLE, START_ROOM, START_OPENING };
+static const unsigned *s_opening_movies;
 static int s_climbing;
 enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING, TITLE_STARTING };
 static int s_title, s_title_choice, s_title_wait;
@@ -595,14 +595,22 @@ typedef struct {
     int leon_only, silent;
 } ReMovie;
 
-enum { RE2_MOVIE_LEON_A_OPENING = 3 };
+enum {
+    RE2_MOVIE_OPENING_FIRST = 3,
+    RE2_MOVIE_LEON_A_OPENING_SECOND = 15,
+    RE2_MOVIE_LEON_B_OPENING_SECOND = 16
+};
+
+/* OPENING.C selects timelines A and B for Leon's two scenarios. */
+static const unsigned s_leon_a_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_LEON_A_OPENING_SECOND, 0};
+static const unsigned s_leon_b_opening[] = {RE2_MOVIE_OPENING_FIRST, RE2_MOVIE_LEON_B_OPENING_SECOND, 0};
 
 /* Entries from Movie_tbl. The alternate excerpts seek to five
  * sectors per table offset unit. Character-specific names are verified for Leon. */
 static const ReMovie s_movies[] = {
     [1] = {.asset = "re2:movie/r200", .last_frame = 250},
     [2] = {.asset = "re2:movie/r200", .last_frame = 146},
-    [RE2_MOVIE_LEON_A_OPENING] = {.asset = "re2:movie/opn1stl", .leon_only = 1},
+    [RE2_MOVIE_OPENING_FIRST] = {.asset = "re2:movie/opn1stl", .leon_only = 1},
     [4] = {.asset = "re2:movie/r10b"},
     [5] = {.asset = "re2:movie/r200", .last_frame = 90},
     [6] = {.asset = "re2:movie/r505", .last_frame = 598},
@@ -614,6 +622,8 @@ static const ReMovie s_movies[] = {
     [12] = {.asset = "re2:movie/r700l", .leon_only = 1},
     [13] = {.asset = "re2:movie/r703l", .leon_only = 1},
     [14] = {.asset = "re2:movie/r704l", .last_frame = 9187, .leon_only = 1},
+    [RE2_MOVIE_LEON_A_OPENING_SECOND] = {.asset = "re2:movie/opn2ndl", .leon_only = 1},
+    [RE2_MOVIE_LEON_B_OPENING_SECOND] = {.asset = "re2:movie/opn2ndrl", .leon_only = 1},
     [17] = {.asset = "re2:movie/r704l", .start_sector = 4589 * 5, .last_frame = 9247, .leon_only = 1, .silent = 1},
 };
 
@@ -665,7 +675,8 @@ static int movie_frame(void) {
 static void stop(void) {
     stop_movie();
     pe_re_music_stop();
-    s_start_pending = START_IDLE;
+    s_start_pending = 0;
+    s_opening_movies = NULL;
     s_title = TITLE_CLOSED;
     s_climbing = 0;
     pe_re_door_cancel();
@@ -684,7 +695,8 @@ static void stop(void) {
 }
 
 static void start_room(void) {
-    s_start_pending = START_IDLE;
+    s_start_pending = 0;
+    s_opening_movies = NULL;
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
     if (s_registered && !keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
     re_host()->set_masks(s_masks);
@@ -693,17 +705,17 @@ static void start_room(void) {
 }
 
 static void advance_start(void) {
-    if (s_start_pending == START_OPENING) {
-        s_start_pending = START_ROOM;
-        if (start_movie(RE2_MOVIE_LEON_A_OPENING)) {
-            snprintf(s_status, sizeof s_status, "Playing the Leon A opening.");
+    while (s_opening_movies && *s_opening_movies) {
+        const unsigned id = *s_opening_movies++;
+        if (start_movie(id)) {
+            snprintf(s_status, sizeof s_status, "Playing the opening cinematic.");
             return;
         }
     }
     start_room();
 }
 
-static void start_game(const PeReGame *game, unsigned player, int scenario_b, int play_opening)
+static void start_game(const PeReGame *game, unsigned player, int scenario_b, const unsigned *opening_movies)
 {
     char why[200] = "";
     if (s_battle_paused) return;
@@ -717,13 +729,15 @@ static void start_game(const PeReGame *game, unsigned player, int scenario_b, in
         pe_toast(s_status);
         return;
     }
-    s_start_pending = play_opening ? START_OPENING : START_ROOM;
+    s_start_pending = 1;
+    s_opening_movies = opening_movies;
     if (host->start_from_title && host->start_from_title()) {
         snprintf(s_status, sizeof s_status, "Starting %s...", s_session.game->title);
     } else if (!host->start_ready || host->start_ready()) {
         advance_start();
     } else {
-        s_start_pending = START_IDLE;
+        s_start_pending = 0;
+        s_opening_movies = NULL;
         pe_re_session_end(&s_session);
         snprintf(s_status, sizeof s_status, "Start is available at the title or in the free field.");
     }
@@ -739,7 +753,7 @@ static void start(void)
         snprintf(s_status, sizeof s_status, "%s isn't playable yet: only RE2 rooms are.", game->title);
         return;
     }
-    start_game(game, (unsigned)s_player, 0, 0);
+    start_game(game, (unsigned)s_player, 0, NULL);
 }
 
 /* Where the save (or the last Stop) left off. */
@@ -815,8 +829,13 @@ static void tick_title(void)
         if (!ready && ++s_title_wait < 300) return;
         s_title = TITLE_CLOSED;
         if (s_title_choice == TITLE_CONTINUE) resume();
-        else start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2,
-                        s_title_choice >= TITLE_LEON_B, s_title_choice == TITLE_LEON_A);
+        else {
+            const unsigned *opening = NULL;
+            if (s_title_choice == TITLE_LEON_A) opening = s_leon_a_opening;
+            if (s_title_choice == TITLE_LEON_B) opening = s_leon_b_opening;
+            start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2,
+                       s_title_choice >= TITLE_LEON_B, opening);
+        }
         return;
     }
     const int choice = host->dialogue_choice();
@@ -860,7 +879,8 @@ static int on_save_read(void *ctx, void *user) {
     }
     if (s_start_pending) {
         pe_re_session_end(&s_session);
-        s_start_pending = START_IDLE;
+        s_start_pending = 0;
+        s_opening_movies = NULL;
     }
     s_resume = !pe_re_save_decode(s_saved, &saved) && saved.game && saved.playing;
     snprintf(s_status, sizeof s_status, s_resume ? "Back to %s when the field is free." : "Not playing.",

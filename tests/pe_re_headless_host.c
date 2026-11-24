@@ -25,7 +25,9 @@ static struct {
     int facing, camera, floor, active, shade, curtain, hold, backdrop;
     unsigned rooms, placements, saves;
     unsigned movie_starts, movie_stops, movie_frames;
-    int movie_missing, movie_muted, movie_locked;
+    unsigned movie_missing;
+    int movie_enabled, movie_muted, movie_locked, movie_muted_at_room_start;
+    char movie_assets[2][PE_IMP_ID_MAX];
     int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
@@ -59,6 +61,7 @@ static int show_room(const char *id, const PeImpRoomLogic *logic, int camera, in
     }
     snprintf(s.room, sizeof s.room, "%s", id);
     s.active = 1;
+    s.movie_muted_at_room_start = s.movie_muted;
     s.rooms++;
     s.camera = camera;
     s.floor = floor;
@@ -105,9 +108,11 @@ static int register_progress(const ReHostProgress *progress, ReHostCallback comm
 static int enable_progress(void) { return 0; }
 
 static int start_movie(const char *asset, unsigned start_sector, unsigned last_frame, int silent) {
-    s.movie_starts++;
-    if (s.active || s.movie_missing || strcmp(asset, "re2:movie/opn1stl") ||
-        start_sector || last_frame || silent) return 0;
+    if (!s.movie_enabled) return 0;
+    const unsigned index = s.movie_starts++;
+    if (index >= sizeof s.movie_assets / sizeof *s.movie_assets) return 0;
+    snprintf(s.movie_assets[index], sizeof s.movie_assets[index], "%s", asset);
+    if (s.active || (s.movie_missing & (1u << index)) || start_sector || last_frame || silent) return 0;
     s.movie_frames = 4;
     return 1;
 }
@@ -411,43 +416,65 @@ static int test_opening(void) {
     EXPECT(catalog);
     fprintf(catalog, "{\"re2:logic/100-0\":{\"type\":\"RoomLogic\","
                      "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
-                     "\"re2:room/100\":{\"type\":\"ImageSet\"}}\n", sha);
+                     "\"re2:logic/104-0\":{\"type\":\"RoomLogic\","
+                     "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
+                     "\"re2:room/100\":{\"type\":\"ImageSet\"}}\n", sha, sha);
     EXPECT(!fclose(catalog));
 
-    enum { FINISH, SKIP, MISSING, LOAD_SAVE };
-    for (int mode = FINISH; mode <= LOAD_SAVE; mode++) {
+    enum { LEON_A, LEON_B = 2 };
+    static const struct {
+        int choice, skip, load_save;
+        unsigned missing, stops;
+    } cases[] = {
+        {LEON_A, 0, 0, 0, 2},
+        {LEON_B, 1, 0, 0, 2},
+        {LEON_B, 0, 0, 1, 1},   /* first missing */
+        {LEON_A, 0, 0, 2, 1},   /* second missing */
+        {LEON_A, 0, 0, 3, 0},   /* both missing */
+        {LEON_B, 0, 1, 0, 1},
+    };
+    for (unsigned i = 0; i < sizeof cases / sizeof *cases; i++) {
         memset(&s, 0, sizeof s);
         s.store = store;
-        s.movie_missing = mode == MISSING;
+        s.movie_enabled = 1;
+        s.movie_missing = cases[i].missing;
         EXPECT(!pe_mod_pe_re_play.init());
         s.title();
         frames(1, 0);
         EXPECT(s.busy && !s.active);
-        s.choice = 0;  /* Leon A */
+        s.choice = cases[i].choice;
         s.busy = 0;
         frames(2, RE_HOST_CROSS);
-        EXPECT(s.movie_starts == 1);
-        if (mode != MISSING) {
-            EXPECT(!s.active && !s.rooms && s.movie_locked && s.movie_muted);
-            frames(1, RE_HOST_CROSS);  /* holding the selection button must not skip */
-            EXPECT(!s.active && s.movie_stops == 0);
-            if (mode == SKIP) {
-                frames(1, 0);
-                frames(1, RE_HOST_CROSS);
-            } else if (mode == LOAD_SAVE) {
-                s.save_read(NULL, NULL);
-            } else {
-                frames(3, 0);
-            }
-            EXPECT(!s.active && s.movie_stops == 1 && !s.movie_locked && !s.movie_muted);
+        EXPECT(!strcmp(s.movie_assets[0], "re2:movie/opn1stl"));
+        if (cases[i].skip) {
+            EXPECT(!s.active && s.movie_locked && s.movie_muted);
+            frames(1, RE_HOST_CROSS);  /* the menu press must not skip */
+            EXPECT(s.movie_stops == 0);
+            frames(1, 0);
+            frames(1, RE_HOST_CROSS);
+            EXPECT(s.movie_stops == 1 && !s.active);
+            frames(2, RE_HOST_CROSS);  /* the first skip must not skip clip two */
+            EXPECT(s.movie_starts == 2 && s.movie_stops == 1 && !s.active);
+            frames(1, 0);
+            frames(1, RE_HOST_CROSS);
+            EXPECT(s.movie_stops == 2 && !s.active);
         }
-        frames(1, mode == SKIP ? RE_HOST_CROSS : 0);
-        if (mode == LOAD_SAVE) {
-            EXPECT(!s.active && !s.rooms);
+        if (cases[i].load_save) {
+            EXPECT(!s.active && s.movie_starts == 1 && s.movie_locked && s.movie_muted);
+            s.save_read(NULL, NULL);
+        }
+
+        frames(12, 0);
+        EXPECT(s.movie_stops == cases[i].stops && !s.movie_locked);
+        if (cases[i].load_save) {
+            EXPECT(!s.active && !s.rooms && s.movie_starts == 1 && !s.movie_muted);
         } else {
-            EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, "re2:room/100"));
+            const int leon_b = cases[i].choice == LEON_B;
+            EXPECT(s.movie_starts == 2);
+            EXPECT(!strcmp(s.movie_assets[1], leon_b ? "re2:movie/opn2ndrl" : "re2:movie/opn2ndl"));
+            EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, leon_b ? "re2:room/104" : "re2:room/100"));
+            EXPECT(!s.movie_muted_at_room_start);
         }
-        EXPECT(s.movie_starts == 1 && s.movie_stops == (unsigned)(mode != MISSING));
         pe_mod_pe_re_play.shutdown();
     }
     return 0;

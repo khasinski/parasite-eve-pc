@@ -24,10 +24,11 @@ The PE1 host can play selected imported STR movies requested by RE2's
 Cross press skips the clip, and the host restores the room picture on exit.
 Missing assets and unresolved movie IDs leave the script free to continue.
 
-**New Game: Leon A** in the RE2 title menu plays the imported `OPN1STL`
-movie before room 1-00. It shares the room movie's playback and skip
-handling. If the opening movie is missing, the game enters the room
-directly.
+The RE2 title menu plays two opening movies for each Leon scenario.
+Both start with `OPN1STL`. Leon A follows with `OPN2NDL` before room 1-00,
+and Leon B follows with `OPN2NDRL` before room 1-04. A fresh Cross press
+skips the current clip. If an asset is missing, the sequence advances
+to the next clip or room.
 
 The room-script mapping covers IDs 1, 2, 4–14 and 17. Character-specific
 entries (8, 10, 12–14 and 17) use verified Leon filenames. MOV3 imports
@@ -41,5 +42,4 @@ Playback places XA file 1, channel 1 on the 150-sector-per-second STR
 timeline and selects video frames from the audio stream's consumed source
 samples. If the track or audio device is unavailable, the host uses its
 video clock. Verify the timing, excerpt boundaries, and channel choice on
-retail discs. Claire-specific filenames and the other scenario openings
-remain unmapped.
+retail discs. Claire-specific filenames and openings remain unmapped.
