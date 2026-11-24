@@ -13,8 +13,8 @@ How to use it:
 - Keep the module boundaries in "Architecture": a game or a host must be
   addable without editing the shared battle code.
 
-Status (2026-11-24): phase 0 built for RE2. Spikes S1-S4 done; S5-S9 open.
-Phases 1-6 not started.
+Status (2026-11-24): phase 0 built for RE2. Spikes S1-S4 and S6-S9 done; S5
+is a decision. Phases 1-6 not started.
 
 ## The battle we want
 
@@ -168,6 +168,7 @@ The host interface grows by what the stage must offer the director (append-only,
 int (*in_view)(double x, double y, double z);          /* built */
 int (*battle_camera)(int camera);                      /* swap the backdrop to this camera: 0, or -1 */
 int (*battle_room_position)(double *x, double *z);     /* Aya's room position in battle (battle_walk's) */
+int (*vram_reserved)(RECT *out, int max);               /* VRAM the room's drawing uses (G2): count written */
 ```
 
 ### The two spaces
@@ -222,11 +223,20 @@ Settle each before the phase that needs it.
 | S2 | What does range do to a shot? | Done 2026-11-24. `Battle_CheckEvasion`: distance x 1000 / weapon range; hit odds bands at 500 and 800; some actions can't hit past 1000. Gap found: see S5. |
 | S3 | Do RE1 and RE3 rooms import what battles need? | Done 2026-11-24. Collision (COLL) and camera zones are imported for all three by the shared reader (`pe_imp_rdt.c`). Missing for RE1/RE3: RE play's script runtime and collision reader are RE2's; that is RE play's port, a prerequisite, not battle work. |
 | S4 | Can pursuit run while RE play is paused? | Done 2026-11-24. `pe_re_session_chase` takes the player's position, floor and collision as arguments: it can be driven with Aya's battle position. It's RE2-only today (moves into RE2's rules). |
-| S5 | Battle distances scale with Aya's size setting (k). At size 200 every enemy is twice as far in PE units, so weapons lose range. Fix k for battles (size 100's), or scale ranges? | Open. Needs a decision before phase 1. |
-| S6 | Does Aya at the off-map anchor render, shadow, light and sound as in place (positional sound, `g_GeomScroll`)? | Open. Before phase 1. |
-| S7 | Can the stage swap camera, picture and masks while the backdrop is on, and how long does a swap take? | Open. Before phase 3. |
-| S8 | Two enemy kinds in one battle, the second joining mid-battle: VRAM for both packs (rooms 1-03, 6-0E)? | Open. Before phase 4. |
-| S9 | Do masks and effects draw correctly over battle actors (order-table depths in battle)? | Open. Before phase 3. |
+| S5 | Battle distances scale with Aya's size setting (k). At size 200 every enemy is twice as far in PE units, so weapons lose range. Fix k for battles (size 100's), or scale ranges? | Open: a decision, before phase 1. |
+| S6 | Does a battle at an off-map anchor work? | Done 2026-11-24 (experiment, code removed). Aya moved 20,000 units off map 66 at battle start: she, the zombies and the HUD drew as before; walking the route that had changed rooms mid-battle left the room unchanged; both zombies shot dead, the battle ended, she returned to her exact field position. The joiners had no PE floor there (flag 0x80): harmless. Positional sound not checked (the harness has no audio). |
+| S7 | Can the stage swap camera, picture and masks while the backdrop is on, and how long does a swap take? | Done 2026-11-24 (experiment, code removed). Calling `pe_re_stage_show` for the new camera with the backdrop on, when `pe_re_camera_at` at Aya's battle position changed: camera 0 -> 1 in the street in 7.5 ms; the battle went on in the new view with Aya, the zombie and the HUD placed right. The stage needs the room logic kept (it isn't today) and a battle-safe show that leaves the backdrop's saved pages alone. |
+| S8 | Two enemy kinds in one battle, the second joining mid-battle: VRAM for both packs? | Done 2026-11-24 (code reading; a live 1-06 encounter didn't trigger in the harness). `pe_place` never runs out: it overwrites the 64-wide block the battle reads least, sampled during the opening (`pe_on_background` until the first join). It knows nothing of RE play's VRAM (picture, effect pages, mesh texture and palettes), and for a late joiner its sample is stale. Gap G2. |
+| S9 | Do masks and effects draw in battle? | Done 2026-11-24 (experiment, code removed). Masks: drawn cleanly from the backdrop path; occlusion of Aya behind a foreground object not yet seen (phase 3's check). Effects: garbage, because the zombie's pack texture went to VRAM 640,256, the effect pages. Gap G2. |
+
+## Gaps found by the spikes
+
+| # | Gap | Resolution |
+|---|-----|------------|
+| G1 | An imported enemy that died while the battle mode wasn't 0 froze in its death anim (D4's time stop came before the death code), and the battle could never end. | Fixed 2026-11-24: the time stop applies to living foes; dying ones play on. (The Cheats mod's Win this battle can still leave a two-enemy battle hanging; the same battle ends normally when shot. Look at it with phase 4.) |
+| G2 | The enemy pack loader and RE play share VRAM without knowing it: the loader overwrote the effect pages. | Phase 3 entry: RE play publishes the VRAM it uses (`ReHost` -> `vram_reserved(rects)`: picture, effect pages, mesh texture, palettes); `pe_vram_reserved` refuses those. A late joiner re-samples before placing. |
+| G3 | The stage doesn't keep the room logic, and `pe_re_stage_show` isn't meant for battle use. | Phase 3: `battle_camera(camera)` in the stage: keeps the logic from the last show, swaps picture, masks, effects and view, leaves the backdrop's saved pages alone. |
+| G4 | Positional sound at the off-map anchor is unchecked. | Phase 1 exit: listen in a play-test (the harness has no audio). |
 
 ## Phases
 
@@ -235,7 +245,7 @@ into the named room with the user's store), tests.
 
 0. **Battles in place (RE2).** Built: D1-D5 (c383bf512, a7e42b88f, 1f1b56ae6,
    9d0db2f64, bdb868a05).
-1. **Off-map anchor (D14).** Entry: S5 decided, S6 done.
+1. **Off-map anchor (D14).** Entry: S5 decided.
    Build: anchor choice from the room's extent; native move at start, back at
    end; I1, I5, I6 logged. Exit: 1-00, run the length of the street in a
    battle; the PE room never changes; the battle ends normally.
@@ -246,11 +256,11 @@ into the named room with the user's store), tests.
    adapter calls the director but behaviour is unchanged. Exit: the five story
    routes finish; battles start with the same enemies as before.
    Tests: T3, T4, the route tests.
-3. **Camera follows, masks and effects (D6, D8).** Entry: S7, S9.
+3. **Camera follows, masks and effects (D6, D8).** Entry: G2 and G3 built.
    Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
    effects in battle. Exit: 1-00, a battle from camera 0 into camera 1; the
    picture, foreground and fires change with her; aiming still works. Tests: T5.
-4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12).** Entry: S8.
+4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12).** Entry: G2's re-sample for late joiners.
    Build: JOIN events, queue, spawn mid-battle, trip result per joiner, target
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
    up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on

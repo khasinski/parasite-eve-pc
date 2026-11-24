@@ -1057,7 +1057,11 @@ static void pe_foe_think(PeFoe *f) {
     if (hp <= 0 && !f->dead && pe_transform(f, core)) return;
     /* time stopped, as for the game's own enemies: they move only while the battle runs (mode 0);
      * Aya's command menu (mode 1, flag 4), her action and its aftermath, or an enemies-stop (0x100) */
-    if ((g_GameStateFlags & (0x100 | 4)) || g_BattleModeState != 0) { pe_place_targets(f); return; }
+    /* (a dying one plays on: the game's death steps run outside mode 0 and wait for its anim) */
+    if ((g_GameStateFlags & 0x100) || (hp > 0 && ((g_GameStateFlags & 4) || g_BattleModeState != 0))) {
+        pe_place_targets(f);
+        return;
+    }
     pe_step_lift(f, aya, hp);
     if (f->entrance_frames && hp > 0) {
         /* Hold the source pose through the battle opening or until a hit. */
