@@ -99,6 +99,8 @@ endif()
 
 add_library(pe-import-core OBJECT ${pe_import_core_sources})
 target_include_directories(pe-import-core PRIVATE import/core)
+# pe_imp_mdec.c builds its tables once across threads with SDL's init-state helpers.
+target_include_directories(pe-import-core PRIVATE "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 add_dependencies(pe-import-core pe-re-portability)
 
 set(pe_debug_sources
