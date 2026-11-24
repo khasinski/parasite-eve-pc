@@ -36,6 +36,8 @@ static struct {
     const ReHostProgress *progress;
     const PeRePlayApi *api;
     const char *store;
+    char report[16384], crash_note[512];   /* the last bug report's text, the last crash note */
+    int reports;
 } s;
 
 static void noop(void) {}
@@ -120,6 +122,12 @@ static int tick_movie(void) { return s.movie_frames && --s.movie_frames != 0; }
 static void stop_movie(void) { s.movie_stops++; s.movie_frames = 0; }
 static void mute(int muted) { s.movie_muted = muted; }
 static void scene_controls(int locked, int mode) { (void)mode; s.movie_locked = locked; }
+static int write_report(const char *text, const void *progress, size_t size, char *where, size_t n) {
+    (void)progress; (void)size;
+    snprintf(s.report, sizeof s.report, "%s", text);
+    s.reports++;
+    return snprintf(where, n, "report-%d", s.reports) < 0;
+}
 
 static int s_exploration_only;
 
@@ -135,7 +143,7 @@ const ReHost *re_host(void) {
         .consume_native_interact = noop, .open_save_screen = open_save, .native_menu_active = menu_active,
         .arm_backdrop = arm, .release_backdrop = release, .bind_lifecycle = bind,
         .register_progress = register_progress, .enable_progress = enable_progress,
-        .movie_start = start_movie, .movie_tick = tick_movie, .movie_stop = stop_movie,
+        .movie_start = start_movie, .movie_tick = tick_movie, .movie_stop = stop_movie, .write_report = write_report,
         .set_native_music_muted = mute, .scene_controls = scene_controls,
     };
     if (!s_exploration_only) return &host;
@@ -185,6 +193,7 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label, const ch
 int pe_mod_path(char *out, size_t n, const char *file) { (void)file; return snprintf(out, n, "%s", s.store) >= (int)n; }
 void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id; (void)fmt; }
 void pe_toast(const char *text) { (void)text; }
+void pe_mod_crash_note(const char *mod_id, const char *text) { (void)mod_id; snprintf(s.crash_note, sizeof s.crash_note, "%s", text); }
 int pe_event_id(const char *name) {
     return !strcmp(name, RE_PLAY_EVENT_ROOM) ? 2 : 3;
 }
@@ -384,6 +393,31 @@ static int play(unsigned scenario) {
     s.busy = 0, s.choice = 0;
     frames(2, 0);
     EXPECT(s.active && !s.busy);
+    /* Unstick scene: nothing running here, so it just leaves her free; Back to last room: the room jump's
+     * checkpoint (beside the store) brings her back to 2-08 */
+    frames(1, RE_HOST_SELECT);
+    EXPECT(s.busy && !strcmp(s.text, "Paused"));
+    s.busy = 0, s.choice = 1;
+    frames(2, 0);
+    EXPECT(s.active && !s.busy);
+    {
+        char path[1200];
+        snprintf(path, sizeof path, "%s/../re_play_checkpoint.bin", s.store);
+        FILE *f = fopen(path, "rb");
+        EXPECT(f);
+        if (f) fclose(f);
+    }
+    frames(1, RE_HOST_SELECT);
+    s.busy = 0, s.choice = 2;
+    frames(3, 0);
+    EXPECT(s.active && !strcmp(s.room, "re2:room/208"));
+    EXPECT(strstr(s.crash_note, "2-08"));                   /* the crash report's note follows the room */
+    frames(1, RE_HOST_SELECT);
+    s.busy = 0, s.choice = 5;                                 /* Write a bug report */
+    frames(8, 0);                                             /* after the box has gone */
+    EXPECT(s.reports == 1 && strstr(s.report, "Room: 2-08") && strstr(s.report, "Scene: re2 2-08"));
+    s.busy = 0;
+    s.give_ribbon();                                          /* the checkpoint is from before the ribbon */
     s.typewriter();
     frames(1, RE_HOST_CROSS);
     EXPECT(s.busy && !strcmp(s.text, "Use an Ink Ribbon to save?"));

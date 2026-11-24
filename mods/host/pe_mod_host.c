@@ -273,6 +273,7 @@ void pe_mods_shutdown_now(void){pe_shutdown_mods();}
 static int s_all_on;
 static int s_mod_on[PE_MAX_MODS];
 static char s_mod_note[PE_MAX_MODS][192];
+static char s_crash_note[PE_MAX_MODS][512];   /* pe_mod_crash_note: printed in the crash report's Mods section */
 static char s_all_note[192];
 static int s_manage_ready, s_boot_all;
 static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
@@ -582,6 +583,16 @@ int pe_mod_snapshot_save_tail(unsigned char *block) {
     return pe_save_try_crash_tail(block);
 }
 
+void pe_mod_crash_note(const char *mod_id, const char *text) {
+    int i;
+    if (!mod_id) return;
+    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
+        if (!strcmp(g_pe_mods[i]->id, mod_id)) {
+            snprintf(s_crash_note[i], sizeof s_crash_note[i], "%s", text ? text : "");
+            return;
+        }
+}
+
 /* ---- crash report Mods section (runs inside the crash handler: reads only) ---- */
 
 static const char *pe_mod_label(const char *mod_id) {
@@ -603,8 +614,10 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
 
     PE_OUT("Mod API %d, mod host %s, All mods %s\r\n", PE_MOD_API_VERSION, s_started ? "started" : "not started yet",
            s_all_on ? "on" : s_running_count ? "off (only Language packs and Font ran)" : "off (mods did not touch the game)");
-    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
+    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++) {
         PE_OUT("  %s: %s\r\n", g_pe_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : g_pe_mods[i]->id);
+        if (s_crash_note[i][0]) PE_OUT("    %s\r\n", s_crash_note[i]);   /* pe_mod_crash_note */
+    }
 
     if (!depth) {
         PE_OUT("Mod code running at the crash: none.%s\r\n",

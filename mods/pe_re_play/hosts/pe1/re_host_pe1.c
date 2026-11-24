@@ -14,6 +14,64 @@
 #include "pe1/scene_transition.h"
 #include "pe1/scene_dispatch.h"
 #include "pe_mod_menu.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <SDL3/SDL.h>
+#include <psyz/video.h>
+
+/* A tester's bug report: bug-reports/re-<date-time>/ beside the preferences, with report.txt, progress.bin,
+ * screenshot.bmp (the game frame as it is now) and log-tail.txt (the end of pe_mods.log). */
+static int write_file(const char *dir, const char *name, const void *bytes, size_t size) {
+    char path[1300];
+    snprintf(path, sizeof path, "%s/%s", dir, name);
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    const int ok = fwrite(bytes, 1, size, f) == size;
+    return fclose(f) || !ok ? -1 : 0;
+}
+static int write_report(const char *text, const void *progress, size_t size, char *where, size_t n) {
+    char name[64], dir[1100], path[1300];
+    const time_t now = time(NULL);
+    const struct tm *t = localtime(&now);
+    if (!t || !strftime(name, sizeof name, "bug-reports/re-%Y%m%d-%H%M%S", t)) return -1;
+    if (pe_mod_path(dir, sizeof dir, name) || !SDL_CreateDirectory(dir)) {
+        pe_mod_log("pe_re_play", "bug report: can't make %s", name);
+        return -1;
+    }
+    if (write_file(dir, "report.txt", text, strlen(text)) || write_file(dir, "progress.bin", progress, size)) {
+        pe_mod_log("pe_re_play", "bug report: can't write into %s", dir);
+        return -1;
+    }
+    int w = 0, h = 0;
+    unsigned char *rgb = Psyz_VideoAllocRenderedFrame(&w, &h);
+    if (!rgb || w <= 0 || h <= 0) {
+        free(rgb);
+        rgb = Psyz_VideoAllocCapturedFrame(&w, &h);
+    }
+    if (rgb && w > 0 && h > 0) {
+        SDL_Surface *frame = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGB24, rgb, w * 3);
+        snprintf(path, sizeof path, "%s/screenshot.bmp", dir);
+        if (!frame || !SDL_SaveBMP(frame, path)) pe_mod_log("pe_re_play", "bug report: no screenshot (%s)", SDL_GetError());
+        SDL_DestroySurface(frame);
+    }
+    free(rgb);
+    if (!pe_mod_path(path, sizeof path, "pe_mods.log")) {            /* the last 64 KB of the mods' log */
+        FILE *f = fopen(path, "rb");
+        if (f) {
+            static char tail[64 << 10];
+            fseek(f, 0, SEEK_END);
+            const long end = ftell(f);
+            fseek(f, end > (long)sizeof tail ? end - (long)sizeof tail : 0, SEEK_SET);
+            const size_t got = fread(tail, 1, sizeof tail, f);
+            fclose(f);
+            write_file(dir, "log-tail.txt", tail, got);
+        }
+    }
+    snprintf(where, n, "%s", dir);
+    return 0;
+}
 
 static void init(const char *mod_id, const char *store) {
     pe_re_stage_init(mod_id, store);
@@ -162,6 +220,7 @@ const ReHost *re_host(void) {
         .movie_start = pe_re_stage_movie_start,
         .movie_tick = pe_re_stage_movie_tick,
         .movie_stop = pe_re_stage_movie_stop,
+        .write_report = write_report,
         .room_collision = pe_re_stage_collision,
         .start_from_title = start_from_title,
         .start_ready = start_ready,

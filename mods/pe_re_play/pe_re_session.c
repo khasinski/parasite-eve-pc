@@ -212,6 +212,59 @@ int pe_re_session_controls_locked(const PeReSession *s) {
            pe_re_flag(&s->progress.flags, PE_RE_FG_STOP, PE_RE_STOP_PAD_LOCK);
 }
 
+int pe_re_session_describe_scene(const PeReSession *s, char *out, size_t n) {
+    uint32_t size = 0;
+    const uint8_t *rdt = s->logic ? pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &size) : NULL;
+    size_t used = 0;
+    int running = 0;
+    if (out && n) used = (size_t)snprintf(out, n, "%s %d-%02X camera %d:", s->game ? s->game->game : "?",
+                                          s->stage + 1, (unsigned)s->room, s->camera);
+    for (int k = 2; k < PE_RE_TASKS; k++) {                /* 0 and 1 run the room's init and main loop */
+        const PeReScdTask *t = &s->run.task[k];
+        if (!t->status) continue;
+        running++;
+        if (out && used < n) {
+            const unsigned op = rdt && t->pc < size ? rdt[t->pc] : 0xFFu;
+            const int w = snprintf(out + used, n - used, " task %d proc %d at %u (op %02X, work %d);", k, t->proc,
+                                   (unsigned)t->pc, op, t->work);
+            used = w < 0 ? n : used + (size_t)w;
+        }
+    }
+    if (!running && out && used < n) snprintf(out + used, n - used, " no scene running");
+    return running;
+}
+
+int pe_re_session_unstick(PeReSession *s, char *report, size_t n) {
+    PeReScdRun *r = &s->run;
+    int ended = 0;
+    pe_re_session_describe_scene(s, report, n);
+    for (int k = 2; k < PE_RE_TASKS; k++) {
+        PeReScdTask *t = &r->task[k];
+        if (!t->status) continue;
+        t->status = 0;
+        ended++;
+    }
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STOP, PE_RE_STOP_PAD_LOCK, 0);
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STOP, PE_RE_STOP_EVENTS, 0);
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, PE_RE_STAT_CINESCO, 0);
+    r->player_dest.moving = 0;
+    r->actor_stopped[0] = 0;
+    r->arrived[0] = 0;
+    r->pl_motion[0] = (PeReSceneMotion){0};
+    r->camera_lock = 0;
+    return ended;
+}
+
+uint32_t pe_re_session_scene_mark(const PeReSession *s) {
+    uint32_t mark = 2166136261u;                           /* FNV-1a over the event tasks' state */
+    for (int k = 2; k < PE_RE_TASKS; k++) {
+        const PeReScdTask *t = &s->run.task[k];
+        const uint32_t words[3] = {t->status, (uint32_t)t->proc, t->pc};
+        for (int i = 0; i < 3; i++) mark = (mark ^ words[i]) * 16777619u;
+    }
+    return mark;
+}
+
 void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
     s->x = x, s->z = z, s->facing = facing & 4095;
 }

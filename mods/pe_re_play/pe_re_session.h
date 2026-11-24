@@ -109,6 +109,16 @@ void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, ch
 /* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
 int pe_re_floor_of(int y);
 int pe_re_session_controls_locked(const PeReSession *s);
+/* A scene that never lets go (a soft-lock, for testers): what each running event task waits at, written to
+ * `report` (room, task, procedure, offset, opcode), then those tasks end and the player is released (pad lock,
+ * letterbox, held camera, a scripted walk or clip, plc_stop). The room's own loops start again on its next
+ * visit. How many tasks ended. */
+int pe_re_session_unstick(PeReSession *s, char *report, size_t n);
+/* Where things stand, for crash notes and bug reports (nothing changes): the room and camera, then each
+ * running event task's procedure, offset, opcode and actor. How many tasks run. */
+int pe_re_session_describe_scene(const PeReSession *s, char *out, size_t n);
+/* A signature of where the scene's event tasks stand, for a caller that watches for one that never moves. */
+uint32_t pe_re_session_scene_mark(const PeReSession *s);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
 /* The session's facing (the stage's yaw: 0 faces -z, 1024 -x) for an angle in the game's own terms
  * (a door's landing direction: RE2's Rot_vector turns 0 to +x). */

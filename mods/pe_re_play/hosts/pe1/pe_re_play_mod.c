@@ -28,6 +28,7 @@ static int init(void)
     pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", controls->start);
     pe_menu_register_action(0, "Continue", "Back where you left this save's imported game.", controls->resume);
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", controls->stop);
+    pe_menu_register_action(0, "Write a bug report", "Saves a folder with a screenshot, where you are and what the room's scripts are doing, for the developers.", controls->bug_report);
     pe_menu_register_toggle("Testing", "Placement markers", "Mark enemy positions using the room camera.", controls->placement_markers, NULL);
     pe_menu_register_toggle("Testing", "Placement meshes", "Draw imported enemy meshes at their placements.", controls->placement_meshes, NULL);
     pe_menu_register_toggle("Testing", "Placement idle animation", "Animate supported placement meshes in place.", controls->placement_idle, NULL);

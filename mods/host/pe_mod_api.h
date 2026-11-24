@@ -62,6 +62,10 @@ int pe_mod_requested(const char *mod_id);
 void pe_mod_manage_refresh(void);
 int pe_mod_path(char *out, size_t size, const char *file);
 void pe_mod_log(const char *mod_id, const char *fmt, ...);
+/* A line (up to 511 bytes) that crash reports print under the mod `mod_id`, in their Mods section: what it
+ * was doing, for the reader of the report. Call again to replace it, with "" to clear it. The crash handler
+ * only reads it, so keep it current from the game thread (a room change, a scene starting). */
+void pe_mod_crash_note(const char *mod_id, const char *text);
 /* Play log (pe_play.log beside the preferences): one "tag key=value ..." row,
  * the same rows as the psxrecomp build's play log, for the analysis tools. Each row is also
  * announced as the PE_EVENT_LOG_LINE event (PeLogLine *), for loggers of their own. */

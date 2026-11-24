@@ -44,6 +44,9 @@ static PeReSession s_session;
  * encoded while playing, and on Stop (so Continue picks it up). Loading a save that was in a game
  * resumes there once the field is free. */
 static uint8_t s_saved[PE_RE_SAVE_SIZE];
+/* Room checkpoints, for testers: the progress as it was when she came into the room, kept beside the
+ * import store (one file, overwritten each room), for the title and pause menus' "last room". */
+static void checkpoint_path(char *out, size_t n) { snprintf(out, n, "%s/../re_play_checkpoint.bin", s_store[0] ? s_store : "."); }
 static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1,
                                           sizeof s_saved, s_saved, pe_re_save_upgrade};
 static int s_registered, s_enabled, s_resume;
@@ -415,11 +418,28 @@ static void check_item(void) {
 /* ---- the pause menu (Select), as RE2's Select opens its own menu (GAME.C, SYS_CONFIG) ---- */
 static void open_title(void);
 static void stop(void);
-enum { PAUSE_RESUME, PAUSE_TITLE, PAUSE_QUIT };
+static void update_crash_note(int force);
+enum { PAUSE_RESUME, PAUSE_UNSTICK, PAUSE_LAST_ROOM, PAUSE_TITLE, PAUSE_QUIT, PAUSE_REPORT };
 static void open_pause(void) {
-    static const char *const options[] = {"Resume", "RE2 title menu", "Back to Parasite Eve"};
-    if (re_host()->choose("Paused", options, 3, PAUSE_RESUME)) s_pick = PICK_PAUSE;
+    static const char *const options[] = {"Resume", "Unstick scene", "Back to last room", "RE2 title menu",
+                                          "Back to Parasite Eve", "Write a bug report"};
+    if (re_host()->choose("Paused", options, 6, PAUSE_RESUME)) s_pick = PICK_PAUSE;
 }
+static void bug_report(void);
+/* The report waits until the boxes are gone, so its screenshot shows the game, not the menu. */
+static int s_report_pending;
+static void request_bug_report(void) { if (s_playing) s_report_pending = 4; else bug_report(); }
+/* Unstick scene: end a scene that never lets go, and say where it was for the bug report. */
+static void unstick_scene(void) {
+    char report[600];
+    const int ended = pe_re_session_unstick(&s_session, report, sizeof report);
+    pe_mod_log("pe_re_play", "unstick: %s", report);
+    snprintf(s_status, sizeof s_status, ended ? "Scene ended (%d tasks); see pe_mods.log for where it stuck." :
+             "No scene was running; controls released.", ended);
+    pe_toast(s_status);
+}
+static void resume(void);
+static int load_checkpoint(void);
 
 static void open_item_box(int at) {
     static char text[RE_HOST_DIALOGUE_CHOICES][41];
@@ -508,7 +528,17 @@ static void picked(void) {
         return;
     }
     if (mode == PICK_PAUSE) {
-        if (c == PAUSE_TITLE) open_title();
+        if (c == PAUSE_UNSTICK) unstick_scene();
+        else if (c == PAUSE_REPORT) request_bug_report();
+        else if (c == PAUSE_LAST_ROOM) {
+            if (load_checkpoint()) say("There's no checkpoint for the last room yet.");
+            else resume();
+        } else if (c == PAUSE_TITLE) {                    /* out of the room, then the menu once PE's field is free */
+            stop();
+            s_resume = 0;
+            s_title = TITLE_WAIT_FIELD;
+            snprintf(s_status, sizeof s_status, "Opening the RE2 title menu...");
+        }
         else if (c == PAUSE_QUIT) { stop(); snprintf(s_status, sizeof s_status, "Back in Parasite Eve. Continue picks the RE game up again."); }
         return;
     }
@@ -709,6 +739,36 @@ static void stop(void) {
     s_battle_paused = 0;
     if (re_host()->release_backdrop) re_host()->release_backdrop();
     snprintf(s_status, sizeof s_status, "Not playing.");
+    pe_mod_crash_note("pe_re_play", "");
+}
+
+static int s_checkpoint_key = -1;              /* the room last written, so a room is written once a visit */
+static void write_checkpoint(void) {
+    char path[1200];
+    static uint8_t bytes[PE_RE_SAVE_SIZE];
+    if (!s_playing || !s_session.game) return;
+    pe_re_save_encode(&s_session, 1, bytes);
+    checkpoint_path(path, sizeof path);
+    FILE *f = fopen(path, "wb");
+    if (!f) { pe_mod_log("pe_re_play", "checkpoint: can't write %s", path); return; }
+    const int ok = fwrite(bytes, 1, sizeof bytes, f) == sizeof bytes;
+    if (fclose(f) || !ok) { pe_mod_log("pe_re_play", "checkpoint: write failed"); return; }
+    s_checkpoint_key = s_session.stage << 8 | s_session.room;
+    update_crash_note(1);                      /* a new room: the crash note says so at once */
+}
+/* The last room's checkpoint into s_saved, for resume(). 0, or -1 (none, or not a game in progress). */
+static int load_checkpoint(void) {
+    char path[1200];
+    static uint8_t bytes[PE_RE_SAVE_SIZE];
+    PeReSaved saved;
+    checkpoint_path(path, sizeof path);
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    const size_t got = fread(bytes, 1, sizeof bytes, f);
+    fclose(f);
+    if (got != sizeof bytes || pe_re_save_decode(bytes, &saved) || !saved.game || !saved.playing) return -1;
+    memcpy(s_saved, bytes, sizeof s_saved);
+    return 0;
 }
 
 static void start_room(void) {
@@ -719,6 +779,7 @@ static void start_room(void) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     show_room(0);
+    write_checkpoint();
 }
 
 static void advance_start(void) {
@@ -797,9 +858,10 @@ static void resume(void) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     show_room(1);
+    write_checkpoint();
 }
 
-enum { TITLE_LEON_A, TITLE_CLAIRE_A, TITLE_LEON_B, TITLE_CLAIRE_B, TITLE_CONTINUE, TITLE_BACK };
+enum { TITLE_LEON_A, TITLE_CLAIRE_A, TITLE_LEON_B, TITLE_CLAIRE_B, TITLE_CONTINUE, TITLE_LAST_ROOM, TITLE_BACK };
 
 static void open_title(void)
 {
@@ -827,7 +889,7 @@ static void tick_title(void)
         if (host->native_menu_active() || (host->start_ready ? !host->start_ready() : !host->field_free())) return;
         static const char *const options[] = {
             "New Game: Leon A", "New Game: Claire A", "New Game: Leon B",
-            "New Game: Claire B", "Continue current save", "Back"
+            "New Game: Claire B", "Continue current save", "Continue from last room", "Back"
         };
         if (host->choose("Resident Evil 2", options, sizeof options / sizeof *options, TITLE_LEON_A)) {
             s_title = TITLE_CHOOSING;
@@ -846,7 +908,10 @@ static void tick_title(void)
         if (!ready && ++s_title_wait < 300) return;
         s_title = TITLE_CLOSED;
         if (s_title_choice == TITLE_CONTINUE) resume();
-        else {
+        else if (s_title_choice == TITLE_LAST_ROOM) {
+            if (load_checkpoint()) pe_toast("There's no checkpoint for the last room yet.");
+            else resume();
+        } else {
             const int scenario_b = s_title_choice >= TITLE_LEON_B;
             start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2, scenario_b,
                        scenario_b ? s_scenario_b_opening : s_scenario_a_opening);
@@ -867,6 +932,10 @@ static void tick_title(void)
         }
         pe_toast("No RE2 progress in the current save. Load a card in Parasite Eve first.");
         s_title = TITLE_WAIT_FIELD;
+        return;
+    }
+    if (choice == TITLE_LAST_ROOM) {
+        s_title = TITLE_STARTING, s_title_choice = choice, s_title_wait = 0;
         return;
     }
     s_title = TITLE_CLOSED;
@@ -973,6 +1042,7 @@ static int on_frame(void *ctx, void *user) {
         const PeReDoorStep door_step = pe_re_door_step();
         if (door_step == PE_RE_DOOR_SWAP) {
             show_room(1);
+            if (s_playing && (s_session.stage << 8 | s_session.room) != s_checkpoint_key) write_checkpoint();
             if (s_playing && s_session.said[0]) say(s_session.said);
         }
         if (s_playing && door_step == PE_RE_DOOR_IDLE) report_enemies();
@@ -1013,17 +1083,40 @@ static int on_frame(void *ctx, void *user) {
     }
     if (s_playing && script_change == PE_RE_CAMERA) show_cut();
     if (!s_playing || movie_frame()) return 0;
+    /* a room entered some other way (a test jump): its checkpoint once she's placed */
+    if (re_host()->room_active() && (s_session.stage << 8 | s_session.room) != s_checkpoint_key) write_checkpoint();
+    update_crash_note(0);
+    if (s_report_pending && !re_host()->dialogue_busy() && !--s_report_pending) bug_report();
     sync_scene_controls();
     const int locked = scene_locked();
     apply_collision(0);
+    {   /* a scene that holds her and never moves on (30 s): point the tester at Unstick, once */
+        static uint32_t mark;
+        static int still, hinted;
+        if (locked && !s_movie_playing && !re_host()->dialogue_busy()) {
+            const uint32_t now = pe_re_session_scene_mark(&s_session);
+            if (now != mark) mark = now, still = 0, hinted = 0;
+            else if (++still >= 30 * 60 && !hinted) {
+                hinted = 1;
+                pe_mod_log("pe_re_play", "a scene has held the player for 30 s without moving on (room %d-%02X)",
+                           s_session.stage + 1, (unsigned)s_session.room);
+                pe_toast("This scene seems stuck. Select > Unstick scene.");
+            }
+        } else {
+            still = 0;
+        }
+    }
     {   /* Square: the pocket, to use something here; Start: the status screen; Select: the pause menu */
         const uint16_t held = re_host()->held_buttons();
         const int square = (held & RE_HOST_SQUARE) != 0, start = (held & RE_HOST_START) != 0,
                   select = (held & RE_HOST_SELECT) != 0;
         const int free = !locked && !s_climbing && !re_host()->dialogue_busy() && s_pick == PICK_NONE;
+        /* Select works while a scene holds her too (Unstick scene), but not over a box or a movie */
+        const int pausable = !s_climbing && !re_host()->dialogue_busy() && s_pick == PICK_NONE && !s_movie_playing &&
+                             !s_session.run.movie_request;
         if (square && !s_square_held && free) open_pocket();
         else if (start && !s_start_held && free) open_status(0);
-        else if (select && !s_select_held && free) open_pause();
+        else if (select && !s_select_held && pausable) open_pause();
         s_square_held = square, s_start_held = start, s_select_held = select;
     }
     const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
@@ -1251,6 +1344,78 @@ static void text_status(char *out, unsigned size) {
     else snprintf(out, size, "%s", s_status);
 }
 
+/* ---- for testers: the crash note and the bug report ---- */
+static const char *scenario_name(void) {
+    if (s_session.player_id == 12) return "HUNK";
+    const int b = pe_re_flag(&s_session.progress.flags, PE_RE_FG_STATUS, 1);
+    return s_session.player ? (b ? "Claire B" : "Claire A") : (b ? "Leon B" : "Leon A");
+}
+/* What crash reports print under RE play (pe_mod_crash_note), kept current twice a second while playing. */
+static void update_crash_note(int force) {
+    static unsigned ticks;
+    char scene[400], note[512];
+    if (!force && ++ticks % 30) return;
+    if (!s_playing || !s_session.game) { pe_mod_crash_note("pe_re_play", s_status); return; }
+    pe_re_session_describe_scene(&s_session, scene, sizeof scene);
+    snprintf(note, sizeof note, "%s %s at %.0f,%.0f floor %d%s%s; %s", s_session.game->game, scenario_name(),
+             s_session.x, s_session.z, s_session.floor, scene_locked() ? ", held by a scene" : "",
+             s_movie_playing ? ", movie playing" : "", scene);
+    pe_mod_crash_note("pe_re_play", note);
+}
+
+static void bug_report(void) {
+    static char text[16384];
+    static uint8_t progress[PE_RE_SAVE_SIZE];
+    char where[1200] = "", line[1024];
+    size_t n = 0;
+    const ReHost *host = re_host();
+#define REPORT(...) do { const int w_ = snprintf(text + n, sizeof text - n, __VA_ARGS__); \
+                         if (w_ > 0) n = n + (size_t)w_ < sizeof text ? n + (size_t)w_ : sizeof text - 1; } while (0)
+    if (!RE_HOST_HAS(host, write_report)) { pe_toast("This build can't write bug reports."); return; }
+    REPORT("RE play bug report\n\nWhat happened (write it here before sending):\n\n\n");
+    if (s_playing && s_session.game) {
+        REPORT("Game: %s, %s (player %d, id %d)\n", s_session.game->title, scenario_name(), s_session.player,
+               s_session.player_id);
+        REPORT("Room: %d-%02X, camera %d%s, at x %.0f z %.0f floor %d facing %d\n", s_session.stage + 1,
+               (unsigned)s_session.room, s_session.camera, s_session.run.camera_lock ? " (held by the scripts)" : "",
+               s_session.x, s_session.z, s_session.floor, s_session.facing);
+        pe_re_session_describe_scene(&s_session, line, sizeof line);
+        REPORT("Scene: %s\n", line);
+        text_scene(line, sizeof line);
+        REPORT("Control: %s%s%s%s\n", line, s_movie_playing ? ", movie playing" : "",
+               pe_re_door_busy() ? ", door busy" : "", host->dialogue_busy() ? ", a box is up" : "");
+        text_status(line, sizeof line);
+        REPORT("Status: %s\n", line);
+        if (s_session.said[0]) REPORT("Last message: %s\n", s_session.said);
+        text_pocket(line, sizeof line);
+        REPORT("Pocket: %s\nItem box: %d items\n", line, s_session.progress.boxed);
+        text_scripts(line, sizeof line);
+        REPORT("Scripts: %s\n", line);
+        text_enemies(line, sizeof line);
+        REPORT("Enemies: %s\n", line);
+        REPORT("Doors taken: %d\n", s_session.doors_taken);
+        static const struct { unsigned group; const char *name; } groups[] = {
+            {1, "Status"}, {3, "Scenario"}, {4, "Common"}, {5, "Room"}, {31, "Key"}};
+        for (size_t g = 0; g < sizeof groups / sizeof *groups; g++) {
+            REPORT("%s flags:", groups[g].name);
+            for (int b = 0; b < 32; b++) REPORT(" %02X", s_session.progress.flags.bits[groups[g].group][b]);
+            REPORT("\n");
+        }
+        pe_re_save_encode(&s_session, 1, progress);
+    } else {
+        REPORT("Not playing an imported game. Status: %s\n", s_status);
+        memcpy(progress, s_saved, sizeof progress);
+    }
+#undef REPORT
+    if (host->write_report(text, progress, sizeof progress, where, sizeof where)) {
+        pe_toast("Couldn't write the bug report (see pe_mods.log).");
+        return;
+    }
+    pe_mod_log("pe_re_play", "bug report written: %s", where);
+    snprintf(s_status, sizeof s_status, "Bug report written: %s", where);
+    say("Bug report saved. Add what happened to report.txt in its folder (F1 > Play imported games shows where).");
+}
+
 static int valid_host(const ReHost *host)
 {
     return host && RE_HOST_HAS(host, bind_lifecycle) &&
@@ -1328,6 +1493,7 @@ const PeRePlayControls *pe_re_play_controls(void)
         .text_enemies = text_enemies,
         .enemy_debug_slot = &s_enemy_debug_slot,
         .text_enemy_movement = text_enemy_movement,
+        .bug_report = request_bug_report,
     };
     return &controls;
 }

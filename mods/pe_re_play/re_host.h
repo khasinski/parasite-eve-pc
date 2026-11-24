@@ -100,6 +100,10 @@ typedef struct ReHost {
     int (*movie_start)(const char *asset, unsigned start_sector, unsigned last_frame, int silent);
     int (*movie_tick)(void);
     void (*movie_stop)(void);
+    /* Optional. A tester's bug report: the host writes a new folder holding `text` (report.txt), the progress
+     * bytes (progress.bin, which loads like a room checkpoint), a screenshot and the end of its log. Returns 0
+     * and the folder in `where`, or -1. */
+    int (*write_report)(const char *text, const void *progress, size_t size, char *where, size_t n);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

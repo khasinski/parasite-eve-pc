@@ -40,6 +40,7 @@ typedef struct PeRePlayControls {
     void (*text_enemies)(char *, unsigned);
     int *enemy_debug_slot;
     void (*text_enemy_movement)(char *, unsigned);
+    void (*bug_report)(void);          /* write a tester's bug report (the host's folder) */
 } PeRePlayControls;
 
 int pe_re_play_init(const char *store);

@@ -226,6 +226,13 @@ static void test_scripted_clips(const PeReGame *game, unsigned player) {
         }
     }
     CHECK(player_seen && marvin_seen);
+    {   /* Unstick scene (the testers' way out): the scene's tasks end, she's free, the report names the place */
+        char report[600];
+        CHECK(pe_re_scd_running(&scene.run, 3));
+        const int ended = pe_re_session_unstick(&scene, report, sizeof report);
+        CHECK(ended >= 1 && !pe_re_scd_running(&scene.run, 3) && !pe_re_session_controls_locked(&scene));
+        CHECK(strstr(report, "2-02") && strstr(report, "proc 3"));
+    }
     pe_re_session_end(&scene);
 }
 
