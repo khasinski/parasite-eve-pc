@@ -49,8 +49,10 @@ refer to the room's main script.
 | 7-00 | 7 | 12 | R700C | 3043 |
 | 7-03 | 13 | 13 | R703C | 2345 |
 
-Room 1-08 checks for scenario B and camera 7 before starting R108C.
-The Windows test has yet to reach that camera through gameplay.
+R108C is a Claire B scene triggered by entering room 1-08 from 1-07.
+The entry script checks that the scene has not already played. The Windows test
+used door 1 in room 1-07, matched a rendered frame to the retail clip, and
+confirmed the completion flag in a native save after skipping the movie.
 
 In Claire A, event zone 7 in room 2-04 starts the cutscene that plays
 R204C. The Windows test reached the clip through that event.
