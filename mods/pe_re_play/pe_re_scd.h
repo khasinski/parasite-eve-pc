@@ -167,6 +167,8 @@ typedef struct {
     uint8_t first_skipped;                     /* an opcode skipped, for the log */
     uint16_t skipped_by_op[256];               /* how often each skipped opcode was met (saturates) */
     int message;                               /* message_on's message, waiting to be shown; -1 none */
+    unsigned movie_task;                       /* interrupted task plus one */
+    unsigned movie_request;                    /* Movie_on ID plus one, 0 when idle */
     int messages;                              /* message_on run so far */
     PeReScdTask task[PE_RE_TASKS];
     uint32_t sec[2], len[2];                   /* init and main scripts in the room file */

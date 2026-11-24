@@ -14,4 +14,20 @@
 - Room-bank script cues now use the imported room's EDT and VAB. Independent one-shot effects can overlap in the mixer.
 - XA script cues now select original stage or global dialogue from the standard Leon and Claire voice archives. They use a dedicated stream alongside room music, apply XA volume, and report whether dialogue is still playing to scene scripts. Dialogue stops when the room changes.
 - On an existing profile, use **F1 → Import → Scan RE2** with the original raw disc images available. The updated readers add the room sounds and voice lines to the import catalog.
-- Exact spatial mixing, redirected and layered tones, non-room script banks, special stage 8 dialogue, field actor cues, and movie playback remain follow-up work. An ISO without the raw XA sectors cannot supply the voice tracks.
+- Exact spatial mixing, redirected and layered tones, non-room script banks, special stage 8 dialogue, field actor cues, and synchronized movie audio remain follow-up work. An ISO without the raw XA sectors cannot supply the voice tracks.
+
+
+## Scripted FMV video
+
+The PE1 host can play selected imported STR movies requested by RE2's
+`Movie_on` room opcode. The room script pauses while the video plays. A new
+Cross press skips the clip, and the host restores the room picture on exit.
+Missing assets and unresolved movie IDs leave the script free to continue.
+
+The initial mapping covers IDs 4, 8–13, with IDs 8, 10, 12 and 13 limited to
+the verified Leon filenames. Playback uses an initial 15 fps cadence. The
+MOV1 catalog stores ordered MDEC payloads and compacted XA records, without
+the original video frame numbers or sector positions. Exact timing,
+scenario-specific movie variants, and movies that seek to a segment need a
+timestamped import format and further disc verification. This initial
+player displays video silently.

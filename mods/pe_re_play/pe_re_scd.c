@@ -25,7 +25,7 @@ enum {
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
-    OP_SPLC_RET = 0x70, OP_SPLC_SCE = 0x71, OP_SCE_RND = 0x28, OP_CUT_REPLACE = 0x4B,
+    OP_MOVIE_ON = 0x6F, OP_SPLC_RET = 0x70, OP_SPLC_SCE = 0x71, OP_SCE_RND = 0x28, OP_CUT_REPLACE = 0x4B,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -367,6 +367,10 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return (hit ? ins[1] : ins[1] ^ 1) ? CONTINUE : FALSE_COND;
     }
+    case OP_MOVIE_ON:                                            /* Movie_on: one-byte movie table index */
+        vm->run->movie_request = 1u + ins[1];
+        t->pc += n;
+        return YIELD;
     case OP_MESSAGE_ON: vm->run->message = ins[2], vm->run->messages++; t->pc += n; return CONTINUE;
     case OP_AOT_SET: case OP_DOOR_AOT_SE: case OP_ITEM_AOT_SET:
     case OP_AOT_SET_4P: case OP_DOOR_AOT_SET_4P: case OP_ITEM_AOT_SET_4P:
@@ -674,12 +678,15 @@ static void schedule(Vm *vm) {
     for (int k = 0; k < PE_RE_TASKS; k++) {
         PeReScdTask *t = &vm->run->task[k];
         int own = BUDGET_TASK;
-        while (t->status && vm->budget > 0) {
+        while (t->status && vm->budget > 0 && !vm->run->movie_request) {
             if (own-- <= 0) { vm->run->stopped++; break; }
             vm->budget--;
             const int r = step(vm, t);
             if (r == CONTINUE) continue;
-            if (r == YIELD) break;
+            if (r == YIELD) {
+                if (vm->run->movie_request) vm->run->movie_task = (unsigned)k + 1;
+                break;
+            }
             if (t->ifel[t->sub] < 0) break;                 /* outside any if: on next frame */
             t->pc = t->ifend[t->sub][t->ifel[t->sub]--];    /* to the end of its if block */
         }
@@ -1077,6 +1084,7 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
+    run->movie_request = 0;                              /* a headless caller advances without presentation */
     /* STAT_BG_JUST_DRAWN: the game sets it as a new background is drawn and clears it a frame later;
      * here it's kept through one whole tick, so a task scheduled before the setter sees it too */
     if (run->camera != run->bg_camera) run->bg_drawn = 2, run->bg_camera = run->camera;
@@ -1096,7 +1104,10 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
     }
     run->effect_count = kept;
     roll_random(flags);                                    /* Sce_scheduler rolls it first */
-    exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
+    /* Event_exec(0, 1) normally restarts the every-frame handler. Finish a
+     * handler interrupted by a movie before restarting it next frame. */
+    if (run->movie_task != 1) exec_task(&vm, 0, 1);
+    run->movie_task = 0;
     schedule(&vm);
     work_clr(flags);
 }

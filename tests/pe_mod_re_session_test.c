@@ -625,9 +625,41 @@ static void test_ground_enemy_variants(void) {
     }
 }
 
+static void test_movie_script(void) {
+    /* Main proc 1 requests two movies, then sets a flag. The every-frame
+     * procedure must resume after each request instead of restarting. */
+    const uint8_t rdt[] = {
+        [8 + 17 * 4] = 100,
+        [100] = 4, 0, 6, 0,
+        0x01, 0,
+        0x6f, 8,
+        0x6f, 11,
+        0x22, 4, 0x30, 1,
+        0x01, 0
+    };
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
+    CHECK(builder);
+    if (!builder) return;
+    CHECK(!pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    PeImpRoomLogic *logic = pe_imp_logic_finish(builder);
+    CHECK(logic);
+    if (!logic) return;
+    PeReScdRun run;
+    PeReFlags flags = {0};
+    pe_re_scd_run(logic, &flags, NULL, &run);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(run.movie_request == 9 && !pe_re_flag(&flags, 4, 0x30));
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(run.movie_request == 12 && !pe_re_flag(&flags, 4, 0x30));
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(!run.movie_request && pe_re_flag(&flags, 4, 0x30));
+    free(logic);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "--host-store")) return re_headless_smoke(argv[2], 0) != 0;
     test_ground_enemy_variants();
+    test_movie_script();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);

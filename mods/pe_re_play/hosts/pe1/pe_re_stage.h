@@ -47,6 +47,9 @@ void pe_re_stage_set_size(int percent);
 void pe_re_stage_collision_id(unsigned slot, unsigned id);   /* a script's wall switch (Sca_id_set) */
 double pe_re_stage_scale(void);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
+int pe_re_stage_movie_start(const char *asset);
+int pe_re_stage_movie_tick(void);
+void pe_re_stage_movie_stop(void);
 
 /* A battle trip: the room shown now (its picture, camera, Aya's place) is armed as the backdrop
  * for the battle that follows in a PE room; during that battle it replaces the PE room's picture

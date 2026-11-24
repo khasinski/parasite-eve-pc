@@ -81,6 +81,7 @@ static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
 static int s_nenemies, s_room_reported;
 static int s_enemy_debug_slot = -1;
 static int s_battle_paused;
+static int s_movie_playing, s_movie_cross;
 static int s_placement_markers;
 static int s_placement_meshes;
 static int s_placement_idle = 1;
@@ -114,7 +115,7 @@ static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
 static void advance_enemies(double x, double z, int floor);
 
-static int scene_locked(void) { return pe_re_session_controls_locked(&s_session); }
+static int scene_locked(void) { return s_movie_playing || s_session.run.movie_request || pe_re_session_controls_locked(&s_session); }
 
 static void sync_scene_controls(void) {
     const ReHost *host = re_host();
@@ -297,7 +298,7 @@ static void advance_enemies(double x, double z, int floor) {
 
 static int pause_for_battle(void) {
     if (!s_playing) return 0;
-    if (s_battle_paused || !re_host()->room_active() || !re_host()->field_free() ||
+    if (s_battle_paused || s_movie_playing || s_session.run.movie_request || !re_host()->room_active() || !re_host()->field_free() ||
         pe_re_door_busy() || re_host()->dialogue_busy() || s_typing != TYPE_NONE) return -1;
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     s_session.floor = re_host()->player_floor();
@@ -578,7 +579,63 @@ static int keep_progress(void) {
     return s_enabled;
 }
 
+static void stop_movie(void) {
+    if (!s_movie_playing) return;
+    const ReHost *host = re_host();
+    host->movie_stop();
+    if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(0);
+    s_movie_playing = 0;
+}
+
+/* Whole-file entries confirmed in bio2-ds MOVIE.C and FILECODE.H. R200,
+ * R505 and R704 also have alternate segment plays which need STR timing.
+ * Character-specific filenames here are confirmed for Leon's disc. */
+static const char *movie_asset(unsigned id, unsigned player) {
+    switch (id) {
+    case 4: return "re2:movie/r10b";
+    case 8: return player == 0 ? "re2:movie/r108l" : NULL;
+    case 9: return "re2:movie/r109";
+    case 10: return player == 0 ? "re2:movie/r204l" : NULL;
+    case 11: return "re2:movie/r409";
+    case 12: return player == 0 ? "re2:movie/r700l" : NULL;
+    case 13: return player == 0 ? "re2:movie/r703l" : NULL;
+    default: return NULL;
+    }
+}
+
+static int movie_frame(void) {
+    const ReHost *host = re_host();
+    const unsigned request = s_session.run.movie_request;
+    if (!request && !s_movie_playing) return 0;
+    const unsigned buttons = host->held_buttons();
+    const int cross = (buttons & RE_HOST_CROSS) != 0;
+    if (request) {
+        s_session.run.movie_request = 0;
+        const char *asset = movie_asset(request - 1, s_session.player);
+        if (!asset || !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) ||
+            !RE_HOST_HAS(host, movie_stop) || !host->movie_start(asset)) {
+            pe_mod_log(MOD_ID, "Movie_on %u unavailable for player %u", request - 1, (unsigned)s_session.player);
+            return 0;
+        }
+        pe_re_music_stop();
+        if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(1);
+        host->forget_dialogue();
+        s_movie_playing = 1;
+        s_movie_cross = cross;
+    } else if ((cross && !s_movie_cross) || !host->movie_tick()) {
+        stop_movie();
+    }
+    host->consume_native_interact();
+    s_cross_held = s_movie_cross = cross;
+    s_square_held = (buttons & RE_HOST_SQUARE) != 0;
+    s_session.key = pe_re_scd_keys(buttons);
+    s_session.key_trg = 0;
+    sync_scene_controls();
+    return 1;
+}
+
 static void stop(void) {
+    stop_movie();
     pe_re_music_stop();
     s_start_pending = 0;
     s_title = TITLE_CLOSED;
@@ -745,6 +802,7 @@ static void tick_title(void)
 static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
+    stop_movie();
     if (s_title != TITLE_CLOSED) re_host()->forget_dialogue();
     s_title = TITLE_CLOSED;
     pe_re_door_cancel();
@@ -807,6 +865,7 @@ static int on_frame(void *ctx, void *user) {
     }
     if (re_host()->native_menu_active()) return 0;    /* PE's own menu (the save screen) has the pad */
     if (!re_host()->room_active()) {                /* PE loaded a room of its own: it's only the shell */
+        stop_movie();
         re_host()->forget_dialogue();
         if (!re_host()->field_free()) return 0;         /* once it has settled, the imported room again */
         s_reshown++;
@@ -838,6 +897,7 @@ static int on_frame(void *ctx, void *user) {
         if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         return 0;
     }
+    if (movie_frame()) return 0;
     s_session.talking = re_host()->dialogue_busy;
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
         const uint16_t pad = re_host()->dialogue_busy() ? 0 : re_host()->held_buttons();
@@ -870,7 +930,7 @@ static int on_frame(void *ctx, void *user) {
         s_session.moved = 0;
     }
     if (s_playing && script_change == PE_RE_CAMERA) show_cut();
-    if (!s_playing) return 0;
+    if (!s_playing || movie_frame()) return 0;
     sync_scene_controls();
     const int locked = scene_locked();
     apply_collision(0);
@@ -1063,7 +1123,7 @@ static void to_ramp(void) {
 }
 static void to_room(void) {
     char why[200] = "";
-    if (s_battle_paused) return;
+    if (s_battle_paused || s_movie_playing) return;
     if (!s_playing) { snprintf(s_status, sizeof s_status, "Start a game first."); return; }
     if (pe_re_session_enter(&s_session, s_store, (uint32_t)(s_jump_stage - 1), (uint32_t)s_jump_room, 0, 0, 0, 0, why,
                             sizeof why)) {

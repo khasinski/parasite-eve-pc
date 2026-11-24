@@ -38,6 +38,10 @@
 #include "pe_model.h"
 #include "pe_model_view.h"
 
+/* libetc's callback declarations conflict with the native PE callbacks. */
+extern long GetVideoMode(void);
+enum { PE_RE_PAL = 1 };
+
 #define VRAM_X 320
 #define VRAM_Y 256
 #define PIC_W 320
@@ -76,6 +80,12 @@ static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left an
 static RenderTexturedQuad s_curtain_quads[2][2];       /* black, in front of everything */
 static int s_shade = 128, s_curtain, s_hold;           /* a door's fade: picture brightness, black, no walking */
 static uint16_t *s_original_picture;
+static struct {
+    PeImpMovie *asset;
+    uint8_t *rgb;
+    uint16_t *pixels;
+    uint32_t start_vblank, frame, hz;
+} s_movie;
 static uint16_t *s_picture;                            /* the room's picture as uploaded, kept for battles */
 /* The room behind a battle: the trip's fight takes place in a PE room, but its picture is
  * swapped for the imported room's and PE's own view matrix for the room's camera, anchored so
@@ -802,6 +812,81 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
     return rc;
 }
 
+static void upload_movie_picture(uint16_t *pixels) {
+    RECT rect = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+    DrawSync(0);
+    LoadImage(&rect, pixels);
+    DrawSync(0);
+}
+
+/* The STR header describes the visible rectangle. MDEC decodes complete blocks. */
+static unsigned movie_stride(unsigned size) { return (size + 15) & ~15u; }
+
+static int draw_movie_frame(uint32_t frame) {
+    const PeImpMovie *m = s_movie.asset;
+    char why[160] = "";
+    if (pe_imp_mdec_decode(m->frame_data + m->offset[frame], m->size[frame],
+                           movie_stride(m->width), movie_stride(m->height), s_movie.rgb, why, sizeof why)) {
+        pe_mod_log(NULL, "RE2 movie frame %u: %s", (unsigned)frame, why);
+        return 0;
+    }
+    /* Fit the source in the PE field viewport, with opaque black bars. */
+    const unsigned width = m->width * FIELD_H > m->height * PIC_W ? PIC_W : m->width * FIELD_H / m->height;
+    const unsigned height = m->width * FIELD_H > m->height * PIC_W ? m->height * PIC_W / m->width : FIELD_H;
+    const unsigned left = (PIC_W - width) / 2, top = (PIC_H - height) / 2;
+    for (unsigned i = 0; i < PIC_W * PIC_H; i++) s_movie.pixels[i] = 0x8000;
+    for (unsigned y = 0; y < height; y++) {
+        for (unsigned x = 0; x < width; x++) {
+            const uint8_t *rgb = s_movie.rgb + 3 * ((y * m->height / height) * movie_stride(m->width) + x * m->width / width);
+            uint16_t pixel = (uint16_t)((rgb[0] >> 3) | (rgb[1] >> 3) << 5 | (rgb[2] >> 3) << 10);
+            s_movie.pixels[(top + y) * PIC_W + left + x] = pixel ? pixel : 0x8000;
+        }
+    }
+    upload_movie_picture(s_movie.pixels);
+    s_movie.frame = frame;
+    return 1;
+}
+
+static void clear_movie(void) {
+    pe_imp_movie_free(s_movie.asset);
+    free(s_movie.rgb);
+    free(s_movie.pixels);
+    memset(&s_movie, 0, sizeof s_movie);
+}
+
+int pe_re_stage_movie_start(const char *asset) {
+    char why[160] = "";
+    if (!s_show || s_movie.asset || !s_picture) return 0;
+    if (pe_imp_catalog_movie(s_store, asset, &s_movie.asset, why, sizeof why)) {
+        pe_mod_log(NULL, "%s: %s", asset, why);
+        return 0;
+    }
+    const PeImpMovie *m = s_movie.asset;
+    s_movie.rgb = malloc((size_t)movie_stride(m->width) * movie_stride(m->height) * 3);
+    s_movie.pixels = malloc(PIC_W * PIC_H * sizeof *s_movie.pixels);
+    if (!s_movie.rgb || !s_movie.pixels || !draw_movie_frame(0)) {
+        clear_movie();
+        return 0;
+    }
+    s_movie.hz = GetVideoMode() == PE_RE_PAL ? 50 : 60;
+    s_movie.start_vblank = (uint32_t)Psyz_VideoVSync(-1);
+    return 1;
+}
+
+int pe_re_stage_movie_tick(void) {
+    if (!s_movie.asset) return 0;
+    const uint32_t elapsed = (uint32_t)Psyz_VideoVSync(-1) - s_movie.start_vblank;
+    /* MOV1 has frame order only. Use standard 15 fps STR playback for this pass. */
+    const uint64_t frame = (uint64_t)elapsed * 15 / s_movie.hz;
+    return frame < s_movie.asset->frames && (frame == s_movie.frame || draw_movie_frame((uint32_t)frame));
+}
+
+void pe_re_stage_movie_stop(void) {
+    if (!s_movie.asset) return;
+    clear_movie();
+    if (s_show && s_picture) upload_movie_picture(s_picture);
+}
+
 static void link_quad(RenderNativeTag *entry, RenderTexturedQuad *quad) {
     quad->tag.address = entry->address;
     entry->address = (uintptr_t)quad;
@@ -1491,6 +1576,13 @@ static int on_background(void *ctx, void *user) {
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
     RenderNativeTag *ordering = b->ordering;
     RenderTexturedQuad *quads = s_quads[b->slot];
+    if (s_movie.asset) {
+        picture_quad(&quads[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
+        picture_quad(&quads[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
+        link_quad(&ordering[0], &quads[0]);
+        link_quad(&ordering[0], &quads[1]);
+        return 1;
+    }
     const u8 shade = (u8)(s_shade < 0 ? 0 : s_shade > 128 ? 128 : s_shade);   /* the texture times shade / 128 */
     picture_quad(&quads[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
     picture_quad(&quads[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
@@ -1524,6 +1616,7 @@ static int on_background(void *ctx, void *user) {
 /* PE loaded another room of its own: its pages are already in VRAM, so just stop. */
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
+    clear_movie();
     backdrop_off(0);                                   /* a new room's pages and camera are coming */
     clear_climb();
     clear_effects(0);
@@ -1679,6 +1772,7 @@ void pe_re_stage_init(const char *mod_id, const char *store) {
 }
 
 void pe_re_stage_shutdown(void) {
+    pe_re_stage_movie_stop();
     clear_actor_banks();
     s_show = s_walk.active = 0;
     clear_climb();
