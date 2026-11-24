@@ -631,6 +631,8 @@ static void movie_input(unsigned buttons) {
     re_host()->consume_native_interact();
     s_cross_held = s_movie_cross = (buttons & RE_HOST_CROSS) != 0;
     s_square_held = (buttons & RE_HOST_SQUARE) != 0;
+    s_start_held = (buttons & RE_HOST_START) != 0;
+    s_select_held = (buttons & RE_HOST_SELECT) != 0;
     s_session.key = pe_re_scd_keys(buttons);
     s_session.key_trg = 0;
     sync_scene_controls();

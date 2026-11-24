@@ -456,8 +456,11 @@ static int test_opening(void) {
             frames(2, RE_HOST_CROSS);  /* the first skip must not skip clip two */
             EXPECT(s.movie_starts == 2 && s.movie_stops == 1 && !s.active);
             frames(1, 0);
-            frames(1, RE_HOST_CROSS);
+            const uint16_t skip_and_menu = RE_HOST_CROSS | RE_HOST_START | RE_HOST_SELECT;
+            frames(1, skip_and_menu);
             EXPECT(s.movie_stops == 2 && !s.active);
+            frames(2, skip_and_menu);
+            EXPECT(s.active && !s.busy);
         }
         if (cases[i].load_save) {
             EXPECT(!s.active && s.movie_starts == 1 && s.movie_locked && s.movie_muted);
