@@ -474,7 +474,7 @@ if(BUILD_TESTING)
         target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import pe_enemy_import)
         target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
         target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
-        set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+        set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800
             ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     endif()
 endif()

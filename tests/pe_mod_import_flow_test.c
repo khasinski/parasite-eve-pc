@@ -402,7 +402,7 @@ int main(int argc, char **argv) {
     pe_import_job_run(&j);
     printf("with %s: %d disc(s) (%s), %d not supported, built %d (%s), current %d, missing %d%s%s\n", j.extra[0],
            j.discs_read, j.games, j.unknown, j.built, j.built_names, j.current, j.missing, j.failed ? ", problem: " : "", j.problem);
-    printf("  (%d unchanged)\n", j.unchanged);
+    printf("  (%d unchanged)%s%s\n", j.unchanged, j.missing ? "; missing: " : "", j.missing ? j.missing_discs : "");
     fflush(stdout);
     assert(!j.failed && j.missing == 0 && j.current == 1 && j.built == 8 && strstr(j.built_names, "Leon") && strstr(j.built_names, "Regina") &&
            strstr(j.built_names, "Wesker") && strstr(j.built_names, "Forrest"));

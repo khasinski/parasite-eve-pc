@@ -12,7 +12,7 @@ extern int pe_imp_mkdirs(const char *path);
 #define STORE "pe-assets-test/import/store"
 #define HASH "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-static const void *s_assets, *s_audio;
+static const void *s_assets, *s_audio, *s_field_audio;
 
 int pe_mod_path(char *out, size_t n, const char *file)
 {
@@ -27,6 +27,7 @@ int pe_service_publish(const char *name, int version, const void *api, const cha
     assert(version == 1 && pe_mod_active(owner));
     if (!strcmp(name, "assets")) s_assets = api;
     else if (!strcmp(name, "audio")) s_audio = api;
+    else if (!strcmp(name, "re_field_audio")) s_field_audio = api;   /* re_field_audio.h: RE rooms' music and voices */
     else return -1;
     return 0;
 }
@@ -36,6 +37,7 @@ const void *pe_service_get(const char *name, int version)
     if (version != 1) return NULL;
     if (!strcmp(name, "assets")) return s_assets;
     if (!strcmp(name, "audio")) return s_audio;
+    if (!strcmp(name, "re_field_audio")) return s_field_audio;
     return NULL;
 }
 

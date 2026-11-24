@@ -115,6 +115,9 @@ static PeReChange answer_tick(PeReSession *s) {
 static void settle(PeReSession *s, int frames) {
     char why[200];
     for (int f = 0; f < frames || (events_running(s) && f < 6000); f++) {
+        /* a scene that waits for a button (sce_trg_ck after a message): a press every half second, as a
+         * player moves a message on; nothing pressed otherwise */
+        s->key_trg = events_running(s) && f % 30 == 15 ? 0xFFFFFFFFu : 0;
         const PeReChange c = answer_tick(s);
         if (c == PE_RE_ZONE) handed(s);
         else if (c == PE_RE_STAY && s->moved && !getenv("PE_TEST_RE_NOSTEP")) {           /* a scene walked her: the game's every-frame check */

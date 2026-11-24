@@ -43,7 +43,8 @@ static int read_room_sounds(const uint8_t *data, uint32_t size, const char *path
         if (!bytes || bytes > size || start > size - bytes) continue;
         char bank[24];
         snprintf(bank, sizeof bank, "room%.4s", room + 5);
-        for (char *c = bank; *c; ++c) if (*c >= 'A' && *c <= 'F') *c += 'a' - 'A';
+        for (char *c = bank; *c; ++c) if (*c >= 'A' && *c <= 'Z') *c += 'a' - 'A';   /* catalog ids are lower case:
+                                                                                         * the Dual Shock disc's ROOMG040 too */
         if (pe_imp_spu_emit(sink, bank, cue, data + start, bytes, why, n)) return -1;
     }
     return 0;
@@ -58,6 +59,6 @@ static int read_logic(const uint8_t *data, uint32_t size, const char *path, PeIm
 const PeImpReader g_re2_logic_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "rdt-logic",
-    .version = 7, .produces = PE_IMP_ROOMLOGIC | PE_IMP_SOUND, .match = "PL?/RDT/ROOM*.RDT",
+    .version = 8, .produces = PE_IMP_ROOMLOGIC | PE_IMP_SOUND, .match = "PL?/RDT/ROOM*.RDT",
     .tags = "room logic", .read = read_logic, .path_key = 1
 };

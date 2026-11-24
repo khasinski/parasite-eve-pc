@@ -238,8 +238,11 @@ PjNode *pj_load(const char *path, char *why, size_t n) {
         if (why && n) snprintf(why, n, "can't open %s", path);
         return NULL;
     }
-    char *buf = malloc(PJ_TEXT_MAX + 1);
-    size_t len = buf ? fread(buf, 1, PJ_TEXT_MAX + 1, f) : 0;
+    long size = fseek(f, 0, SEEK_END) ? -1 : ftell(f);   /* the file's own size, up to the limit (+1 tells "too large") */
+    if (size < 0 || fseek(f, 0, SEEK_SET)) size = PJ_TEXT_MAX;
+    const size_t want = (size_t)size > PJ_TEXT_MAX ? PJ_TEXT_MAX + 1 : (size_t)size + 1;
+    char *buf = malloc(want);
+    size_t len = buf ? fread(buf, 1, want, f) : 0;
     fclose(f);
     if (!buf) return NULL;
     PjNode *x = NULL;

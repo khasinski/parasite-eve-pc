@@ -18,9 +18,9 @@ typedef struct PjNode {
     int count;
 } PjNode;
 
-#define PJ_TEXT_MAX (4u << 20)
+#define PJ_TEXT_MAX (32u << 20)   /* a game's catalog.json: RE2's three discs with room sounds pass 4.5 MB */
 #define PJ_DEPTH_MAX 32
-#define PJ_NODES_MAX 1000000
+#define PJ_NODES_MAX 4000000
 
 PjNode *pj_parse(const char *text, size_t len, char *why, size_t n);   /* NULL on error */
 void pj_free(PjNode *root);

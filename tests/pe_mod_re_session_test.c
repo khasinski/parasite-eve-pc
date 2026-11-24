@@ -35,6 +35,16 @@ static int clear_approach(double x, double z, double target_x, double target_z) 
     return 1;
 }
 
+/* A frame of the room's scripts without a session: the player's scripted walk (plc_dest) is done at
+ * once, as the session's walk would finish it, so a scene waiting on her arrival flag goes on. */
+static void scene_tick(const PeImpRoomLogic *logic, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
+    pe_re_scd_tick(logic, flags, host, run);
+    if (run->player_dest.moving && !run->actor_stopped[0]) {
+        run->player_dest.moving = 0;
+        run->arrived[0] = run->player_dest.arrival;
+    }
+}
+
 static void test_mr_x(const PeReGame *game, unsigned player) {
     char id[PE_IMP_ID_MAX];
     PeReSession scene = {.game = game, .stage = 4, .room = 7};
@@ -78,7 +88,7 @@ static void test_licker(const PeReGame *game, unsigned player) {
     flags->work[PE_RE_WORK_ROOM] = scene.room;
     pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
     pe_re_scd_exec(scene.logic, &scene.run, 2, 2);
-    pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    scene_tick(scene.logic, flags, NULL, &scene.run);
     const int16_t *licker = scene.run.works[3];
     CHECK(licker[0] && licker[PE_RE_MEMBER_ID] == 0x22 && licker[PE_RE_MEMBER_TYPE] == 0x4510);
     PeReRoomEvent room = {sizeof room, "re2", scene.stage, scene.room, 0, 0, enemies};
@@ -88,7 +98,7 @@ static void test_licker(const PeReGame *game, unsigned player) {
     pe_re_scd_exec(scene.logic, &scene.run, 2, 9);
     int saw_entrance = 0;
     for (int tick = 0; tick < 600; tick++) {
-        pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+        scene_tick(scene.logic, flags, NULL, &scene.run);
         if (pe_re_scd_running(&scene.run, 9) && licker[PE_RE_MEMBER_SCE_FREE0] == 1) {
             saw_entrance = 1;
             CHECK(licker[PE_RE_MEMBER_TYPE] == 0x4510);
@@ -102,7 +112,7 @@ static void test_licker(const PeReGame *game, unsigned player) {
     CHECK(pe_re_flag(flags, PE_RE_FG_ENEMY, 0x3d));
     pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
     pe_re_scd_exec(scene.logic, &scene.run, 2, 2);
-    pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    scene_tick(scene.logic, flags, NULL, &scene.run);
     room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
     CHECK(!pe_trip_approach(&room, -14869, -3479, 0, clear_approach, nearby));
     pe_re_session_end(&scene);
@@ -198,13 +208,13 @@ static void test_alligator(const PeReGame *game, unsigned player) {
     for (int ticks = 0; ticks < 800 && pe_re_session_ready_boss(&boss) < 0; ticks++) {
         /* Claire A's partner scene waits for the approach to cross these two camera zones. */
         if (player) flags->work[PE_RE_WORK_CUT] = ticks < 300 ? 12 : 10;
-        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+        scene_tick(boss.logic, flags, NULL, &boss.run);
     }
     CHECK(pe_re_session_ready_boss(&boss) == 0);
     const PeReFlags entrance_flags = *flags;
     const PeReScdRun entrance_run = boss.run;
     CHECK(!pe_re_session_beaten(&boss, 0, 0));
-    pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    scene_tick(boss.logic, flags, NULL, &boss.run);
     CHECK(boss.run.camera == 8 && !boss.run.camera_lock);
     CHECK(pe_re_session_ready_boss(&boss) == -1 && pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0));
     pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
@@ -216,7 +226,7 @@ static void test_alligator(const PeReGame *game, unsigned player) {
     CHECK(pe_re_session_canister_win(&boss, 0, 0) < 0);
     pe_re_session_release_canister(&boss);
     for (int ticks = 0; ticks < 150 && pe_re_scd_running(&boss.run, 10); ticks++)
-        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+        scene_tick(boss.logic, flags, NULL, &boss.run);
     CHECK(pe_re_session_canister_ready(&boss));
     CHECK(pe_re_session_canister_win(&boss, 1, 0) < 0);
     CHECK(!pe_re_session_canister_win(&boss, 0, 0));
@@ -266,10 +276,10 @@ static void test_lift_boss(const PeReGame *game, unsigned player) {
     pe_re_scd_run(logic, flags, NULL, &boss.run);
     CHECK(pe_re_session_ready_boss(&boss) == -1);
     pe_re_scd_exec(logic, &boss.run, 2, 7);
-    for (int ticks = 0; ticks < 800; ticks++) pe_re_scd_tick(logic, flags, NULL, &boss.run);
+    for (int ticks = 0; ticks < 800; ticks++) scene_tick(logic, flags, NULL, &boss.run);
     CHECK(pe_re_session_ready_boss(&boss) == 0);
     CHECK(!pe_re_session_beaten(&boss, 0, 0xff));
-    pe_re_scd_tick(logic, flags, NULL, &boss.run);
+    scene_tick(logic, flags, NULL, &boss.run);
     CHECK(pe_re_session_ready_boss(&boss) == -1 && boss.run.em_dead[0] == 2);
     free(logic);
 }
