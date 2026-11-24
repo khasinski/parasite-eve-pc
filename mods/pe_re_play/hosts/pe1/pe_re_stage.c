@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <psyz/video.h>
+#include <psyz/audio.h>
+#include <SDL3/SDL.h>
 
 #include "pe_re_stage.h"
 #include "../../pe_re_session.h"
@@ -84,7 +86,10 @@ static struct {
     PeImpMovie *asset;
     uint8_t *rgb;
     uint16_t *pixels;
-    uint32_t start_vblank, frame, hz;
+    uint32_t start_vblank, frame, hz, sector;
+    SDL_AudioStream *audio;
+    unsigned audio_rate, audio_channels;
+    int audio_bytes;
 } s_movie;
 static uint16_t *s_picture;                            /* the room's picture as uploaded, kept for battles */
 /* The room behind a battle: the trip's fight takes place in a PE room, but its picture is
@@ -848,10 +853,32 @@ static int draw_movie_frame(uint32_t frame) {
 }
 
 static void clear_movie(void) {
+    if (s_movie.audio) SDL_DestroyAudioStream(s_movie.audio);
     pe_imp_movie_free(s_movie.asset);
     free(s_movie.rgb);
     free(s_movie.pixels);
     memset(&s_movie, 0, sizeof s_movie);
+}
+
+static void start_movie_audio(void) {
+    const char *clock = SDL_getenv("PSYZ_AUDIO_CLOCK");
+    if (clock && !strcmp(clock, "video")) return;    /* deterministic headless playback */
+    uint32_t frames;
+    /* RE2's movie player sets its CD-XA filter to file 1, channel 1. */
+    int16_t *pcm = pe_imp_movie_pcm(s_movie.asset, 1, 1, &frames,
+                                   &s_movie.audio_rate, &s_movie.audio_channels);
+    if (!pcm) return;
+    SDL_AudioSpec spec = {SDL_AUDIO_S16, (int)s_movie.audio_channels, (int)s_movie.audio_rate};
+    SDL_AudioStream *stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+    const int bytes = (int)(frames * s_movie.audio_channels * sizeof *pcm);
+    if (stream && SDL_SetAudioStreamGain(stream, (float)Psyz_AudioGetOutputVolume() / 100.0f) &&
+        SDL_PutAudioStreamData(stream, pcm, bytes) && SDL_FlushAudioStream(stream) && SDL_ResumeAudioStreamDevice(stream)) {
+        s_movie.audio = stream;
+        s_movie.audio_bytes = bytes;
+    } else if (stream) {
+        SDL_DestroyAudioStream(stream);
+    }
+    free(pcm);
 }
 
 int pe_re_stage_movie_start(const char *asset) {
@@ -868,17 +895,50 @@ int pe_re_stage_movie_start(const char *asset) {
         clear_movie();
         return 0;
     }
+    if (m->frame_sector && m->frame_sector[0]) {
+        for (unsigned i = 0; i < PIC_W * PIC_H; i++) s_movie.pixels[i] = 0x8000;
+        upload_movie_picture(s_movie.pixels);
+        s_movie.frame = UINT32_MAX;
+    }
+    start_movie_audio();
     s_movie.hz = GetVideoMode() == PE_RE_PAL ? 50 : 60;
     s_movie.start_vblank = (uint32_t)Psyz_VideoVSync(-1);
     return 1;
 }
 
 int pe_re_stage_movie_tick(void) {
-    if (!s_movie.asset) return 0;
-    const uint32_t elapsed = (uint32_t)Psyz_VideoVSync(-1) - s_movie.start_vblank;
-    /* MOV1 has frame order only. Use standard 15 fps STR playback for this pass. */
-    const uint64_t frame = (uint64_t)elapsed * 15 / s_movie.hz;
-    return frame < s_movie.asset->frames && (frame == s_movie.frame || draw_movie_frame((uint32_t)frame));
+    const PeImpMovie *m = s_movie.asset;
+    if (!m) return 0;
+    const uint32_t now = (uint32_t)Psyz_VideoVSync(-1);
+    const uint32_t elapsed = now - s_movie.start_vblank;
+    if (!m->frame_sector) {
+        /* Older MOV1 imports have frame order only. */
+        const uint64_t frame = (uint64_t)elapsed * 15 / s_movie.hz;
+        return frame < m->frames && (frame == s_movie.frame || draw_movie_frame((uint32_t)frame));
+    }
+
+    uint32_t sector = (uint32_t)((uint64_t)elapsed * PE_IMP_MOVIE_SECTOR_HZ / s_movie.hz);
+    if (s_movie.audio) {
+        const int queued = SDL_GetAudioStreamQueued(s_movie.audio);
+        if (queued >= 0 && queued <= s_movie.audio_bytes) {
+            /* The stream reports queued source bytes, before device resampling. */
+            const unsigned frames = (unsigned)(s_movie.audio_bytes - queued) /
+                                    (s_movie.audio_channels * sizeof(int16_t));
+            sector = frames / (s_movie.audio_rate / PE_IMP_MOVIE_SECTOR_HZ);
+        } else {
+            SDL_DestroyAudioStream(s_movie.audio);
+            s_movie.audio = NULL;
+            s_movie.start_vblank = now - s_movie.sector * s_movie.hz / PE_IMP_MOVIE_SECTOR_HZ;
+            sector = s_movie.sector;
+        }
+    }
+    if (sector >= m->sectors) return 0;
+    if (sector < s_movie.sector) sector = s_movie.sector;
+    s_movie.sector = sector;
+    if (sector < m->frame_sector[0]) return 1;
+    uint32_t frame = s_movie.frame == UINT32_MAX ? 0 : s_movie.frame;
+    while (frame + 1 < m->frames && m->frame_sector[frame + 1] <= sector) frame++;
+    return frame == s_movie.frame || draw_movie_frame(frame);
 }
 
 void pe_re_stage_movie_stop(void) {

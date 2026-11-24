@@ -293,8 +293,8 @@ static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDi
     }
     uint8_t *companion = NULL;
     uint32_t companion_size = 0;
-    if (rd->xa == PE_IMP_XA_BOTH) {                     /* a movie: its audio sectors as the companion */
-        if (pe_imp_disc_xa(d, i, &companion, &companion_size, why, sizeof why)) companion = NULL, companion_size = 0;
+    if (rd->xa == PE_IMP_XA_BOTH) {                     /* keep XA at its source sector on the STR timeline */
+        if (pe_imp_disc_xa_indexed(d, i, &companion, &companion_size, why, sizeof why)) companion = NULL, companion_size = 0;
     } else if (rd->find_companion) {
         int index = rd->find_companion(d, path);
         if (index >= 0 && pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {

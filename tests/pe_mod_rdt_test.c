@@ -188,6 +188,54 @@ static void scan_files(const char *label, const char *cue, const char *game, con
     assert(!sc.refused && pictures >= want && decoded == pictures && (want_docs ? docs >= want_docs : !docs));
 }
 
+static void test_movie_timeline(void) {
+    enum { sectors = 12, stride = 2048, frames_per_sector = 252 };
+    uint8_t str[sectors * stride] = {0};
+    uint8_t xa[sectors * PE_IMP_XA_RECORD] = {0};
+    const uint8_t fr[] = {0x60, 1, 1, 0x80, 0, 0, 1, 0, 0, 0, 0, 0, 12, 0, 0, 0, 16, 0, 16, 0};
+    memcpy(str, fr, sizeof fr);
+    memcpy(str + 10 * stride, fr, sizeof fr);
+    str[10 * stride + 8] = 2;   /* the source skipped frame number 1 */
+    const uint8_t stereo[] = {1, 1, 0x24, 1};
+    const uint8_t other[] = {1, 2, 0x24, 1};
+    memcpy(xa + PE_IMP_XA_RECORD, stereo, sizeof stereo);
+    memset(xa + PE_IMP_XA_RECORD + 4 + 16, 0x11, 112);
+    memcpy(xa + 3 * PE_IMP_XA_RECORD, other, sizeof other);
+    memset(xa + 3 * PE_IMP_XA_RECORD + 4 + 16, 0x77, 112);
+    memcpy(xa + 11 * PE_IMP_XA_RECORD, stereo, sizeof stereo);
+    memset(xa + 11 * PE_IMP_XA_RECORD + 4 + 16, 0x22, 112);
+    PeImpMovie *movie = pe_imp_movie_from_indexed_str(str, sizeof str, xa, sizeof xa);
+    assert(movie && movie->frames == 2 && movie->sectors == sectors);
+    assert(movie->frame_sector[0] == 0 && movie->frame_sector[1] == 10);
+    assert(movie->audio_records == 3 && movie->audio_sector[0] == 1 && movie->audio_sector[2] == 11);
+
+    const char *folder = "pe-rdt-test/movie-timeline";
+    assert(!pe_imp_mkdirs(folder));
+    assert(!pe_imp_movie_save(movie, folder, NULL, 0));
+    PeImpMovie *back;
+    assert(!pe_imp_movie_load(folder, &back, NULL, 0));
+    assert(back->frame_sector[1] == 10 && back->audio_sector[1] == 3);
+    uint32_t frames;
+    unsigned rate, channels;
+    int16_t *pcm = pe_imp_movie_pcm(back, 1, 1, &frames, &rate, &channels);
+    assert(pcm && frames == sectors * frames_per_sector && rate == 37800 && channels == 2);
+    assert(pcm[0] == 0 && pcm[frames_per_sector * 2] == 4096 && pcm[frames_per_sector * 2 + 1] == 4096);
+    assert(pcm[3 * frames_per_sector * 2] == 0 && pcm[10 * frames_per_sector * 2] == 0);
+    assert(pcm[11 * frames_per_sector * 2] == 8192);
+    free(pcm);
+    pe_imp_movie_free(back);
+
+    /* MOV1 stays readable and its compacted audio has no timeline. */
+    PeImpMovie legacy = *movie;
+    legacy.frame_sector = legacy.audio_sector = NULL;
+    assert(!pe_imp_movie_save(&legacy, folder, NULL, 0));
+    assert(!pe_imp_movie_load(folder, &back, NULL, 0));
+    assert(back->frames == 2 && back->audio_records == 3 && !back->frame_sector && !back->audio_sector);
+    assert(!pe_imp_movie_pcm(back, 1, 1, &frames, &rate, &channels));
+    pe_imp_movie_free(back);
+    pe_imp_movie_free(movie);
+}
+
 /* one movie: read from the disc, saved and loaded, a frame from its middle decoded
  * (PE_TEST_MOVIE_PPM=<folder> writes that frame as <name>.ppm) */
 static void movie(const char *label, const char *cue, const char *path) {
@@ -199,9 +247,9 @@ static void movie(const char *label, const char *cue, const char *path) {
     uint8_t *str, *xa = NULL;
     uint32_t size, xa_size = 0;
     assert(!pe_imp_disc_read(d, i, &str, &size, why, sizeof why));
-    pe_imp_disc_xa(d, i, &xa, &xa_size, why, sizeof why);
+    pe_imp_disc_xa_indexed(d, i, &xa, &xa_size, why, sizeof why);
     pe_imp_disc_close(d);
-    PeImpMovie *m = pe_imp_movie_from_str(str, size, xa, xa_size);
+    PeImpMovie *m = pe_imp_movie_from_indexed_str(str, size, xa, xa_size);
     free(str), free(xa);
     assert(m);
     pe_imp_mkdirs("pe-rdt-test/movie");
@@ -773,6 +821,7 @@ static void audit_room_enemies(const char *store) {
 }
 
 int main(void) {
+    test_movie_timeline();
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
     check_room_effects();

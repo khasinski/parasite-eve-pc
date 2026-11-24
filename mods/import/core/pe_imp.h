@@ -178,23 +178,27 @@ const uint8_t *pe_imp_imageset_frame(const PeImpImageSet *set, uint32_t i, uint3
 int pe_imp_imageset_save(const PeImpImageSet *set, const char *folder, char *why, size_t n);
 int pe_imp_imageset_load(const char *folder, PeImpImageSet **set, char *why, size_t n);
 
-/* Movie: a PS1 STR movie as the game keeps it, copied once. Frames are MDEC frames (pe_imp_mdec.h)
- * of width x height, in order; audio is the movie's CD-XA sectors as PE_IMP_XA_RECORD records
- * (pe_imp_disc_xa: file, channel, submode, coding, 2304 bytes), in disc order. movie.bin:
- *   "MOV1", u32 version 1, width, height, frames, audio records, then per frame u32 offset and
- *   u32 size (from the start of the frame data), the frame data, then the audio records. */
-#define PE_IMP_MOVIE_VERSION 1
+/* Movie: ordered PS1 STR frames and XA records. MOV2 preserves the source
+ * sector of each frame and audio record. MOV1 remains readable without timing. */
+#define PE_IMP_MOVIE_VERSION 2
 #define PE_IMP_MOVIE_MAX (160u << 20)
+#define PE_IMP_MOVIE_SECTOR_HZ 150u
 enum { PE_IMP_XA_BOTH = 2, PE_IMP_XA_INDEXED = 3 };
 typedef struct {
     uint32_t width, height, frames, audio_records;
     uint32_t *offset, *size;                  /* per frame, into frame_data */
     uint8_t *frame_data, *audio;
-    uint32_t frame_bytes;
+    uint32_t frame_bytes, sectors;
+    uint32_t *frame_sector, *audio_sector;   /* zero-based source sectors */
 } PeImpMovie;
-/* From an STR file's 2048-byte sectors (pe_imp_disc_read; interleaved audio sectors are skipped by
- * their header) and its XA records (may be NULL). NULL if no frame was found. */
+/* Read STR video and optional compacted XA (without audio timing). */
 PeImpMovie *pe_imp_movie_from_str(const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size);
+/* As above with one indexed XA record per source sector, with holes zeroed. */
+PeImpMovie *pe_imp_movie_from_indexed_str(const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size);
+/* Decode one XA file/channel onto the movie's sector timeline. Returns owned
+ * PCM, or NULL if no compatible timed track is present. */
+int16_t *pe_imp_movie_pcm(const PeImpMovie *m, unsigned file, unsigned channel,
+                          uint32_t *frames, unsigned *rate, unsigned *channels);
 void pe_imp_movie_free(PeImpMovie *m);
 int pe_imp_movie_save(const PeImpMovie *m, const char *folder, char *why, size_t n);
 int pe_imp_movie_load(const char *folder, PeImpMovie **m, char *why, size_t n);
@@ -231,7 +235,7 @@ typedef struct {
     int path_key;                             /* single-file reader derives IDs from its ISO path */
     int xa;                                   /* 1: read gets the file's XA audio records (pe_imp_disc_xa);
                                                * PE_IMP_XA_BOTH: read_pair gets the file and, as the
-                                               * companion, its XA records (a movie; none from an .iso) */
+                                               * companion, sector-indexed XA records (none from an .iso) */
     PeImpFindCompanionFn find_companion;      /* alternative to a required .companion path */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */
