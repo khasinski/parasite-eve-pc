@@ -190,6 +190,30 @@ static void test_licker_variants(const PeReGame *game, unsigned player) {
     }
 }
 
+/* 1-07's entry script swaps cameras 0/6 and 1/7 in its switch zones once Common 0x03 is set (cut_replace),
+ * and every room entry rolls the scripts' random value (Sce_random). */
+static void test_cut_replace(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession scene = {.game = game, .stage = 0, .room = 7};
+    PeReFlags *flags = &scene.progress.flags;
+    if (player) return;                                       /* Leon's room file */
+    pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+    if (!scene.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = scene.stage;
+    flags->work[PE_RE_WORK_ROOM] = scene.room;
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    CHECK(!scene.run.cut_swapped);
+    const int16_t first = flags->work[PE_RE_WORK_RANDOM];
+    pe_re_flag_set(flags, 4, 0x03, 1);
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    CHECK(flags->work[PE_RE_WORK_RANDOM] != first);
+    CHECK(scene.run.cut_swapped && scene.run.cut_to[0] == 6 && scene.run.cut_to[6] == 0 &&
+          scene.run.cut_to[1] == 7 && scene.run.cut_to[7] == 1 && scene.run.cut_to[2] == 2);
+    CHECK(scene.run.cut_from[6] == 0 && scene.run.cut_from[7] == 1);
+    pe_re_session_end(&scene);
+}
+
 static void test_alligator(const PeReGame *game, unsigned player) {
     char id[PE_IMP_ID_MAX];
     PeReSession boss = {.game = game, .stage = 3, .room = 0x0a};
@@ -961,6 +985,7 @@ int main(int argc, char **argv) {
     test_licker(g, scenario);
     test_licker_variants(g, scenario);
     test_adult_g(g, scenario);
+    test_cut_replace(g, scenario);
     test_alligator(g, scenario);
     test_lift_boss(g, scenario);
     test_final_tyrant(g, scenario);
@@ -1158,6 +1183,7 @@ int main(int argc, char **argv) {
         CHECK(!memcmp(back.progress.unlocked, r.progress.unlocked, sizeof r.progress.unlocked));
         CHECK(back.progress.boxed == 1 && back.progress.box[0].item == 0x40 && back.progress.box[0].count == 2 &&
               back.progress.flags.work[20] == 1234);
+        back.progress.flags.work[PE_RE_WORK_RANDOM] = r.progress.flags.work[PE_RE_WORK_RANDOM];   /* re-rolled on entry */
         pe_re_save_encode(&back, 1, again);
         CHECK(!memcmp(bytes, again, sizeof bytes));               /* stable */
         PeImpDoor cabin;                                          /* the cabin door stays open */

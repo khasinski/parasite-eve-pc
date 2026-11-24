@@ -331,7 +331,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   For the RE2 story runs we also consulted `SCE2.C` Plc_motion / Plc_dest / Plc_stop (scripted moves,
   and an arrival flag of 0 that still counts, with `SPL_SCE.C`), `SCE1.C` Cut_chg / Cut_old (the
   background-drawn status bit scenes wait on) and `SCE_AT.C` Sce_at / Sce_at_check with `GAME.C`
-  (zones checked every frame, for the partner and enemies too).
+  (zones checked every frame, for the partner and enemies too). For scenes, `SCE0.C` Sce_rnd_set (the
+  scripts' random value and its seed) and `SCE1.C` Sce_rnd / Cut_replace (camera swaps in the switch zones).
   `EM_SUB.C` and `EM10.C` were consulted for selecting feeding zombies' room animation.
   `EM10.C` and `EM20.C` were consulted for zombie walk and dog run animation selection in the field.
   `EM21.C`, `EM29.C`, `EM31.C`, `EM33.C`, `EM34.C`, `EM36.C`, and `EM3A.C` were consulted

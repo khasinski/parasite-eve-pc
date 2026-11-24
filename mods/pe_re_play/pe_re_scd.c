@@ -25,7 +25,7 @@ enum {
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
-    OP_SPLC_RET = 0x70, OP_SPLC_SCE = 0x71,
+    OP_SPLC_RET = 0x70, OP_SPLC_SCE = 0x71, OP_SCE_RND = 0x28, OP_CUT_REPLACE = 0x4B,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -95,6 +95,15 @@ static int patch_slot(const PeReScdRun *r, uint32_t at) {
     int k = (int)((at * 2654435761u) >> 23) & (PE_RE_PATCHES - 1);
     while (r->patch[k].at && r->patch[k].at != at) k = (k + 1) & (PE_RE_PATCHES - 1);
     return k;
+}
+
+/* Sce_rnd_set (SCE0.C): the scripts' random value, a 32-bit sequence seeded once (0x138201C3, as
+ * Sce_test_init does); its low half lands in Sce_random each frame, at room entry and on sce_rnd. */
+static uint32_t s_random_base = 0x138201C3u;
+static void roll_random(PeReFlags *flags) {
+    const uint32_t d1 = s_random_base << 1;
+    s_random_base = ((s_random_base + (d1 >> 16)) & 0xFFFFu) + (d1 & 0xFFFF0000u);
+    flags->work[PE_RE_WORK_RANDOM] = (int16_t)s_random_base;
 }
 
 static int16_t *member(Vm *vm, const PeReScdTask *t, unsigned m) {
@@ -374,6 +383,21 @@ static int step(Vm *vm, PeReScdTask *t) {
         return CONTINUE;
     }
     case OP_CUT_AUTO: vm->run->camera_lock = ins[1] != 1; t->pc += n; return CONTINUE;
+    case OP_SCE_RND: roll_random(vm->flags); t->pc += n; return CONTINUE;
+    case OP_CUT_REPLACE: {                                 /* Cut_replace (SCE1.C): swap two cameras in the switch zones */
+        PeReScdRun *r = vm->run;
+        if (!r->cut_swapped)
+            for (int k = 0; k < 256; k++) r->cut_to[k] = r->cut_from[k] = (uint8_t)k;
+        r->cut_swapped = 1;
+        const uint8_t a = ins[1], b = ins[2];
+        for (int k = 0; k < 256; k++) {                    /* the zones' numbers: a and b trade places */
+            if (r->cut_to[k] == a) r->cut_to[k] = b;
+            else if (r->cut_to[k] == b) r->cut_to[k] = a;
+        }
+        for (int k = 0; k < 256; k++) r->cut_from[r->cut_to[k]] = (uint8_t)k;
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_WORK_COPY: {                                   /* a work value into the script, ins[2] bytes past this */
         PeReScdRun *r = vm->run;
         const uint32_t at = t->pc + 4 + ins[2];
@@ -695,6 +719,7 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     pe_re_flag_set(flags, PE_RE_FG_STOP, PE_RE_STOP_PAD_LOCK, 0);
     pe_re_flag_set(flags, PE_RE_FG_STOP, PE_RE_STOP_EVENTS, 0);
     pe_re_flag_set(flags, PE_RE_FG_STATUS, PE_RE_STAT_CINESCO, 0);
+    roll_random(flags);
     work_clr(flags);
     task_start(&out->task[0], proc_start(&vm, 0, 0));      /* Event_exec(0, 0) on the init script */
     out->task[0].proc = -1;
@@ -1070,6 +1095,7 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
         run->effects[kept++] = e;
     }
     run->effect_count = kept;
+    roll_random(flags);                                    /* Sce_scheduler rolls it first */
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);

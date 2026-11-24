@@ -323,7 +323,13 @@ every_frame:;                                              /* every frame: the z
     if (message_zone < 0) s->auto_message = -1;
 camera:
     if (s->run.ran && s->run.camera_lock) return PE_RE_STAY;   /* the scripts hold the camera */
-    const int camera = pe_re_camera_at(s->logic, s->camera, s->floor, x, z);
+    /* cut_replace swapped cameras in the switch zones: from the zones' own number for this camera, and
+     * the camera their target now names (SCE1.C Cut_replace rewrites each zone's Fcut and Tcut) */
+    const PeReScdRun *r = &s->run;
+    const int from = r->cut_swapped && s->camera >= 0 && s->camera < 256 ? r->cut_from[s->camera] : s->camera;
+    int camera = pe_re_camera_at(s->logic, from, s->floor, x, z);
+    if (camera == from) camera = s->camera;
+    else if (r->cut_swapped && camera >= 0 && camera < 256) camera = r->cut_to[camera];
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;
     return PE_RE_CAMERA;

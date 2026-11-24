@@ -95,6 +95,7 @@ PeReZombieMode pe_re_zombie_mode(unsigned type, int routine);
 #define PE_RE_WORK_STAGE 0x18                  /* Stage_no, Room_no, Cut_no (MEM_CARD.H's SaveData order) */
 #define PE_RE_WORK_ROOM 0x19
 #define PE_RE_WORK_CUT 0x1A
+#define PE_RE_WORK_RANDOM 0x1D                 /* Sce_random: rolled each frame, at room entry and by sce_rnd */
 #define PE_RE_WORK_ROOM_OLD 0x1B               /* the room before: room + (stage + 1) * 256 */
 
 typedef struct {
@@ -180,6 +181,8 @@ typedef struct {
     int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
     int bg_drawn, bg_camera;                   /* STAT_BG_JUST_DRAWN's ticks left, the camera it last saw */
+    uint8_t cut_swapped;                       /* cut_replace has run: cut_to / cut_from below hold */
+    uint8_t cut_to[256], cut_from[256];        /* cut_replace's camera swaps in the switch zones, both ways */
     uint16_t arrived[PE_RE_WORKS];             /* plc_dest's arrival flag (Room_flg bit) plus one per walker, set
                                                 * every frame from the next one until plc_dest / plc_ret again; 0 none.
                                                 * Bit 0 counts: SCE2.C Plc_dest keeps Set_no as given (2-02, 4-09). */
