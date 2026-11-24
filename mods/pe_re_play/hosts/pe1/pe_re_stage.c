@@ -941,7 +941,7 @@ static void prepare_field_texture(void) {
 }
 
 static void load_field_moves(unsigned kind, const PeImpModel *model) {
-    if (!pe_re_scene_kind(kind) && (kind < 0x10 || (kind > 0x20 && kind != 0x22))) return;
+    if (!pe_re_scene_kind(kind) && !pe_re2_ground_pursuit_kind(kind)) return;
     for (uint32_t b = 0; b < model->bones; b++)
         if (model->parent[b] >= (int)b || (b != 0 && model->parent[b] < 0)) return;
     for (uint32_t p = 0; p < model->parts && p < model->bones; p++)
@@ -1116,18 +1116,22 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             }
         } else if (s_placement_idle && moves->moves) {
             const unsigned type = p->behaviour & 0x3f;
-            const PeReZombieMode mode = pe_re_zombie_mode(type, 0);
+            const int zombie = p->kind >= 0x10 && p->kind < 0x20;
+            const PeReZombieMode mode = zombie ? pe_re_zombie_mode(type, 0) : PE_RE_ZOMBIE_UNSUPPORTED;
             const int moving = s_last_motion[i] && (uint32_t)vblanks - s_last_motion[i] <= 3;
             /* EM10.C uses move 0 as one of the zombie walk cycles. EM20.C uses move 2 for the dog's run. */
             unsigned index = 0;
             if (p->kind == 0x20) index = moving ? 2 : 0;
-            else if (p->kind != 0x22 && mode == PE_RE_ZOMBIE_CRAWL) index = moving ? 4 : 0x17;
-            else if (type == 2 || type == 5) index = 0x16;
-            else if (type == 4 || type == 7) index = 0x17;
-            else if (type == 8) index = 0x12;
+            else if (p->kind == 0x24 || pe_re2_ivy(p->kind)) index = moving ? 1 : 0;
+            else if (zombie) {
+                if (mode == PE_RE_ZOMBIE_CRAWL) index = moving ? 4 : 0x17;
+                else if (type == 2 || type == 5) index = 0x16;
+                else if (type == 4 || type == 7) index = 0x17;
+                else if (type == 8) index = 0x12;
+            }
             if (index < moves->moves && moves->move[index].frames) {
                 const PeImpMove *move = &moves->move[index];
-                const int animate = moving || (p->kind >= 0x10 && p->kind < 0x20 &&
+                const int animate = moving || (zombie &&
                                                (mode == PE_RE_ZOMBIE_IDLE || mode == PE_RE_ZOMBIE_PURSUIT));
                 const unsigned frame = animate ? (vblanks * moves->fps / 60 + 7u * p->slot) % move->frames : 0;
                 field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data, NULL, pose);

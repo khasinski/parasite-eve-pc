@@ -416,7 +416,7 @@ if(BUILD_TESTING)
         pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
         pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_logic.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_pld.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
-    target_include_directories(test-mod-rdt PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    target_include_directories(test-mod-rdt PRIVATE host import/core pe_src_re1 pe_src_re2 pe_src_re3)
     # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
     pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_sources})
     target_include_directories(test-mod-fit PRIVATE import/core)

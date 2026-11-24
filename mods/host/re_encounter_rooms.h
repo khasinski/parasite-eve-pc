@@ -5,6 +5,15 @@
 
 enum { PE_RE_MESH_OFF, PE_RE_MESH_ALL, PE_RE_MESH_ENCOUNTERS };
 
+/* Room-script behaviours decide which placements can use these ground routines. */
+static inline int pe_re2_ivy(unsigned kind) {
+    return kind == 0x2e || kind == 0x39;
+}
+
+static inline int pe_re2_ground_pursuit_kind(unsigned kind) {
+    return (kind >= 0x10 && kind <= 0x20) || kind == 0x22 || kind == 0x24 || pe_re2_ivy(kind);
+}
+
 static inline int pe_re2_opening_street(unsigned stage, unsigned room) {
     return !stage && !room;
 }

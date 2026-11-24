@@ -503,11 +503,13 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         int16_t *work = s->run.works[2 + e->slot];
         const int dog = e->kind == 0x20;
         const int licker = e->kind == 0x22;
+        const int enhanced_licker = e->kind == 0x24;
+        const int ivy = pe_re2_ivy(e->kind);
         const int zombie = e->kind >= 0x10 && e->kind < 0x20;
         const unsigned type = e->behaviour & 0x3f;
         const PeReZombieMode mode = pe_re_zombie_mode(type, work[PE_RE_MEMBER_ROUTINE0]);
         *state = PE_RE_ENEMY_FAMILY;
-        if (!zombie && !dog && !licker) continue;
+        if (!pe_re2_ground_pursuit_kind(e->kind)) continue;
         if (zombie) {
             if (mode == PE_RE_ZOMBIE_UNSUPPORTED ||
                 (mode == PE_RE_ZOMBIE_SCRIPT && (work[PE_RE_MEMBER_ROUTINE1] < 0 || work[PE_RE_MEMBER_ROUTINE1] > 3))) {
@@ -522,10 +524,12 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         }
         *state = PE_RE_ENEMY_SCRIPTED;
         if (s->run.camera_lock || (scripted & (1u << e->slot)) ||
-            (zombie && (work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active))) continue;
+            work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active) continue;
         /* The field does not require a persistent battle defeat flag. */
         const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 :
                            licker ? type == 0 || type == 0x10 || type == 0x11 || type == 0x13 :
+                           enhanced_licker ? (type & 0xf) == 0 :
+                           ivy ? (type & 0xf) <= 3 :
                            mode == PE_RE_ZOMBIE_IDLE || mode == PE_RE_ZOMBIE_PURSUIT || mode == PE_RE_ZOMBIE_CRAWL;
         const unsigned held = zombie ? (street ? 0x8000 : 0xc000) : 0xe000;
         *state = PE_RE_ENEMY_DORMANT;
@@ -547,7 +551,11 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
             if (!*alerted && mode == PE_RE_ZOMBIE_IDLE && !(distance < 5000 && abs(turn) < 1024) &&
                 !(*idle >= 300 && distance < 7500)) continue;
         } else {
-            const double awareness = dog ? 5200 : 3900;
+            const double awareness = dog ? 5200 : enhanced_licker ? 3000 : ivy ? 4200 : 3900;
+            /* Standard ground variants acquire a target through presentation
+             * cues. The field has no RE2 room sound flags, so use a close
+             * forward arc for enhanced Lickers and Ivy. */
+            if ((enhanced_licker || ivy) && !*alerted && distance > 1600 && abs(turn) >= 1024) continue;
             if (distance > awareness + (*alerted ? 1200 : 0)) {
                 *alerted = 0;
                 continue;
@@ -556,16 +564,18 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         *alerted = 1;
         *state = PE_RE_ENEMY_CLOSE;
         if (distance <= 1200) continue;
-        const double speed = dog ? 62 : licker ? 44 : mode == PE_RE_ZOMBIE_CRAWL ? 12 : 22;
-        const double radius = dog ? 210 : licker ? 310 : 240;
+        const double speed = dog ? 62 : licker || enhanced_licker ? 44 : ivy ? 26 :
+                             mode == PE_RE_ZOMBIE_CRAWL ? 12 : 22;
+        const double radius = dog ? 210 : ivy ? 340 : licker || enhanced_licker ? 310 : 240;
         *state = PE_RE_ENEMY_BLOCKED;
         double next_x = e->x, next_z = e->z, ground = -(double)floor * PE_RE2_FLOOR_HEIGHT;
         /* Native walking turns toward a target over successive updates and
          * applies movement along the actor's forward axis. */
-        const int turn_step = distance < 3000 ? 24 : 8;
-        const int dir = zombie ? (e->dir + (turn < -turn_step ? -turn_step : turn > turn_step ? turn_step : turn)) & 4095 :
+        const int gradual = zombie || enhanced_licker || ivy;
+        const int turn_step = ivy ? 6 : distance < 3000 ? 24 : 8;
+        const int dir = gradual ? (e->dir + (turn < -turn_step ? -turn_step : turn > turn_step ? turn_step : turn)) & 4095 :
                                  target_dir;
-        const int turned = zombie && dir != e->dir;
+        const int turned = gradual && dir != e->dir;
         if (turned) {
             work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)dir;
             moved++;
@@ -584,7 +594,7 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         if (pe_imp_re2_ground(collision, ix, iz, &ground) && pe_re_floor_of((int)lround(ground)) != floor) continue;
         /* Rounding the position for the script's word fields must still leave clearance. */
         if (pe_imp_re2_blocked_on(collision, (unsigned)floor, ix, iz, radius)) continue;
-        const int move_dir = zombie ? dir :
+        const int move_dir = gradual ? dir :
             (int)lround(atan2(e->z - iz, ix - e->x) * (2048.0 / acos(-1.0))) & 4095;
         work[PE_RE_MEMBER_POS_X] = e->x = (int16_t)ix;
         work[PE_RE_MEMBER_POS_Y] = e->y = (int16_t)lround(ground);
@@ -679,7 +689,8 @@ static int room_move(const PeReSession *s, unsigned bit, char *asset, size_t siz
 }
 
 int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size) {
-    return slot < 16 ? room_move(s, slot + 1, asset, size) : -1;
+    /* Rbj_set addresses the actor table: player, partner, then enemy slot 0. */
+    return slot < 16 ? room_move(s, slot + 2, asset, size) : -1;
 }
 
 int pe_re_session_player_room_move(const PeReSession *s, char *asset, size_t size) {

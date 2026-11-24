@@ -6,6 +6,7 @@
 #include "pe_re_scd.h"
 #include "pe_imp_rdt.h"
 #include "pe_imp_room.h"
+#include "re_encounter_rooms.h"
 
 enum {
     OP_NOP = 0x00, OP_EVT_END = 0x01, OP_EVT_NEXT = 0x02, OP_EVT_CHAIN = 0x03, OP_EVT_EXEC = 0x04, OP_EVT_KILL = 0x05,
@@ -833,6 +834,10 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
             if (w[PE_RE_MEMBER_ROUTINE0] == 8 || !zombie_rise(run, n)) zombie_scene(run, n);
             continue;
         }
+        /* EM2E waits for Sce_free0 before releasing this scripted Ivy. */
+        if (w[0] && !run->em_dead[n] && pe_re2_ivy((unsigned)w[PE_RE_MEMBER_ID]) &&
+            w[PE_RE_MEMBER_TYPE] == 0x6002 && *f)
+            w[PE_RE_MEMBER_TYPE] &= 0x0fff;
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x22) {
             licker_standin(run, n, room);
             continue;

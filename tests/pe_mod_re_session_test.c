@@ -434,12 +434,90 @@ static void test_climb_camera_floors(const char *store) {
     }
 }
 
+static void test_enemy_room_bindings(const char *store) {
+    static PeReSession s;
+    s.game = pe_re_game_named("re2");
+    char asset[PE_IMP_ID_MAX];
+    /* Kendo's room has player and enemy-slot-zero bindings in the same record. */
+    s.room = 1;
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/101-0", &s.logic, NULL, 0));
+    if (s.logic) {
+        CHECK(!pe_re_session_player_room_move(&s, asset, sizeof asset));
+        CHECK(!pe_re_session_enemy_room_move(&s, 0, asset, sizeof asset));
+        CHECK(!strcmp(asset, "re2:roomanim/101-0-p0"));
+        CHECK(pe_re_session_enemy_room_move(&s, 1, asset, sizeof asset) == -1);
+        free(s.logic);
+        s.logic = NULL;
+    }
+    /* The final Tyrant room binds player and partner. No enemy owns this bank. */
+    s.stage = 6, s.room = 2;
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/702-0", &s.logic, NULL, 0));
+    if (s.logic) {
+        CHECK(pe_re_session_enemy_room_move(&s, 0, asset, sizeof asset) == -1);
+        free(s.logic);
+        s.logic = NULL;
+    }
+}
+
+static void test_ground_enemy_assets(const char *store) {
+    static const unsigned kinds[] = {0x24, 0x2e, 0x39};
+    for (unsigned i = 0; i < sizeof kinds / sizeof *kinds; i++) {
+        char id[PE_IMP_ID_MAX], why[128];
+        PeImpModel model = {0};
+        PeImpAnimation animation = {0};
+        snprintf(id, sizeof id, "re2:enemy/em%02x", kinds[i]);
+        CHECK(!pe_imp_catalog_model(store, id, &model, why, sizeof why));
+        snprintf(id, sizeof id, "re2:enemy/em%02x/moves", kinds[i]);
+        CHECK(!pe_imp_catalog_animation(store, id, &animation, why, sizeof why));
+        CHECK(model.bones == animation.bones && animation.moves > 1 && animation.move[1].frames);
+        for (unsigned b = 0; b < model.bones; b++)
+            CHECK(model.parent[b] < (int)b && (!b || model.parent[b] >= 0));
+        for (unsigned b = 0; b < model.parts && b < model.bones; b++)
+            CHECK(!model.part[b].tri_skin && !model.part[b].quad_skin);
+        pe_imp_model_free(&model);
+        pe_imp_animation_free(&animation);
+    }
+}
+
+static void test_ground_enemy_variants(void) {
+    static PeReSession s;
+    s.game = pe_re_game_named("re2");
+    s.room = 1;
+    const PeRe2RoomCollision room = {0};
+    int16_t *work = s.run.works[2];
+    work[0] = 1;
+    for (unsigned i = 0; i < 3; i++) {
+        const unsigned kind = i == 0 ? 0x24 : i == 1 ? 0x2e : 0x39;
+        PeReEnemyPlacement enemy = {.kind = kind};
+        work[PE_RE_MEMBER_ID] = kind;
+        s.run.em_alerted[0] = 0;
+        CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, -2400, 0, 0));
+        CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 1));
+        enemy.behaviour = 0x4000;
+        CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0));
+        enemy.behaviour = 0;
+        work[PE_RE_MEMBER_ROUTINE0] = 8;
+        CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0));
+        work[PE_RE_MEMBER_ROUTINE0] = 1;
+        for (int tick = 0; tick < 6; tick++)
+            CHECK(pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0) == 1);
+        CHECK(enemy.x > 0 && enemy.z == 0 && enemy.dir == 0);
+        if (kind == 0x24) {
+            enemy.behaviour = 2;   /* wall variant keeps its own routine */
+            CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0));
+        }
+    }
+}
+
 int main(void) {
+    test_ground_enemy_variants();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);
         test_kendo_zombies(effect_store);
         test_climb_camera_floors(effect_store);
+        test_enemy_room_bindings(effect_store);
+        test_ground_enemy_assets(effect_store);
     }
     char why[200] = "";
 

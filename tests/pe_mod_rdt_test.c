@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "re_encounter_rooms.h"
 #include "pe_imp.h"
 #include "pe_imp_internal.h"
 #include "pe_imp_logic.h"
@@ -754,7 +755,7 @@ static void audit_room_enemies(const char *store) {
     }
     free(assets);
     for (unsigned kind = 0; kind < 256; kind++) {
-        const int pursuit_family = (kind >= 0x10 && kind <= 0x20) || kind == 0x22;
+        const int pursuit_family = pe_re2_ground_pursuit_kind(kind);
         for (unsigned type = 0; type < 64; type++) {
             const unsigned count = audit.placements[kind][type];
             if (!count) continue;
