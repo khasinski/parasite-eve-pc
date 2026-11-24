@@ -95,6 +95,7 @@ static struct {
 } s_backdrop;
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
+static uint8_t s_mask_groups[16];
 static int s_placement_markers;
 static int s_placement_meshes;
 static int s_placement_idle;
@@ -125,13 +126,19 @@ static unsigned s_texture_palette_rows;
 static uint16_t s_texture_words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
 static uint16_t s_texture_clut[FIELD_CLUT_ROWS][256];
 static uint16_t s_vram_check[64 * 256];
+enum { FIELD_MESH_KINDS = 256 };
+
 static struct {
     PeImpModel model;
     int tried;
     int64_t foot_y;
     unsigned first_page, first_palette;
     PeImpAnimation moves;
-} s_field_mesh[0x40];
+} s_field_mesh[FIELD_MESH_KINDS];
+static struct {
+    char asset[PE_IMP_ID_MAX];
+    PeImpAnimation moves;
+} s_actor_bank[PE_RE_ENEMIES_MAX];
 
 static struct {
     GteMatrix view;
@@ -155,6 +162,9 @@ static struct {
     double x, z;
     int floor;
 } s_climb;
+
+static int s_scene_locked, s_scene_pose;
+static unsigned s_scene_frame;
 
 static struct {
     unsigned buttons;
@@ -260,7 +270,7 @@ static int on_move(void *ctx, void *user) {
     const FieldActor *aya = ctx;
     if (!s_show || !s_walk.active || aya != g_PlayerEntity) return 0;
     const int free_field = pe_free_field();
-    if (!free_field || pe_re_box_busy() || s_hold || s_climb.row.b) {
+    if (!free_field || pe_re_box_busy() || s_hold || s_scene_locked || s_climb.row.b) {
         walk_input(0, 0, 0);
         return free_field;
     }
@@ -473,15 +483,19 @@ int pe_re_stage_climb(int pressed, const char *asset, unsigned player) {
     return 0;
 }
 
-static int on_climb_render(void *ctx, void *user) {
+static int on_player_scene_render(void *ctx, void *user) {
     (void)user;
     const PeHookActorDraw *draw = ctx;
     FieldActor *aya = draw->actor;
-    if (!s_climb.row.b || !aya || aya != g_PlayerEntity) return 0;
+    if ((!s_climb.row.b && !s_scene_locked) || !aya || aya != g_PlayerEntity) return 0;
+    RenderAnimationDataHeader *row = s_climb.row.b ? (RenderAnimationDataHeader *)s_climb.row.b
+                                                   : g_GameState.bank_rows[0][s_scene_pose];
     RenderObjectEntity *object = &aya->render_object;
+    if (!row || !row->frame_count || !object->header || row->last_bone_index >= object->header->part_count) return 0;
+    const unsigned frame = s_climb.row.b ? s_climb.frame / 2 : s_scene_frame % row->frame_count;
     uint32_t *view = (uint32_t *)draw->view;
     Render_InitRoomPrimState(object);
-    Anim_BuildRotationMatrices(object, (RenderAnimationDataHeader *)s_climb.row.b, s_climb.frame / 2);
+    Anim_BuildRotationMatrices(object, row, frame);
     Render_TransformVertices(object);
     Render_TransformSkinnedVertices(object, view);
     Render_TransformMorphVertices(object, view);
@@ -652,7 +666,7 @@ static int build_masks(const PeImpImageSet *set, const PeImpRoomView *view, Room
     if (!s_camera.distance || !view->mask_count) return 1;
     uint16_t *depths = malloc(PIC_W * PIC_H * sizeof *depths);
     if (!depths) return -1;
-    int rc = pe_imp_room_foreground_depth(set, (uint32_t)s_view, view, depths);
+    int rc = pe_imp_room_foreground_depth_groups(set, (uint32_t)s_view, view, s_mask_groups, depths);
     size_t capacity = 0;
     if (rc) goto done;
     for (int y = PIC_TOP; y < PIC_TOP + FIELD_H; y++) {
@@ -897,7 +911,15 @@ static int empty_texture_area(RECT *rect) {
     return 1;
 }
 
+static const PeReSceneActor *scene_actor_for(const PeReEnemyPlacement *p) {
+    for (int i = 0; i < s_scene_count; i++)
+        if (s_scene_actors[i].slot == p->slot && s_scene_actors[i].kind == p->kind) return &s_scene_actors[i];
+    return NULL;
+}
+
 static int show_placement_mesh(const PeReEnemyPlacement *p) {
+    /* Kendo is a room-script actor above the enemy model range. */
+    if (p->kind == PE_RE_KENDO || scene_actor_for(p)) return 1;
     return p->kind < 0x40 && (pe_re_scene_kind(p->kind) || s_placement_meshes == PE_RE_MESH_ALL ||
            (s_placement_meshes == PE_RE_MESH_ENCOUNTERS &&
             ((p->kind >= 0x10 && p->kind < 0x20) || pe_re2_proximity_enemy(p, 0))));
@@ -940,12 +962,16 @@ static void prepare_field_texture(void) {
     s_texture_kind = kind;
 }
 
-static void load_field_moves(unsigned kind, const PeImpModel *model) {
-    if (!pe_re_scene_kind(kind) && !pe_re2_ground_pursuit_kind(kind)) return;
+static int field_rig_supported(const PeImpModel *model) {
     for (uint32_t b = 0; b < model->bones; b++)
-        if (model->parent[b] >= (int)b || (b != 0 && model->parent[b] < 0)) return;
+        if (model->parent[b] >= (int)b || (b && model->parent[b] < 0)) return 0;
     for (uint32_t p = 0; p < model->parts && p < model->bones; p++)
-        if (model->part[p].tri_skin || model->part[p].quad_skin) return;
+        if (model->part[p].tri_skin || model->part[p].quad_skin) return 0;
+    return model->bones != 0;
+}
+
+static void load_field_moves(unsigned kind, const PeImpModel *model) {
+    if (!field_rig_supported(model)) return;
     char id[PE_IMP_ID_MAX], why[160];
     PeImpAnimation animation = {0};
     snprintf(id, sizeof id, "re2:enemy/em%02x/moves", kind);
@@ -958,12 +984,12 @@ static void load_field_moves(unsigned kind, const PeImpModel *model) {
 }
 
 static void load_field_meshes(void) {
-    int wanted[0x40] = {0};
+    int wanted[FIELD_MESH_KINDS] = {0};
     for (int i = 0; i < s_placement_count; i++) {
         const unsigned kind = s_placements[i].kind;
         if (show_placement_mesh(&s_placements[i])) wanted[kind] = 1;
     }
-    for (unsigned kind = 0; kind < 0x40; kind++) {
+    for (unsigned kind = 0; kind < FIELD_MESH_KINDS; kind++) {
         PeImpModel *model = &s_field_mesh[kind].model;
         if (!wanted[kind]) {
             if (s_field_mesh[kind].tried) free_field_mesh(kind);
@@ -1000,12 +1026,35 @@ static void load_field_meshes(void) {
     }
 }
 
+static void clear_actor_banks(void) {
+    for (unsigned i = 0; i < PE_RE_ENEMIES_MAX; i++) {
+        s_actor_bank[i].asset[0] = 0;
+        pe_imp_animation_free(&s_actor_bank[i].moves);
+    }
+}
+
+static const PeImpAnimation *field_actor_moves(const PeReSceneActor *scene, const PeImpModel *model,
+                                               const PeImpAnimation *stock) {
+    if (!scene->direct || !scene->bank[0] || scene->slot >= PE_RE_ENEMIES_MAX ||
+        (!scene->room_clip && scene->move < stock->moves) || !field_rig_supported(model)) return stock;
+    const unsigned slot = scene->slot;
+    if (strcmp(s_actor_bank[slot].asset, scene->bank)) {
+        char why[160];
+        pe_imp_animation_free(&s_actor_bank[slot].moves);
+        snprintf(s_actor_bank[slot].asset, sizeof s_actor_bank[slot].asset, "%s", scene->bank);
+        pe_imp_catalog_animation(s_store, scene->bank, &s_actor_bank[slot].moves, why, sizeof why);
+    }
+    const PeImpAnimation *room = &s_actor_bank[slot].moves;
+    return room->bones == model->bones && scene->move < room->moves ? room : stock;
+}
+
 static int on_import_published(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     /* Placements are independent of imported models. Replace the renderer's cache only. */
+    clear_actor_banks();
     clear_field_texture();
-    for (unsigned kind = 0; kind < 0x40; kind++)
+    for (unsigned kind = 0; kind < FIELD_MESH_KINDS; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);
     load_field_meshes();
     return 0;
@@ -1083,15 +1132,8 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
     for (int i = 0; i < s_placement_count; i++) {
         const PeReEnemyPlacement *p = &s_placements[i];
         if (!show_placement_mesh(p)) continue;
-        const PeReSceneActor *scene = NULL;
-        {
-            for (int j = 0; j < s_scene_count; j++)
-                if (s_scene_actors[j].slot == p->slot && s_scene_actors[j].kind == p->kind) {
-                    scene = &s_scene_actors[j];
-                    break;
-                }
-            if (!scene && pe_re_scene_kind(p->kind)) continue;
-        }
+        const PeReSceneActor *scene = scene_actor_for(p);
+        if (!scene && pe_re_scene_kind(p->kind)) continue;
         const PeImpModel *model = &s_field_mesh[p->kind].model;
         const double world_x = scene ? scene->x : p->x;
         const double world_y = scene && !scene->field_pose ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
@@ -1102,19 +1144,22 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
         const double cs = cos(angle), sn = sin(angle);
         FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
         const PeImpAnimation *moves = &s_field_mesh[p->kind].moves;
+        if (scene) moves = field_actor_moves(scene, model, moves);
         int animated = 0;
-        if (scene) {
+        if (scene && !scene->destination_pose) {
             if (scene->move < moves->moves) {
                 const PeImpMove *move = &moves->move[scene->move];
                 if (move->frames) {
-                    const unsigned frame = scene->field_pose ? scene->frame % move->frames :
-                        scene->frame < move->frames ? scene->frame : move->frames - 1;
+                    const unsigned step = scene->direct ? scene->start_frame + scene->frame * moves->fps / 60u : scene->frame;
+                    unsigned frame = scene->field_pose && !scene->direct ? step % move->frames :
+                        step < move->frames ? step : move->frames - 1;
+                    if (scene->reverse) frame = move->frames - 1 - frame;
                     field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data,
                                scene->field_pose ? NULL : scene, pose);
                     animated = 1;
                 }
             }
-        } else if (s_placement_idle && moves->moves) {
+        } else if ((s_placement_idle || scene) && moves->moves) {
             const unsigned type = p->behaviour & 0x3f;
             const int zombie = p->kind >= 0x10 && p->kind < 0x20;
             const PeReZombieMode mode = zombie ? pe_re_zombie_mode(type, 0) : PE_RE_ZOMBIE_UNSUPPORTED;
@@ -1491,6 +1536,8 @@ static int on_scene(void *ctx, void *user) {
 }
 
 void pe_re_stage_hide(void) {
+    clear_actor_banks();
+    pe_re_stage_scene_controls(0, 0);
     s_shade = 128, s_curtain = s_hold = 0;
     clear_climb();
     clear_effects(1);
@@ -1537,8 +1584,16 @@ void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count)
     if (changed) load_field_meshes();
 }
 void pe_re_stage_set_scene_actors(const PeReSceneActor *actors, int count) {
-    s_scene_count = count;
+    if (count > PE_RE_ENEMIES_MAX) count = PE_RE_ENEMIES_MAX;
+    int changed = count != s_scene_count;
+    for (int i = 0; i < count && !changed; i++)
+        changed = s_scene_actors[i].slot != actors[i].slot || s_scene_actors[i].kind != actors[i].kind;
     if (count) memcpy(s_scene_actors, actors, (size_t)count * sizeof *actors);
+    s_scene_count = count;
+    if (changed) {
+        clear_field_texture();
+        load_field_meshes();
+    }
 }
 void pe_re_stage_player(double *x, double *z, int *facing) { *x = s_walk.x, *z = s_walk.z, *facing = s_walk.yaw; }
 int pe_re_stage_floor(void) { return s_walk.floor; }
@@ -1583,27 +1638,52 @@ void pe_re_stage_place(double x, double z) {
     s_walk.ghost = blocked_here(x, z);
 }
 void pe_re_stage_set_masks(int on) { s_foreground = on; }
+
+void pe_re_stage_set_mask_groups(const uint8_t groups[16]) {
+    if (!s_show || !memcmp(groups, s_mask_groups, sizeof s_mask_groups)) return;
+    PeImpImageSet *set = NULL;
+    char why[160];
+    if (pe_imp_catalog_imageset(s_store, s_walk.room_id, &set, why, sizeof why)) return;
+    PeImpRoomView view;
+    if (!pe_imp_room_view(set, (uint32_t)s_view, &view)) {
+        memcpy(s_mask_groups, groups, sizeof s_mask_groups);
+        DrawSync(0);
+        free_masks();
+        build_masks(set, &view, &s_masks, &s_mask_count);
+    }
+    free(set);
+}
+void pe_re_stage_scene_controls(int locked, int move_mode) {
+    /* The PE field banks already have Aya's standing, walking and running poses. */
+    const int pose = !move_mode ? 21 : move_mode == 5 ? 23 : 22;
+    s_scene_frame = locked && s_scene_locked && pose == s_scene_pose ? s_scene_frame + 1 : 0;
+    s_scene_locked = locked;
+    s_scene_pose = pose;
+    if (locked) g_FieldPadPressed &= ~0x80u;  /* the native Aya inventory shortcut */
+}
 void pe_re_stage_fade(int shade, int curtain, int hold) { s_shade = shade, s_curtain = curtain, s_hold = hold; }
 void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent, pe_re_scale(); }
 double pe_re_stage_scale(void) { return s_scale; }
 
 void pe_re_stage_init(const char *mod_id, const char *store) {
     s_store = store, s_scale = 3;
+    memset(s_mask_groups, 0xff, sizeof s_mask_groups);
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, on_background, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_MOVE, on_move, NULL, PE_PRIORITY_LATE, mod_id);
-    pe_hook_add(PE_HOOK_ACTOR_RENDER, on_climb_render, NULL, PE_PRIORITY_LATE, mod_id);
+    pe_hook_add(PE_HOOK_ACTOR_RENDER, on_player_scene_render, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(pe_event_id(PE_EVENT_IMPORT_PUBLISHED), on_import_published, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
 
 void pe_re_stage_shutdown(void) {
+    clear_actor_banks();
     s_show = s_walk.active = 0;
     clear_climb();
     clear_effects(1);
     clear_field_texture();
-    for (unsigned kind = 0; kind < 0x40; kind++)
+    for (unsigned kind = 0; kind < FIELD_MESH_KINDS; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);
     free_masks();
     free(s_original_picture);

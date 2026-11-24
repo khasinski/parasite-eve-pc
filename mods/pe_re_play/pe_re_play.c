@@ -49,7 +49,7 @@ static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_V
                                              pe_re_save_upgrade, NULL, NULL};   /* min reader 1: the host loads it */
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
-static int s_script_held;                  /* frames left since a script last moved her */
+static int s_climbing;
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -111,6 +111,15 @@ static void resume_after_battle(void);
 static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
 static void advance_enemies(double x, double z, int floor);
+
+static int scene_locked(void) { return pe_re_session_controls_locked(&s_session); }
+
+static void sync_scene_controls(void) {
+    const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, scene_controls) + sizeof host->scene_controls && host->scene_controls)
+        host->scene_controls(scene_locked(), s_session.run.player_dest.moving && !s_session.run.actor_stopped[0] ?
+                             s_session.run.player_dest.mode : 0);
+}
 static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
 static int prepare_boss(uint8_t slot);
 static int api_canister_defeat(uint8_t slot) {
@@ -141,10 +150,15 @@ static void report_enemies(void) {
     const int fresh = !s_room_reported;
     const int n = pe_re_session_enemies(&s_session, placements, PE_RE_ENEMIES_MAX);
     const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, set_mask_groups) + sizeof host->set_mask_groups &&
+        host->set_mask_groups && (unsigned)s_session.camera < PE_RE_PRI_CAMERAS)
+        host->set_mask_groups(s_session.progress.flags.bits[PE_RE_FG_PRI + s_session.camera]);
     if (host->struct_size >= offsetof(ReHost, set_scene_actors) + sizeof host->set_scene_actors &&
         host->set_scene_actors) {
         PeReSceneActor actors[16];
         const int count = pe_re_scd_scene_actors(&s_session.run, actors, 16);
+        for (int i = 0; i < count; i++)
+            if (actors[i].direct) pe_re_session_enemy_room_move(&s_session, actors[i].slot, actors[i].bank, sizeof actors[i].bank);
         host->set_scene_actors(actors, count);
     }
     if (host->struct_size >= offsetof(ReHost, set_effects) + sizeof host->set_effects && host->set_effects) {
@@ -196,6 +210,13 @@ static void text_enemy_movement(char *out, unsigned size) {
             at > 0 && (unsigned)at < size)
             at += snprintf(out + at, size - (unsigned)at, " Script clip %u, frame %u.",
                            s_session.run.scene[slot].move, s_session.run.scene[slot].elapsed);
+        if (s_enemy_debug_slot >= 0 && slot < PE_RE_ENEMIES_MAX && at > 0 && (unsigned)at < size) {
+            const PeReActorDestination *dest = &s_session.run.enemy_dest[slot];
+            if (dest->moving) at += snprintf(out + at, size - (unsigned)at, " Script destination %d,%d.",
+                                             dest->x, dest->z);
+            if (s_session.run.actor_stopped[2 + slot] && at > 0 && (unsigned)at < size)
+                snprintf(out + at, size - (unsigned)at, " Script paused.");
+        }
     }
 }
 
@@ -225,7 +246,7 @@ static int encounter_position(double *x, double *z, int *floor) {
     const ReHost *host = re_host();
     if (!s_playing || s_battle_paused || !host->room_active() || !host->field_free() ||
         pe_re_door_busy() || host->dialogue_busy() || host->native_menu_active() ||
-        s_typing != TYPE_NONE || s_script_held || s_pick != PICK_NONE) return -1;
+        s_typing != TYPE_NONE || s_climbing || scene_locked() || s_pick != PICK_NONE) return -1;
     int facing;
     host->player_pose(x, z, &facing);
     *floor = host->player_floor();
@@ -399,6 +420,7 @@ static void show_room(int place) {
     }
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     apply_collision(1);
+    sync_scene_controls();
     snprintf(s_status, sizeof s_status, "Room %x-%02X, camera %d.", (unsigned)s_session.stage + 1,
              (unsigned)s_session.room, s_session.camera);
 }
@@ -426,6 +448,7 @@ static int keep_progress(void) {
 
 static void stop(void) {
     s_start_pending = 0;
+    s_climbing = 0;
     pe_re_door_cancel();
     re_host()->forget_dialogue();
     s_typing = TYPE_NONE;
@@ -586,15 +609,16 @@ static int on_frame(void *ctx, void *user) {
     s_session.talking = re_host()->dialogue_busy;
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
         const uint16_t pad = re_host()->dialogue_busy() ? 0 : re_host()->held_buttons();
-        const uint32_t key = pe_re_scd_keys(pad);
+        const uint32_t key = pe_re_scd_keys(pad) & (scene_locked() ? 0x3C00u : 0xFFFFu);
         s_session.key_trg = key & ~s_session.key;
         s_session.key = key;
     }
     picked();
-    switch (pe_re_session_tick(&s_session)) {     /* the room's scripts, a frame */
+    const PeReChange script_change = pe_re_session_tick(&s_session);
+    switch (script_change) {
     case PE_RE_SAID: say(s_session.said); break;
     case PE_RE_ZONE: zone_handed(); break;
-    case PE_RE_CAMERA: show_cut(); break;
+    case PE_RE_CAMERA: break;
     default: break;
     }
     {   /* SYS_ENDING (script bit 0x0A of System_flg): the scenario is over; its ending isn't played here */
@@ -610,28 +634,27 @@ static int on_frame(void *ctx, void *user) {
             re_host()->face_player(s_session.facing);
         }
         s_session.moved = 0;
-        s_script_held = 30;
-    } else if (s_script_held) {
-        s_script_held--;
     }
+    if (s_playing && script_change == PE_RE_CAMERA) show_cut();
+    if (!s_playing) return 0;
+    sync_scene_controls();
+    const int locked = scene_locked();
     apply_collision(0);
     {   /* Square: the pocket, to use something here */
         const int square = (re_host()->held_buttons() & RE_HOST_SQUARE) != 0;
-        if (square && !s_square_held && !re_host()->dialogue_busy()) open_pocket();
+        if (square && !s_square_held && !locked && !s_climbing && !re_host()->dialogue_busy()) open_pocket();
         s_square_held = square;
     }
     const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
-    const int pressed = cross && !s_cross_held && !re_host()->dialogue_busy();   /* a box's Cross is the box's */
+    const int pressed = cross && !s_cross_held && !locked && !re_host()->dialogue_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
     const ReHost *host = re_host();
     if (host->struct_size >= offsetof(ReHost, climb) + sizeof host->climb && host->climb) {
         char asset[PE_IMP_ID_MAX] = "";
-        if (pressed && !s_script_held && host->field_free()) pe_re_session_player_room_move(&s_session, asset, sizeof asset);
+        if (pressed && !s_climbing && host->field_free()) pe_re_session_player_room_move(&s_session, asset, sizeof asset);
         const int climb = host->climb(pressed, asset, s_session.player_id == 12 ? 12 : s_session.player);
-        if (climb == 1) {
-            s_script_held = 2;
-            return 0;
-        }
+        s_climbing = climb == 1;
+        if (s_climbing) return 0;
     }
     double x, z;
     int facing;
@@ -658,7 +681,7 @@ static int on_frame(void *ctx, void *user) {
     }
     if (s_playing && !pe_re_door_busy()) {
         report_enemies();
-        if (re_host()->field_free() && !re_host()->dialogue_busy()) advance_enemies(x, z, s_session.floor);
+        if (!locked && re_host()->field_free() && !re_host()->dialogue_busy()) advance_enemies(x, z, s_session.floor);
     }
     if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
@@ -679,7 +702,7 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
     }
-    if (s_script_held) {                                  /* a scene is moving her: it would undo the move */
+    if (s_climbing || scene_locked()) {                                  /* a scene is moving her: it would undo the move */
         snprintf(s_status, sizeof s_status, "A scene is playing: wait for it to end.");
         s_door_start = -1;
         return;
@@ -772,7 +795,7 @@ static void give_use_here(void) {           /* the item the last place to use on
 }
 static void to_ledge(void) {
     const ReHost *host = re_host();
-    if (!s_playing || s_battle_paused || s_script_held || host->struct_size < offsetof(ReHost, place_at_ledge) + sizeof host->place_at_ledge ||
+    if (!s_playing || s_battle_paused || s_climbing || scene_locked() || host->struct_size < offsetof(ReHost, place_at_ledge) + sizeof host->place_at_ledge ||
         !host->place_at_ledge) return;
     char asset[PE_IMP_ID_MAX];
     int camera;
@@ -837,6 +860,10 @@ static void text_pocket(char *out, unsigned size) {
         w += (size_t)k;
     }
 }
+static void text_scene(char *out, unsigned size) {
+    snprintf(out, size, "%s", !s_playing ? "-" : s_session.run.player_dest.moving ? "Scripted movement" :
+                              scene_locked() ? "Input locked" : "Player control");
+}
 static void text_status(char *out, unsigned size) {
     if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, floor %d, doors %d, scale %.1f.", s_status, s_session.x,
                             s_session.z, s_session.floor, s_session.doors_taken, re_host()->player_scale());
@@ -876,6 +903,7 @@ static int init(void) {
     pe_menu_register_int("Testing", "Door", "A door of this room by its number (0 first), for Go to that door.", &s_door_pick, 0, 31, 1);
     pe_menu_register_action("Testing", "Go to that door", "Puts Aya in that doorway (or the next one the scripts set up).", to_that_door);
     pe_menu_register_action(0, "Refresh the list", "Looks for games imported since the game started.", refresh);
+    pe_menu_register_info("Testing", "Scene control", "Who controls Aya while a room script plays.", text_scene);
     pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);

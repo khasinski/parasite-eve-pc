@@ -103,7 +103,7 @@ static uint32_t read_pri(Bytes pri, int re1, PeImpRoomView *view) {
             if (!w || !h || w > ROOM_WIDTH || h > 256) return 0;
             if (view) view->masks[count] = (PeImpRoomMask){
                 signed16(le16(group + 4)) + p[2], signed16(le16(group + 6)) + p[3],
-                p[0], p[1], (uint16_t)w, (uint16_t)h, (uint16_t)le16(p + 4)
+                p[0], p[1], (uint16_t)w, (uint16_t)h, (uint16_t)le16(p + 4), (uint16_t)(groups - g)
             };
             count++;
             pos += stride;
@@ -484,7 +484,7 @@ static uint8_t expand_5(uint32_t channel) {
 }
 
 static int decode_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view,
-                             uint8_t *rgba, uint16_t *depth) {
+                             uint8_t *rgba, uint16_t *depth, const uint8_t *groups) {
     Bytes data, pri, atlas;
     int rc = room_data(set, frame, &data, &pri, &atlas);
     if (rc) return rc;
@@ -507,6 +507,7 @@ static int decode_foreground(const PeImpImageSet *set, uint32_t frame, const PeI
     if (rgba) memset(rgba, 0, ROOM_WIDTH * ROOM_HEIGHT * 4);
     for (uint32_t i = 0; i < view->mask_count; i++) {
         const PeImpRoomMask *m = &view->masks[i];
+        if (groups && m->group < 128 && !(groups[m->group >> 3] & (1u << (m->group & 7)))) continue;
         for (uint32_t row = 0; row < m->height && m->v + row < tim.height; row++) {
             int64_t y = (int64_t)m->y + row;
             if (y < 0 || y >= ROOM_HEIGHT) continue;
@@ -533,12 +534,17 @@ static int decode_foreground(const PeImpImageSet *set, uint32_t frame, const PeI
 int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view, uint8_t *rgba) {
     uint16_t *depth = malloc(ROOM_WIDTH * ROOM_HEIGHT * sizeof *depth);
     if (!depth) return -1;
-    int rc = decode_foreground(set, frame, view, rgba, depth);
+    int rc = decode_foreground(set, frame, view, rgba, depth, NULL);
     free(depth);
     return rc;
 }
 
+int pe_imp_room_foreground_depth_groups(const PeImpImageSet *set, uint32_t frame,
+                                        const PeImpRoomView *view, const uint8_t groups[16], uint16_t *depth) {
+    return decode_foreground(set, frame, view, NULL, depth, groups);
+}
+
 int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
                                  const PeImpRoomView *view, uint16_t *depth) {
-    return decode_foreground(set, frame, view, NULL, depth);
+    return pe_imp_room_foreground_depth_groups(set, frame, view, NULL, depth);
 }

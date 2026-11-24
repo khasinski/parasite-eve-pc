@@ -20,7 +20,8 @@ enum {
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
     OP_CUT_AUTO = 0x3C, OP_ESPR_ON = 0x3A, OP_ESPR_KILL = 0x4C,
     OP_ESPR_ON2 = 0x64, OP_ESPR_KILL2 = 0x65,
-    OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
+    OP_PLC_MOTION = 0x3F, OP_PLC_DEST = 0x40, OP_PLC_FLG = 0x43,
+    OP_PLC_ROT = 0x58, OP_PLC_CNT = 0x5B, OP_PLC_STOP = 0x66, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
@@ -79,6 +80,14 @@ static int work_slot(unsigned kind, int n) {
     case 5: return n >= 0 && n < 14 ? 50 + n : -1;
     default: return -1;
     }
+}
+
+static int enemy_work(int work) {
+    return work >= 2 && work < 2 + PE_RE_ENEMIES_MAX;
+}
+
+static int walking_mode(unsigned mode) {
+    return mode == 4 || mode == 5 || mode == 7 || mode == 8 || mode == 9;
 }
 
 /* work_copy's patch at `at`, or the empty slot it would go in (open addressing; never full) */
@@ -406,15 +415,61 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return CONTINUE;
     }
+    case OP_PLC_MOTION:
+        if (!enemy_work(t->work) || ins[1]) goto unsupported;
+        vm->run->scene[t->work - 2] = (PeReSceneMotion){.active = 1, .direct = 1, .move = ins[2]};
+        *member(vm, t, PE_RE_MEMBER_SCE_FLAGS) = ins[3];
+        vm->run->actor_stopped[t->work] = 0;
+        vm->run->arrived[t->work] = 0;
+        vm->run->enemy_dest[t->work - 2] = (PeReActorDestination){0};
+        t->pc += n;
+        return CONTINUE;
+    case OP_PLC_FLG: {
+        if (t->work < 0 || ins[1] > 2) goto unsupported;
+        int16_t *flags = member(vm, t, PE_RE_MEMBER_SCE_FLAGS);
+        const int16_t value = s16(ins + 2);
+        if (ins[1] == 0) *flags |= value;
+        else if (ins[1] == 1) *flags = value;
+        else *flags ^= value;
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_PLC_ROT:
+        if (t->work < 0 || ins[1] > 1) goto unsupported;
+        *member(vm, t, PE_RE_MEMBER_SCE_FREE0 + ins[1]) = s16(ins + 2);
+        t->pc += n;
+        return CONTINUE;
+    case OP_PLC_CNT:
+        if (!enemy_work(t->work) || !vm->run->scene[t->work - 2].direct) goto unsupported;
+        vm->run->scene[t->work - 2].start_frame = ins[1];
+        vm->run->scene[t->work - 2].elapsed = 0;
+        t->pc += n;
+        return CONTINUE;
+    case OP_PLC_STOP:
+        if (t->work != 0 && !enemy_work(t->work)) goto unsupported;
+        vm->run->actor_stopped[t->work] ^= 1;
+        t->pc += n;
+        return CONTINUE;
     case OP_PLC_DEST: {                                    /* walk to (x, z); ins[3]: the arrival flag */
         PeReScdRun *r = vm->run;
         const int16_t x = s16(ins + 4), z = s16(ins + 6);
-        if (t->work == 0) {                                /* the player: the caller moves her */
-            if (x || z) r->dest_x = x, r->dest_z = z, r->dest_moved = 1;
-        } else if (x || z) {                               /* the partner or anyone else: just there */
-            *member(vm, t, PE_RE_MEMBER_POS_X) = x, *member(vm, t, PE_RE_MEMBER_POS_Z) = z;
+        if (t->work == 0 || (enemy_work(t->work) && walking_mode(ins[2]))) {
+            PeReActorDestination *dest = t->work == 0 ? &r->player_dest : &r->enemy_dest[t->work - 2];
+            *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = ins[3], .x = x, .z = z};
+            *member(vm, t, PE_RE_MEMBER_DEST_X) = x;
+            *member(vm, t, PE_RE_MEMBER_DEST_Z) = z;
+            r->arrived[t->work] = 0;
+            r->actor_stopped[t->work] = 0;
+            if (ins[3]) pe_re_flag_set(vm->flags, 5, ins[3], 0);
+            if (t->work && r->scene[t->work - 2].direct) r->scene[t->work - 2] = (PeReSceneMotion){0};
+        } else if (t->work > 0) {
+            /* Keep legacy placement for destination modes without a movement routine. */
+            if (x || z) {
+                *member(vm, t, PE_RE_MEMBER_POS_X) = x;
+                *member(vm, t, PE_RE_MEMBER_POS_Z) = z;
+            }
+            r->arrived[t->work] = ins[3];
         }
-        if (t->work >= 0) r->arrived[t->work] = ins[3];   /* each walker's own flag, from the next frame on */
         t->pc += n;
         return CONTINUE;
     }
@@ -435,7 +490,15 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return CONTINUE;
     case OP_PLC_RET:                                       /* back to normal: no more arrival flag */
-        if (t->work >= 0) vm->run->arrived[t->work] = 0;
+        if (t->work >= 0) {
+            vm->run->arrived[t->work] = 0;
+            vm->run->actor_stopped[t->work] = 0;
+        }
+        if (t->work == 0) vm->run->player_dest.moving = 0;
+        if (enemy_work(t->work)) {
+            vm->run->enemy_dest[t->work - 2] = (PeReActorDestination){0};
+            if (vm->run->scene[t->work - 2].direct) vm->run->scene[t->work - 2] = (PeReSceneMotion){0};
+        }
         t->pc += n;
         return CONTINUE;
     case OP_SCE_EM_SET: {                                  /* SCE2.C: the last successful spawn owns the slot. */
@@ -458,6 +521,8 @@ static int step(Vm *vm, PeReScdTask *t) {
             r->em_idle_ticks[slot - 2] = 0;
             r->em_ready[slot - 2] = 0;
             r->scene[slot - 2] = (PeReSceneMotion){0};
+            r->enemy_dest[slot - 2] = (PeReActorDestination){0};
+            r->actor_stopped[slot] = r->arrived[slot] = 0;
             if (pe_re_scene_kind(ins[3])) {
                 w[PE_RE_MEMBER_ROUTINE0] = ins[3] == 0x2c ? 1 : 2;
             }
@@ -584,11 +649,18 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     Vm vm;
     memset(out, 0, sizeof *out);
     out->message = -1;
+    /* Sce work initialization enables every group in each fixed camera. */
+    for (unsigned camera = 0; camera < PE_RE_PRI_CAMERAS; camera++)
+        memset(flags->bits[PE_RE_FG_PRI + camera], 0xff, 16);
     if (!setup(&vm, l, flags, host, out, BUDGET_ENTRY)) return;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_INIT, &out->sec[0], &out->len[0])) out->sec[0] = out->len[0] = 0;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_MAIN, &out->sec[1], &out->len[1])) out->sec[1] = out->len[1] = 0;
     if (!out->sec[0] && !out->sec[1]) return;
     out->ran = 1;
+    /* These engine flags belong to the room's live scripts, including on reload. */
+    pe_re_flag_set(flags, PE_RE_FG_STOP, PE_RE_STOP_PAD_LOCK, 0);
+    pe_re_flag_set(flags, PE_RE_FG_STOP, PE_RE_STOP_EVENTS, 0);
+    pe_re_flag_set(flags, PE_RE_FG_STATUS, PE_RE_STAT_CINESCO, 0);
     work_clr(flags);
     task_start(&out->task[0], proc_start(&vm, 0, 0));      /* Event_exec(0, 0) on the init script */
     out->task[0].proc = -1;
@@ -659,17 +731,22 @@ int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) 
     for (unsigned slot = 0; slot < 16 && count < max; slot++) {
         const int16_t *work = run->works[2 + slot];
         const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
-        const int field_pose = kind >= 0x10 && kind < 0x20 && run->scene[slot].active;
-        if (!work[0] || run->em_dead[slot] || (!field_pose && !pe_re_scene_kind(kind))) continue;
         const PeReSceneMotion *motion = &run->scene[slot];
+        const int destination_pose = run->enemy_dest[slot].owned && !motion->active;
+        const int field_pose = destination_pose || (motion->active && (motion->direct || (kind >= 0x10 && kind < 0x20)));
+        if (!work[0] || run->em_dead[slot] || (!field_pose && !pe_re_scene_kind(kind))) continue;
         PeReSceneActor *actor = &out[count++];
         *actor = (PeReSceneActor){
             .slot = (uint8_t)slot, .kind = (uint8_t)kind, .move = motion->move,
-            .frame = (uint8_t)(motion->reverse ? scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
+            .frame = (uint16_t)(!motion->direct && motion->reverse ?
+                               scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
+            .direct = motion->direct, .start_frame = motion->start_frame, .destination_pose = destination_pose,
+            .room_clip = motion->direct && (work[PE_RE_MEMBER_SCE_FLAGS] & 8),
+            .reverse = motion->direct && (work[PE_RE_MEMBER_SCE_FLAGS] & 0x80),
             .x = work[PE_RE_MEMBER_POS_X], .y = work[PE_RE_MEMBER_POS_Y], .z = work[PE_RE_MEMBER_POS_Z],
             .dir = work[PE_RE_MEMBER_CDIR_Y], .field_pose = field_pose
         };
-        if (kind != 0x3f) continue;
+        if (kind != 0x3f || motion->direct) continue;
         if (motion->reset_parts) {
             actor->absolute_parts = 1;
             actor->part_y[0] = 94, actor->part_y[1] = -103, actor->part_y[2] = 112;
@@ -822,6 +899,42 @@ static int zombie_rise(PeReScdRun *run, int slot) {
     return 1;
 }
 
+/* Script-owned paths follow authored destinations in room coordinates. */
+int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing) {
+    const double dx = dest->x - *x, dz = dest->z - *z;
+    const double distance = hypot(dx, dz);
+    const double speed = dest->mode == 5 ? 135 : dest->mode == 8 ? 38 : 80;
+    if (distance > 0) {
+        const int direction = (int)lround(atan2(-dz, dx) * (2048.0 / acos(-1.0)));
+        *facing = (direction + (dest->mode == 7 || dest->mode == 8 ? 2048 : 0)) & 4095;
+    }
+    if (distance <= speed) {
+        *x = dest->x;
+        *z = dest->z;
+        return 1;
+    }
+    *x += dx * speed / distance;
+    *z += dz * speed / distance;
+    return 0;
+}
+
+static void step_enemy_destinations(PeReScdRun *run) {
+    for (unsigned slot = 0; slot < PE_RE_ENEMIES_MAX; slot++) {
+        PeReActorDestination *dest = &run->enemy_dest[slot];
+        int16_t *work = run->works[2 + slot];
+        if (!dest->moving || !work[0] || run->em_dead[slot] || run->actor_stopped[2 + slot]) continue;
+        double x = work[PE_RE_MEMBER_POS_X], z = work[PE_RE_MEMBER_POS_Z];
+        int facing = work[PE_RE_MEMBER_CDIR_Y];
+        if (pe_re_actor_destination_step(dest, &x, &z, &facing)) {
+            run->arrived[2 + slot] = dest->arrival;
+            dest->moving = 0;
+        }
+        work[PE_RE_MEMBER_POS_X] = (int16_t)lround(x);
+        work[PE_RE_MEMBER_POS_Z] = (int16_t)lround(z);
+        work[PE_RE_MEMBER_CDIR_Y] = (int16_t)facing;
+    }
+}
+
 static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
     const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
     const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
@@ -830,8 +943,12 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        PeReSceneMotion *motion = &run->scene[n];
+        if (run->actor_stopped[2 + n]) continue;
+        if (motion->direct && motion->active && motion->elapsed < UINT16_MAX) motion->elapsed++;
         if (w[0] && w[PE_RE_MEMBER_ID] >= 0x10 && w[PE_RE_MEMBER_ID] < 0x20) {
-            if (w[PE_RE_MEMBER_ROUTINE0] == 8 || !zombie_rise(run, n)) zombie_scene(run, n);
+            if (!motion->direct && !run->enemy_dest[n].owned &&
+                (w[PE_RE_MEMBER_ROUTINE0] == 8 || !zombie_rise(run, n))) zombie_scene(run, n);
             continue;
         }
         /* EM2E waits for Sce_free0 before releasing this scripted Ivy. */
@@ -847,7 +964,7 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
             continue;
         }
         if (w[0] && pe_re_scene_kind((unsigned)w[PE_RE_MEMBER_ID])) {
-            scene_tick(&run->scene[n], w);
+            if (!motion->direct) scene_tick(motion, w);
             continue;
         }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x23 && alligator) {
@@ -888,7 +1005,8 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
-    for (int w = 0; w < PE_RE_WORKS; w++)                  /* they got there (at once): the engine's arrival flags, */
+    step_enemy_destinations(run);
+    for (int w = 0; w < PE_RE_WORKS; w++)                  /* repeat arrival flags until that actor gets a new order */
         if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
     enemy_standins(run, flags);
     int kept = 0;

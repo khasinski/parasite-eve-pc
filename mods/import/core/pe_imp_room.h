@@ -9,6 +9,7 @@ enum { PE_IMP_RE1 = 1, PE_IMP_RE2, PE_IMP_RE3 };
 typedef struct {
     int32_t x, y;                          /* destination on the background */
     uint16_t u, v, width, height, depth;    /* atlas coordinates and source depth */
+    uint16_t group;                       /* RE2 PRI visibility bit, groups numbered backwards */
 } PeImpRoomMask;
 
 typedef struct {
@@ -34,6 +35,9 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
 
 /* Same foreground cutout as above. Returns the nearest raw PRI depth for
  * each pixel, or UINT16_MAX for a transparent pixel. Size: width * height. */
+/* Optional RE2 script visibility bits, 128 groups in low-bit-first order. */
+int pe_imp_room_foreground_depth_groups(const PeImpImageSet *set, uint32_t frame,
+                                        const PeImpRoomView *view, const uint8_t groups[16], uint16_t *depth);
 int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
                                  const PeImpRoomView *view, uint16_t *depth);
 

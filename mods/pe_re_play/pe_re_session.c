@@ -198,6 +198,11 @@ int pe_re_floor_of(int y) {
 
 int pe_re_facing_of(int game_dir) { return (game_dir - 1024) & 4095; }
 
+int pe_re_session_controls_locked(const PeReSession *s) {
+    return s->run.player_dest.moving || s->run.actor_stopped[0] ||
+           pe_re_flag(&s->progress.flags, PE_RE_FG_STOP, PE_RE_STOP_PAD_LOCK);
+}
+
 void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
     s->x = x, s->z = z, s->facing = facing & 4095;
 }
@@ -220,10 +225,9 @@ static PeReChange say_message(PeReSession *s, const uint8_t data[6]) {
     return pe_re_message(s->logic, m, s->said, sizeof s->said) ? PE_RE_STAY : PE_RE_SAID;
 }
 
-/* Sce_Event: Event_exec(data word 0, data byte 3). The game stops the scheduler's zone checks while
- * an event plays (Stop_flg); that stop isn't kept here, so a zone set off every frame doesn't
- * restart an event that's still running (`again` 0). */
+/* Sce_Event checks the event stop flag independently of the pad lock. */
 static void start_event(PeReSession *s, const uint8_t data[6], int again) {
+    if (pe_re_flag(&s->progress.flags, PE_RE_FG_STOP, PE_RE_STOP_EVENTS)) return;
     const unsigned level = (unsigned)data[0] | (unsigned)data[1] << 8, proc = data[3];
     if (!again && (level < PE_RE_TASKS ? s->run.task[level].status && s->run.task[level].proc == (int)proc
                                        : pe_re_scd_running(&s->run, proc)))
@@ -266,6 +270,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
     PeReZoneHit hits[16];
     if (!s->game || !s->logic) return PE_RE_STAY;
     s->x = x, s->z = z;
+    if (pe_re_session_controls_locked(s)) goto camera;
     if (action) {
         s->said[0] = 0;
         /* an examine: the game's own check (the point in front, or underfoot, by the zone's bits) */
@@ -305,6 +310,7 @@ every_frame:;                                              /* every frame: the z
         if (c != PE_RE_STAY) return c;
     }
     if (message_zone < 0) s->auto_message = -1;
+camera:
     if (s->run.ran && s->run.camera_lock) return PE_RE_STAY;   /* the scripts hold the camera */
     const int camera = pe_re_camera_at(s->logic, s->camera, s->floor, x, z);
     if (camera == s->camera) return PE_RE_STAY;
@@ -322,6 +328,20 @@ static void re2_partner(PeReSession *s) {
     PeReFlags *f = &s->progress.flags;
     if (!s->game || strcmp(s->game->game, "re2") || !pe_re_flag(f, PE_RE_FG_STATUS, 1)) return;
     if (pe_re_flag(f, RE2_COMMON, 0x6D) && !pe_re_flag(f, RE2_COMMON, 0x78)) pe_re_flag_set(f, PE_RE_FG_STATUS, 3, 0);
+}
+
+/* Script coordinates are authoritative: these paths may cross room collision
+ * that the scene is about to toggle. Keep fractional progress until arrival. */
+static void step_player_destination(PeReSession *s) {
+    PeReScdRun *r = &s->run;
+    if (!r->player_dest.moving || r->actor_stopped[0]) return;
+    int facing = (s->facing + 1024) & 4095;
+    if (pe_re_actor_destination_step(&r->player_dest, &s->x, &s->z, &facing)) {
+        r->player_dest.moving = 0;
+        r->arrived[0] = r->player_dest.arrival;
+    }
+    s->facing = pe_re_facing_of(facing);
+    s->moved = 1;
 }
 
 PeReChange pe_re_session_tick(PeReSession *s) {
@@ -350,6 +370,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         s->cdir_y = me[PE_RE_MEMBER_CDIR_Y];
         s->moved = 1;
     }
+    step_player_destination(s);
     for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */
         PeReZoneHit h;
         if (pe_re_zone_by_id(s->logic, &s->run, &s->progress, s->run.aot_on[i], &h)) continue;
@@ -358,9 +379,6 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         if (c == PE_RE_SAID || c == PE_RE_ZONE) { s->run.naot_on = 0; return c; }
     }
     s->run.naot_on = 0;
-    if (s->run.dest_moved) {                               /* plc_dest: she's moved for the cutscene */
-        s->x = s->run.dest_x, s->z = s->run.dest_z, s->run.dest_moved = 0, s->moved = 1;
-    }
     if (s->run.ran && s->run.camera != s->camera) {        /* a script cut to another camera */
         s->camera = s->run.camera;
         return PE_RE_CAMERA;
@@ -524,7 +542,8 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         }
         *state = PE_RE_ENEMY_SCRIPTED;
         if (s->run.camera_lock || (scripted & (1u << e->slot)) ||
-            work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active) continue;
+            work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active ||
+            s->run.enemy_dest[e->slot].owned || s->run.actor_stopped[2 + e->slot]) continue;
         /* The field does not require a persistent battle defeat flag. */
         const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 :
                            licker ? type == 0 || type == 0x10 || type == 0x11 || type == 0x13 :

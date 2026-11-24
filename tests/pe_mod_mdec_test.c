@@ -109,8 +109,13 @@ static void made_up_masks(void) {
         assert(depths[0] == UINT16_MAX && depths[1] == 7 && depths[2] == 7 && depths[3] == UINT16_MAX);
         view.masks[1] = view.masks[0];
         view.masks[1].depth = 4;
+        view.masks[1].group = 2;
         view.mask_count = 2;
         assert(!pe_imp_room_foreground_depth(set, 0, &view, depths) && depths[1] == 4);
+        const uint8_t only_group_one[16] = {1 << 1};
+        const uint8_t no_groups[16] = {0};
+        assert(!pe_imp_room_foreground_depth_groups(set, 0, &view, only_group_one, depths) && depths[1] == 7);
+        assert(!pe_imp_room_foreground_depth_groups(set, 0, &view, no_groups, depths) && depths[1] == UINT16_MAX);
         view.masks[0].depth = 3;
         assert(!pe_imp_room_foreground_depth(set, 0, &view, depths) && depths[1] == 3);
         view.mask_count = 1;

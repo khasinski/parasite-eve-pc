@@ -36,9 +36,10 @@
  *            member_calc2 / pos_set / dir_set read and write its fields (SCE1.C, def/SCENARIO.H's
  *            MEMBER_*). The player's position, facing and floor follow the session; pos_set or
  *            dir_set on her moves her (the caller places her). sce_em_set fills its enemy's.
- *   player   plc_dest: the player is sent to a spot; she arrives at once (the caller moves her)
- *            and the instruction's Room_flg bit is set the next frame, as the engine sets it on
- *            arrival (cutscenes wait on it)
+ *   actors   plc_motion submits a clip for an imported enemy or person; plc_dest moves the selected
+ *            enemy or player over successive ticks and publishes its Room_flg on arrival.
+ *            plc_ret releases the command, plc_stop suspends it, and plc_flg / plc_rot / plc_cnt
+ *            update its script flags, scratch words and starting sample.
  *   camera   cut_chg (that camera; camera zones locked out), cut_old (back to the one before,
  *            unlocked), cut_auto (lock on / off) (SCE1.C Cut_chg / Cut_old / Cut_auto)
  *   enemies  sce_em_set: run = placed (its offset kept; the caller reads the record)
@@ -52,6 +53,12 @@
 
 #define PE_RE_FLAG_GROUPS 36                   /* RE2 scripts set groups 0-35 */
 #define PE_RE_FG_STATUS 1
+#define PE_RE_FG_STOP 2
+#define PE_RE_FG_PRI 13
+#define PE_RE_PRI_CAMERAS 16
+#define PE_RE_STOP_PAD_LOCK 7
+#define PE_RE_STOP_EVENTS 6
+#define PE_RE_STAT_CINESCO 27
 #define PE_RE_FG_ITEM 8
 #define PE_RE_FG_ITEM2 34                      /* Item_flg2: taken items from stage 5 on (SCE_AT.C, Stage_no >= 4) */
 #define PE_RE_WORK 256
@@ -67,7 +74,7 @@
 #define PE_RE_WORKS 64                         /* objects: 0 player, 1 partner, 2-17 enemies, 18-49 scene objects, 50-63 doors */
 #define PE_RE_PATCHES 512                      /* work_copy: values written into the room's script (a hash) */
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
-enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_TYPE = 7, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_SCE_FREE1 = 24,
+enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_TYPE = 7, PE_RE_MEMBER_SCE_FLAGS = 22, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_SCE_FREE1 = 24,
        PE_RE_MEMBER_SCE_FREE3 = 26,
        PE_RE_MEMBER_DEST_X = 20, PE_RE_MEMBER_DEST_Z = 21,
        PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
@@ -99,12 +106,17 @@ void pe_re_flag_set(PeReFlags *f, unsigned group, unsigned bit, int on);
 
 typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
 
+enum { PE_RE_KENDO = 0x48 };
+
 typedef struct PeReSceneActor {
-    uint8_t slot, kind, move, frame;
+    uint8_t slot, kind, move;
+    uint16_t frame;
     int16_t x, y, z, dir;
     int16_t part_y[3]; /* EM3F: parts 1, 2 and 4/6/8/10 */
     uint8_t absolute_parts;
     uint8_t field_pose;              /* field clip laid over the actor's simulated position */
+    uint8_t direct, room_clip, reverse, start_frame, destination_pose;
+    char bank[PE_IMP_ID_MAX];
 } PeReSceneActor;
 
 enum { PE_RE_EFFECT_MAX = 64 };
@@ -115,9 +127,18 @@ typedef struct PeReEffect {
 } PeReEffect;
 
 typedef struct {
-    uint8_t active, move, elapsed, reverse, next;
-    uint8_t reset_parts;
+    uint8_t active, move, reverse, next;
+    uint16_t elapsed;
+    uint8_t reset_parts, direct, start_frame;
 } PeReSceneMotion;
+
+typedef struct {
+    uint8_t moving, owned, mode, arrival;
+    int16_t x, z;
+} PeReActorDestination;
+
+/* Advance in RE2 room units, returning true on arrival. Facing is RE2 yaw. */
+int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing);
 
 typedef struct {
     uint8_t status;                            /* 0 idle */
@@ -153,8 +174,9 @@ typedef struct {
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
     uint8_t arrived[PE_RE_WORKS];              /* plc_dest's arrival flag (Room_flg bit) per walker, set every
                                                 * frame from the next one until plc_dest / plc_ret again; 0 none */
-    int dest_moved;                            /* plc_dest sent the player somewhere: dest_x, dest_z */
-    int16_t dest_x, dest_z;
+    PeReActorDestination player_dest;
+    PeReActorDestination enemy_dest[PE_RE_ENEMIES_MAX];
+    uint8_t actor_stopped[PE_RE_WORKS];         /* plc_stop suspends the active scripted action */
     int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */
     int player_set;                            /* pos_set / dir_set moved the player: works[0] */
     struct { uint32_t at; int16_t value; uint8_t wide; } patch[PE_RE_PATCHES];  /* work_copy's script patches,

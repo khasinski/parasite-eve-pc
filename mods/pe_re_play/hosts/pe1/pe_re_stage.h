@@ -27,6 +27,7 @@ void pe_re_stage_face(int facing);                 /* turn her (testing; 0 faces
 int pe_re_stage_blocked(double x, double z);       /* a wall at (x, z) on her floor (testing) */
 const PeRe2RoomCollision *pe_re_stage_collision(void);
 void pe_re_stage_set_masks(int on);
+void pe_re_stage_set_mask_groups(const uint8_t groups[16]);
 void pe_re_stage_set_placement_markers(int on);
 void pe_re_stage_set_placement_meshes(int on);
 void pe_re_stage_set_placement_idle(int on);
@@ -39,6 +40,7 @@ int pe_re_stage_to_ledge(int *camera);
 void pe_re_stage_set_scene_actors(const struct PeReSceneActor *actors, int count);
 /* A door's transition: the picture's brightness (128 full, 0 black), a black curtain in front of
  * everything (Aya too), and no walking while `hold`. */
+void pe_re_stage_scene_controls(int locked, int move_mode);
 void pe_re_stage_fade(int shade, int curtain, int hold);
 /* Aya's size in the room, percent of an RE person's height (100: as tall as Leon). */
 void pe_re_stage_set_size(int percent);

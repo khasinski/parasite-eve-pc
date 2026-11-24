@@ -75,6 +75,8 @@ typedef struct ReHost {
     /* 1 while traversal owns the player, 2 on the landing frame. */
     int (*climb)(int pressed, const char *asset, unsigned player);
     int (*place_at_ledge)(int *camera);
+    void (*scene_controls)(int locked, int move_mode);
+    void (*set_mask_groups)(const uint8_t groups[16]);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

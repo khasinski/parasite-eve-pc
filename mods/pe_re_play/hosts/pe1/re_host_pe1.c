@@ -132,6 +132,8 @@ const ReHost *re_host(void) {
         .set_effects = pe_re_stage_set_effects,
         .climb = pe_re_stage_climb,
         .place_at_ledge = pe_re_stage_to_ledge,
+        .scene_controls = pe_re_stage_scene_controls,
+        .set_mask_groups = pe_re_stage_set_mask_groups,
         .room_collision = pe_re_stage_collision,
         .start_from_title = start_from_title,
         .start_ready = start_ready,

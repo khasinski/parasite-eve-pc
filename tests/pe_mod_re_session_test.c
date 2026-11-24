@@ -392,6 +392,20 @@ static void test_room_effects(const char *store) {
     free(room);
 }
 
+static void test_re2_script_mask_groups(const char *store) {
+    static PeReScdRun run;
+    PeReFlags flags = {0};
+    PeImpRoomLogic *room = NULL;
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/105-0", &room, NULL, 0));
+    if (!room) return;
+    pe_re_scd_run(room, &flags, NULL, &run);
+    /* Room 1-05's entry script disables group 1 on camera 6. */
+    CHECK(!pe_re_flag(&flags, PE_RE_FG_PRI + 6, 1));
+    CHECK(pe_re_flag(&flags, PE_RE_FG_PRI + 6, 2));
+    CHECK(pe_re_flag(&flags, PE_RE_FG_PRI + 5, 1));
+    free(room);
+}
+
 static void test_kendo_zombies(const char *store) {
     static PeReScdRun run;
     PeReFlags flags = {0};
@@ -423,6 +437,40 @@ static void test_kendo_zombies(const char *store) {
     }
     CHECK(entered && advanced && fed && released);
     free(room);
+}
+
+static void test_kendo_player_control(const char *store) {
+    static PeReSession s;
+    char why[128] = "";
+    CHECK(!pe_re_session_start(&s, store, pe_re_game_named("re2"), 0, why, sizeof why));
+    if (!s.game) return;
+    if (pe_re_session_enter(&s, store, 0, 1, 0, -16000, -14000, 0, why, sizeof why)) {
+        CHECK(0);
+        pe_re_session_end(&s);
+        return;
+    }
+    int locked = 0, approached = 0, arrived = 0, returned = 0, cut = 0, kendo_animated = 0;
+    for (int tick = 0; tick < 1000; tick++) {
+        const int moving = s.run.player_dest.moving;
+        pe_re_session_step(&s, store, s.x, s.z, 0, why, sizeof why);
+        if (pe_re_session_tick(&s) == PE_RE_CAMERA) cut = 1;
+        if (pe_re_session_controls_locked(&s)) locked = 1;
+        kendo_animated |= s.run.scene[0].active && s.run.scene[0].elapsed > 1;
+        if (s.run.player_dest.moving) {
+            CHECK(!s.run.arrived[0]);
+            if (s.moved && hypot(s.x - s.run.player_dest.x, s.z - s.run.player_dest.z) > 500) approached = 1;
+        } else if (moving && s.run.arrived[0]) {
+            CHECK(s.x == s.run.player_dest.x && s.z == s.run.player_dest.z);
+            arrived = 1;
+        }
+        s.moved = 0;
+        if (locked && !pe_re_session_controls_locked(&s)) {
+            returned = 1;
+            break;
+        }
+    }
+    CHECK(locked && approached && arrived && cut && returned && kendo_animated);
+    pe_re_session_end(&s);
 }
 
 static void test_climb_camera_floors(const char *store) {
@@ -522,6 +570,8 @@ int main(void) {
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);
         test_kendo_zombies(effect_store);
+        test_re2_script_mask_groups(effect_store);
+        test_kendo_player_control(effect_store);
         test_climb_camera_floors(effect_store);
         test_enemy_room_bindings(effect_store);
         test_ground_enemy_assets(effect_store);

@@ -108,6 +108,7 @@ int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint3
 void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, char *out, size_t n);
 /* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
 int pe_re_floor_of(int y);
+int pe_re_session_controls_locked(const PeReSession *s);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
 /* The session's facing (the stage's yaw: 0 faces -z, 1024 -x) for an angle in the game's own terms
  * (a door's landing direction: RE2's Rot_vector turns 0 to +x). */
