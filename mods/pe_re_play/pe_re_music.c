@@ -111,7 +111,7 @@ typedef struct {
 
 static MusicSlot s_slots[MUSIC_SLOTS];
 static unsigned s_stage, s_room, s_scenario;
-static int s_selected, s_muted, s_suspended;
+static int s_selected, s_muted, s_suspended, s_results;
 
 static const PeFieldAudioApi *audio_api(void)
 {
@@ -220,6 +220,7 @@ void pe_re_music_stop(void)
     mute_native(0);
     s_selected = 0;
     s_suspended = 0;
+    s_results = 0;
 }
 
 static void select_room(unsigned stage, unsigned room, unsigned scenario)
@@ -246,16 +247,54 @@ static void select_room(unsigned stage, unsigned room, unsigned scenario)
     }
 }
 
+static const PeAssetsApi *song_assets(void)
+{
+    const PeAssetsApi *assets = pe_service_get("assets", 1);
+    return assets && assets->struct_size >= offsetof(PeAssetsApi, acquire_song) + sizeof assets->acquire_song &&
+        assets->acquire_song && assets->release ? assets : NULL;
+}
+
+static void poll_slot(unsigned slot, const PeFieldAudioApi *audio, const PeAssetsApi *assets, const char *context)
+{
+    MusicSlot *song = &s_slots[slot];
+    if (song->wanted && *song->id && !song->attempted) {
+        song->handle = assets->acquire_song(song->id);
+        song->attempted = 1;
+    }
+    if (!song->handle) return;
+    const unsigned sequence = slot == PE_FIELD_MUSIC_SUB_SECOND;
+    const int status = audio->play_song(slot, song->handle, sequence, song->loops);
+    if (!status) return;
+    if (status > 0) pe_mod_log("pe_re_play", "%s music: %s sequence %u", context, song->id, sequence);
+    assets->release(song->handle);
+    song->handle = 0;
+}
+
+void pe_re_music_results(void)
+{
+    if (!s_results) {
+        pe_re_music_stop();
+        s_results = 1;
+        MusicSlot *song = &s_slots[PE_FIELD_MUSIC_MAIN];
+        *song = (MusicSlot){.id = "re2:music/main2a", .wanted = 1}; /* ENDING.C: results cue */
+    }
+    mute_native(1);
+    const PeFieldAudioApi *audio = audio_api();
+    const PeAssetsApi *assets = song_assets();
+    if (audio && assets) poll_slot(PE_FIELD_MUSIC_MAIN, audio, assets, "results");
+}
+
 void pe_re_music_update(PeReSession *session)
 {
     if (strcmp(session->game->game, "re2")) {
         pe_re_music_stop();
         return;
     }
+    if (s_results) pe_re_music_stop();
     const unsigned scenario = session->player_id == 12 ? 4 :
         session->player * 2 + pe_re_flag(&session->progress.flags, PE_RE_FG_STATUS, 1);
     const PeFieldAudioApi *audio = audio_api();
-    const PeAssetsApi *assets = pe_service_get("assets", 1);
+    const PeAssetsApi *assets = song_assets();
     if (!s_selected || s_stage != session->stage || s_room != session->room || s_scenario != scenario) {
         for (unsigned slot = 0; slot < MUSIC_SLOTS; ++slot) clear_slot(slot, audio, assets);
         clear_scene_audio(audio, assets);
@@ -268,9 +307,7 @@ void pe_re_music_update(PeReSession *session)
         s_suspended = 0;
         pe_mod_log("pe_re_play", "field music: resumed after combat");
     }
-    if (!audio || !assets ||
-        assets->struct_size < offsetof(PeAssetsApi, acquire_song) + sizeof assets->acquire_song ||
-        !assets->acquire_song || !assets->release) {
+    if (!audio || !assets) {
         session->run.voice_busy = 0;
         session->run.voice_pending = 0;
         session->run.sound_count = 0;
@@ -287,15 +324,6 @@ void pe_re_music_update(PeReSession *session)
             song->wanted = command == 1 || command == 3;
             if (command == 1) song->loops = 1;
         }
-        if (song->wanted && *song->id && !song->attempted) {
-            song->handle = assets->acquire_song(song->id);
-            song->attempted = 1;
-        }
-        if (!song->handle) continue;
-        const int status = audio->play_song(slot, song->handle, slot == 2, song->loops);
-        if (!status) continue;
-        if (status > 0) pe_mod_log("pe_re_play", "field music: %s sequence %u", song->id, slot == 2);
-        assets->release(song->handle);
-        song->handle = 0;
+        poll_slot(slot, audio, assets, "field");
     }
 }

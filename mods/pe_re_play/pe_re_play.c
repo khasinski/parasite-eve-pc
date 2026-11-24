@@ -1007,7 +1007,7 @@ static int tick_ending(void)
     if (s_ending == ENDING_MOVIE) {
         if (tick_movie()) return 1;
         s_ending = ENDING_RESULTS;
-        pe_re_music_stop();
+        pe_re_music_results();
         host->forget_dialogue();
         sync_scene_controls();
         const char *character = s_session.player ? "Claire" : "Leon";
@@ -1026,6 +1026,8 @@ static int tick_ending(void)
     if (host->dialogue_choice() != -1 || !host->dialogue_busy()) {
         stop();
         s_title = TITLE_WAIT_FIELD;
+    } else {
+        pe_re_music_results();
     }
     return 1;
 }

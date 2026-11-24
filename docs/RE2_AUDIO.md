@@ -13,7 +13,7 @@
 
 - Room-bank script cues now use the imported room's EDT and VAB. Independent one-shot effects can overlap in the mixer.
 - XA script cues now select original stage or global dialogue from the standard Leon and Claire voice archives. They use a dedicated stream alongside room music, apply XA volume, and report whether dialogue is still playing to scene scripts. Dialogue stops when the room changes.
-- On an existing profile, use **F1 â†’ Import â†’ Scan RE2** with the original raw disc images available. The updated readers add the room sounds and voice lines to the import catalog.
+- On an existing profile, use **F1 Ã¢â€ â€™ Import Ã¢â€ â€™ Scan RE2** with the original raw disc images available. The updated readers add the room sounds and voice lines to the import catalog.
 - Exact spatial mixing, redirected and layered tones, non-room script banks, special stage 8 dialogue, and field actor cues remain follow-up work. An ISO without the raw XA sectors cannot supply the voice tracks.
 
 
@@ -36,8 +36,8 @@ The RE2 title menu plays two opening movies for both characters.
 A fresh Cross press skips the current clip. If an asset is missing, the
 sequence advances to the next clip or room.
 
-The room-script mapping covers IDs 1, 2, 4â€“14 and 17. Character-specific
-entries (8, 10, 12â€“14 and 17) use verified Leon filenames. MOV3 imports
+The room-script mapping covers IDs 1, 2, 4Ã¢â‚¬â€œ14 and 17. Character-specific
+entries (8, 10, 12Ã¢â‚¬â€œ14 and 17) use verified Leon filenames. MOV3 imports
 preserve STR frame numbers as well as the video and XA sector positions.
 This lets R200, R505 and Leon's R704 play the excerpt requested by the room
 script, using the seek and end frame from the original movie table. Rescan
@@ -62,7 +62,8 @@ and hands off to the shared movie player. Scenario B plays movie 14 from
 Cross press skips the active clip. Natural completion and skipping both open
 the host's campaign completion screen, which returns to the RE2 title menu.
 
-The completion screen shows the character and scenario. The retail score
-calculation, clear-save unlocks, still art and standalone results music are
-outside this implementation. A missing ending movie still advances to the
+The completion screen shows the character and scenario and plays the retail
+results cue (`MAIN2A`). The cue stops when the player returns to the title.
+Retail score calculations, clear-save unlocks and results art remain pending.
+A missing ending movie still advances to the
 completion screen.
