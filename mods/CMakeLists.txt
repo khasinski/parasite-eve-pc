@@ -449,7 +449,7 @@ if(BUILD_TESTING)
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
     target_sources(test-mod-re-route PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-route PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
-    set_tests_properties(mod-re-route PROPERTIES TIMEOUT 900)
+    set_tests_properties(mod-re-route PROPERTIES TIMEOUT 900 SKIP_RETURN_CODE 77)   # 77: no RE2 disc set
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
     # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
     pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_sources}
