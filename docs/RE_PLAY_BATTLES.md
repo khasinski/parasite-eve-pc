@@ -41,7 +41,7 @@ Newest last. Each entry: what, why, and where it lives.
 | D7 | 2026-11-24 | Off-screen enemies keep closing in on Aya while battle time runs. | RE's enemies pursue; they come into view by themselves. |
 | D8 | 2026-11-24 | The room's foreground masks and effects are drawn in battle. | Not drawing them was unfinished work, not a choice. |
 | D9 | 2026-11-24 | Boss and story fights follow the same rules, and enemies the original game brings into that fight (G's embryos, for one) join it. | As in RE. |
-| D10 | 2026-11-24 | An enemy can be targeted only while it is in the same room as Aya. In practice every enemy in a battle is (battles never leave the room), and an enemy in another room never joins. Confirm if this was meant as "in the same camera view". | User's rule. |
+| D10 | 2026-11-24 | Proposed, to confirm: any enemy in the battle can be targeted, on screen or not (all are in Aya's room; one in another room never joins). PE's range still applies: a target past the weapon's `range` is marked out of range (`Battle_CycleTarget`) and gets PE's out-of-range treatment. Targets on screen come first in the default and the cycling order, nearest first, then off-screen ones by distance; an off-screen target gets a marker at the screen's edge. | RE lets you shoot what you can't see; PE makes distance cost. Together: no blind spot when the camera changes, but closing in still pays, which suits enemies that keep coming (D7). |
 | D11 | 2026-11-24 | At most 6 enemies in a battle (the engine has 7 places; one is Aya); joining is rolling. | 5 RE2 rooms hold more than 6 (up to 16). |
 | D12 | 2026-11-24 | A battle stays on Aya's floor: only enemies on it join, and stairs and ramps act as walls until it is over. | 6 RE2 rooms have enemies on two floors. |
 | D13 | 2026-11-24 | No interaction until the battle is resolved: all enemies dead, or Escape. After an escape, Aya stays where she is with a grace period. | User's rule; RE play is already paused for the battle. |
@@ -109,8 +109,10 @@ Everything that touches Parasite Eve's engine:
 - enemies: spawn at a room position mapped into the battle (D4, built for the
   start; `pe_summon` already spawns mid-battle), freeze on time stop (built),
   despawn and report on death;
-- targeting by the room rule (D10): PE's `Battle_BuildTargetList` lists every
-  live battle enemy by distance, which already satisfies it.
+- targeting (D10): PE's `Battle_BuildTargetList` lists every live battle enemy
+  by distance; reorder it on screen first (the director's `in_view`), and draw
+  an edge marker for an off-screen target. Range and its out-of-range marking
+  are PE's own (`action->range` in `Battle_CycleTarget`).
 
 The mapping between the two spaces is one formula, k = RE play's scale
 (`units_per_pe_unit`, about 5.7 at Aya's size 100):
@@ -202,7 +204,7 @@ run, people (kinds 0x40 and up) left out:
 
 ## Open questions
 
-- D10's meaning: confirm "same room" rather than "same camera view".
+- D10: confirm the proposed targeting rule (off-screen targets allowed, range applies, on-screen first, edge marker).
 - How long the grace period is, and whether it ends early once Aya has walked a
   set distance from the survivors.
 - Whether a joining enemy gets an entrance (RE's own walk-in) or simply
