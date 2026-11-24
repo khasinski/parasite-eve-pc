@@ -279,7 +279,8 @@ static int play(unsigned scenario) {
     int shared = 0;
     for (int i = 0; i < room.count; i++) shared += room.enemies[i].killed_flag == flag;
     EXPECT(pe_trip_arm(&trip, &room, NULL, NULL) > 1 && trip.slot[0] == room.enemies[0].slot);
-    EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
+    /* with a backdrop the room stays up for the battle to take over (a battle started in place) */
+    EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && s.active);
     pe_trip_won(&trip, 1);                                 /* a failure to spawn the rest must preserve their slots */
     EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
     s.api->resume_after_battle();

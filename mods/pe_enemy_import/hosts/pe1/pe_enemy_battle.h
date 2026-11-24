@@ -22,6 +22,13 @@ void pe_enemy_battle_arm_summon(int parent, const char *offspring, unsigned move
 void pe_enemy_battle_arm_canister(void);
 void pe_enemy_battle_arm_launcher(void);
 int pe_enemy_battle_canister_detonated(void);
+/* In a battle, and the imported enemy has taken the room's enemies' place (after the opening). */
+int pe_enemy_battle_joined(void);
+/* A battle right here, without a room battle: start_here arms it (mode: the battle-entry opcode's
+ * argument, 2 for the field's random battles); here_step runs one field frame of the entry,
+ * 1 once the battle is on, 0 meanwhile, -1 if it failed. Arm the enemies first. */
+int pe_enemy_battle_start_here(int mode);
+int pe_enemy_battle_here_step(void);
 /* Defeated original roster positions, excluding enemies summoned during combat. */
 unsigned pe_enemy_battle_defeated_mask(void);
 void pe_enemy_battle_disarm(void);

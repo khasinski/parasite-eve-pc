@@ -99,7 +99,7 @@ static int s_placement_idle = 1;
 static int s_room_event = -1, s_enemies_event = -1;
 
 static int api_room(PeReRoomEvent *out) {
-    if (!out || !s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    if (!out || !s_playing || !s_room_reported || s_battle_paused || !re_host()->room_active() || pe_re_door_busy()) return -1;
     memset(out, 0, sizeof *out);
     out->struct_size = sizeof *out;
     out->game = s_session.game->game, out->stage = s_session.stage, out->room = s_session.room;
@@ -107,7 +107,7 @@ static int api_room(PeReRoomEvent *out) {
     return 0;
 }
 static int api_defeated(uint8_t killed_flag) {
-    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    if (!s_playing || !s_room_reported || s_battle_paused || !re_host()->room_active() || pe_re_door_busy()) return -1;
     for (int i = 0; i < s_nenemies; i++) {
         if (s_enemies[i].killed_flag == killed_flag)
             return pe_re_session_defeated(&s_session, killed_flag);
@@ -115,7 +115,7 @@ static int api_defeated(uint8_t killed_flag) {
     return -1;
 }
 static int api_defeated_slot(uint8_t slot) {
-    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    if (!s_playing || !s_room_reported || s_battle_paused || !re_host()->room_active() || pe_re_door_busy()) return -1;
     for (int i = 0; i < s_nenemies; i++)
         if (s_enemies[i].slot == slot) return pe_re_session_beaten(&s_session, slot, s_enemies[i].killed_flag);
     return -1;
@@ -147,7 +147,7 @@ static void sync_scene_controls(void) {
 static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
 static int prepare_boss(uint8_t slot);
 static int api_canister_defeat(uint8_t slot) {
-    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    if (!s_playing || !s_room_reported || s_battle_paused || !re_host()->room_active() || pe_re_door_busy()) return -1;
     for (int i = 0; i < s_nenemies; i++) {
         if (s_enemies[i].slot == slot)
             return pe_re_session_canister_win(&s_session, slot, s_enemies[i].killed_flag);
@@ -325,8 +325,9 @@ static int pause_for_battle(void) {
     s_session.floor = re_host()->player_floor();
     s_battle_paused = 1;
     pe_re_music_suspend();
-    if (re_host()->arm_backdrop && re_host()->release_backdrop) re_host()->arm_backdrop();                  /* the battle plays in front of this room */
-    re_host()->hide_room();
+    /* the battle plays in front of this room: with a backdrop the room stays up until the battle has
+     * it (a battle started in place never leaves it); a PE room's load hides it anyway */
+    if (!re_host()->arm_backdrop || !re_host()->release_backdrop || !re_host()->arm_backdrop()) re_host()->hide_room();
     snprintf(s_status, sizeof s_status, "Paused for battle.");
     return 1;
 }

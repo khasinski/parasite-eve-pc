@@ -42,6 +42,10 @@
 #include "pe1/battle.h"
 #include "pe1/battle_entity_anim.h"
 #include "pe1/battle_runtime.h"
+#include "pe1/battle_start.h"
+#include "pe1/battle_turn.h"
+#include "pe1/memcard.h"
+#include "pe1/menu_inventory.h"
 #include "pe1/display_env.h"
 #include "pe1/draw_buffers.h"
 #include "pe1/entity_allocation.h"
@@ -392,6 +396,72 @@ unsigned pe_enemy_battle_defeated_mask(void) {
 void pe_enemy_battle_arm_canister(void) { s_canister_armed = 1; }
 void pe_enemy_battle_arm_launcher(void) { s_launcher_armed = 1; }
 int pe_enemy_battle_canister_detonated(void) { return s.canister_detonated; }
+int pe_enemy_battle_joined(void) { return s.active && s.joined; }
+
+/* A battle started where Aya is, without a room battle (no spot, no room enemies): the steps of
+ * the game's battle-entry opcode 85 (Boot_MemCardStepInit, phases 0 and 0x37..0x3B), here instead
+ * of in a room script, which the opcode rewinds to run again. The room script before it only
+ * plays its sounds and wakes its own enemies, which a battle of imported enemies doesn't want. */
+static int s_here_phase = -1, s_here_mode, s_here_direct;
+/* The room's own actors when the battle started here (its people): not in the battle, so not drawn
+ * in front of the imported room's picture. Aya, the battle's own and the imported enemies are. */
+#define PE_HERE_HIDDEN_MAX 64
+static const FieldActor *s_here_hidden[PE_HERE_HIDDEN_MAX];
+static int s_here_hidden_n, s_here_seen;
+
+int pe_enemy_battle_start_here(int mode) {
+    if (s_here_phase >= 0 || s.active) return -1;
+    s_here_phase = 0, s_here_mode = mode;
+    s_here_direct = 1;
+    s_here_hidden_n = s_here_seen = 0;
+    for (const FieldActor *a = g_FieldActorListHead; a && s_here_hidden_n < PE_HERE_HIDDEN_MAX; a = a->next)
+        if (a != g_PlayerEntity) s_here_hidden[s_here_hidden_n++] = a;
+    return 0;
+}
+
+int pe_enemy_battle_here_step(void) {
+    Pe1GameState *base = &g_GameState;
+    int status;
+    for (;;) switch (s_here_phase) {
+    case 0:
+        base->flags |= 0x800000;
+        if (base->story_day_flags & 3) return 0;             /* the game is still busy: next frame */
+        s_here_phase = 0x37;
+        break;
+    case 0x37:
+        if (!(base->flags & 0x400000)) MemCard_InitSlotState();
+        s_here_phase = 0x38;
+        break;
+    case 0x38:
+        if ((status = CdRom_StepReadState(1)) < 0) goto failed;
+        if (status == 1) return 0;                            /* still reading the battle's data */
+        if (!(base->flags & 0x400000)) Menu_SaveBgStartFadeOut();
+        s_here_phase = 0x39;
+        break;
+    case 0x39:
+        if ((status = Asset_LoadTimTextures(1)) < 0) goto failed;
+        if (status == 1) return 0;
+        s_here_phase = 0x3A;
+        break;
+    case 0x3A:
+        g_GameStateFlags |= 2;
+        Battle_StartEncounter(s_here_mode);
+        s_here_phase = 0x3B;
+        return 0;
+    case 0x3B:
+        if (base->story_day_flags & 3) return 0;
+        base->flags &= ~0x800000u;
+        s_here_phase = -1;
+        return 1;
+    default:
+        return -1;
+    }
+failed:
+    base->flags &= ~0x800000u;
+    s_here_phase = -1;
+    s_here_direct = 0;
+    return -1;
+}
 void pe_enemy_battle_disarm(void) { s_armed = s_canister_armed = s_launcher_armed = 0; }
 
 /* ---- actors ---- */
@@ -871,6 +941,10 @@ static void pe_begin(void) {
     s_used_frames = 0;
     s.active = 1;
     s.canister_exposed = s_canister_armed;
+    if (s_here_direct) {        /* no room enemies to take their places and start the clock: now */
+        s_here_direct = 0;
+        g_BattleEnemyEscapeFlag = 1;
+    }
     s.launcher = s_launcher_armed ? LAUNCHER_WAITING : LAUNCHER_NONE;
     s_canister_armed = s_launcher_armed = 0;
 }
@@ -1162,6 +1236,7 @@ static void pe_step_launcher(void) {
 
 static int pe_on_battle(void *ctx, void *user) {
     (void)ctx; (void)user;
+    if (s_here_phase == 0x3B) pe_enemy_battle_here_step();   /* the entry's last step, in the battle */
     if (!s.active && s_armed) {
         pe_begin();
         s_armed = 0;
@@ -1317,6 +1392,11 @@ static int pe_on_render(void *ctx, void *user) {
     FieldActor *a = (FieldActor *)d->actor;
     PeFoe *f;
     (void)user;
+    if (a && s_here_hidden_n && a != g_PlayerEntity) {
+        if (pe_in_battle()) s_here_seen = 1;
+        else if (s_here_seen) s_here_hidden_n = 0;         /* the battle is over: the room's own again */
+        if (s_here_hidden_n && pe_in_battle()) for (int i = 0; i < s_here_hidden_n; ++i) if (s_here_hidden[i] == a) return 1;
+    }
     if (!a || a->type_id != PE_FOE_TYPE) return 0;
     if (s.active && (f = pe_foe_of(a))) pe_draw(f, (const u32 *)d->view);
     return 1;   /* an imported enemy's actor never goes through the game's model draw */

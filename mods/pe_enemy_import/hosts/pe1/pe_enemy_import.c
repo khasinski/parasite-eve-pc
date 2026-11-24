@@ -54,6 +54,7 @@
 #define PE_ZONES_MAX 8
 #define PE_TOKEN_TITLE 0xA9400048u    /* the title screens (pe_warp) */
 #define PE_APPROACH_FIGHT 1            /* Day 1 Sewer, second spot: the native battle carrier */
+#define PE_HERE_MODE 2                 /* the battle-entry opcode's argument in the field's random battles */
 
 typedef struct { const char *name; unsigned story; } PeArea;
 typedef struct { unsigned char area; unsigned short map; unsigned char spot; const char *enemies; } PeFight;
@@ -121,9 +122,10 @@ static const PeFight k_fights[] = {
 };
 #define PE_FIGHTS ((int)(sizeof k_fights / sizeof k_fights[0]))
 
-enum { PE_IDLE, PE_LEAVE, PE_ARRIVE, PE_WAIT_BATTLE, PE_FIGHT, PE_AFTER, PE_HOME };
+enum { PE_IDLE, PE_LEAVE, PE_ARRIVE, PE_WAIT_BATTLE, PE_FIGHT, PE_AFTER, PE_HOME, PE_HERE };
 static const char *const k_state_names[] = {
     "Ready", "Leaving", "Going to the fight", "Waiting for the fight", "Fighting", "Fight over", "Going back",
+    "Starting the fight here",
 };
 
 static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
@@ -439,6 +441,17 @@ static void pe_leave(void) {
     s.same_room = s.target == s.origin;
     s.frames = s.travel = 0;
     s.saw_enemies = 0;
+    if (s.automatic) {   /* an imported room's encounter: the battle starts here, no room of PE's needed */
+        s.same_room = 1;
+        if (pe_enemy_battle_start_here(PE_HERE_MODE)) {
+            pe_finish("the battle couldn't start here");
+            pe_end_trip();
+            return;
+        }
+        s.state = PE_HERE;
+        pe_log("cheat_fight_picker", "start here fight=%d from=%08X", s.fight, s.origin);
+        return;
+    }
     g_ScriptVariableBank[PE_VAR_STORY] = k_areas[f->area].story;
     s.state = PE_ARRIVE;
     if (!s.same_room) pe_transfer(s.target);   /* the transfer never finishes into its own room */
@@ -474,6 +487,20 @@ static void pe_step(void) {
         if (!pe_field_ready() || (unsigned)g_SceneDispatchToken != s.target) { s.frames = 0; break; }
         if (++s.frames >= PE_SETTLE_FRAMES) pe_arrived();
         break;
+    case PE_HERE: {
+        const int step = pe_in_battle() ? 1 : pe_enemy_battle_here_step();
+        if (step < 0) {
+            pe_finish("the battle didn't start here");
+            pe_go_home();
+            break;
+        }
+        if (step && pe_in_battle()) { s.state = PE_FIGHT; s.frames = 0; break; }
+        if (++s.frames > PE_START_FRAMES) {
+            pe_finish("the fight didn't start");
+            pe_go_home();
+        }
+        break;
+    }
     case PE_WAIT_BATTLE:
         if (pe_in_battle()) { s.state = PE_FIGHT; s.frames = 0; break; }
         if (++s.frames > PE_START_FRAMES) {
