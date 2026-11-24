@@ -27,8 +27,8 @@
 
 #include "pe_mod_api.h"
 #include "pe_mod_menu.h"
-#include "pe_extension_section.h"
 #include "pe_re_door.h"
+#include "pe_re_music.h"
 #include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "re_host.h"
@@ -45,8 +45,8 @@ static PeReSession s_session;
  * encoded while playing, and on Stop (so Continue picks it up). Loading a save that was in a game
  * resumes there once the field is free. */
 static uint8_t s_saved[PE_RE_SAVE_SIZE];
-static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1, sizeof s_saved, s_saved,
-                                             pe_re_save_upgrade, NULL, NULL};   /* min reader 1: the host loads it */
+static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1,
+                                          sizeof s_saved, s_saved, pe_re_save_upgrade};
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_climbing;
@@ -139,10 +139,30 @@ static const char *api_enemy_archive(void) {
 static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
     return s_playing ? pe_re_session_enemy_room_move(&s_session, slot, asset, size) : -1;
 }
+static int api_battle_result(const PeReBattleResult *result)
+{
+    if (!result || !result->game || !result->defeated_slots) return -1;
+    PeReRoomEvent room;
+    if (api_room(&room)) return 0;
+    if (strcmp(result->game, room.game) || result->stage != room.stage || result->room != room.room) return -1;
+    int applied = 0;
+    for (unsigned slot = 0; slot < PE_RE_ENEMIES_MAX; ++slot) {
+        const unsigned bit = 1u << slot;
+        if (!(result->defeated_slots & bit)) continue;
+        if ((result->canister_slots & bit) && !api_canister_defeat((uint8_t)slot)) {
+            ++applied;
+            continue;
+        }
+        applied += !api_defeated_slot((uint8_t)slot);
+    }
+    return applied ? applied : -1;
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
-    NULL /* field movement is driven by the room, independently of encounter selection */
+    NULL, /* field movement is driven by the room, independently of encounter selection */
+    api_battle_result
 };
 
 static void report_enemies(void) {
@@ -279,7 +299,8 @@ static int pause_for_battle(void) {
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     s_session.floor = re_host()->player_floor();
     s_battle_paused = 1;
-    re_host()->arm_backdrop();                  /* the battle plays in front of this room */
+    pe_re_music_suspend();
+    if (re_host()->arm_backdrop && re_host()->release_backdrop) re_host()->arm_backdrop();                  /* the battle plays in front of this room */
     re_host()->hide_room();
     snprintf(s_status, sizeof s_status, "Paused for battle.");
     return 1;
@@ -288,7 +309,7 @@ static int pause_for_battle(void) {
 static void resume_after_battle(void) {
     if (!s_battle_paused) return;
     s_battle_paused = 0;
-    re_host()->release_backdrop();
+    if (re_host()->release_backdrop) re_host()->release_backdrop();
     s_cross_held = s_square_held = 1;
     s_session.key = s_session.key_trg = 0;
 }
@@ -351,7 +372,8 @@ static void zone_handed(void) {
     case PE_RE_ZONE_ITEMBOX: open_item_box(0); break;
     case PE_RE_ZONE_SAVE: {
         static const char *const yes_no[2] = {"Yes", "No"};
-        if (!pe_re_has(&s_session.progress, PE_RE2_INK_RIBBON))
+        if (!s_registered) say("Saving imported progress is unavailable in this host.");
+        else if (!pe_re_has(&s_session.progress, PE_RE2_INK_RIBBON))
             say("There's a typewriter. With an Ink Ribbon you could record your progress.");
         else if (re_host()->choose("Use an Ink Ribbon to save?", yes_no, 2, 0))
             s_pick = PICK_SAVE;
@@ -363,6 +385,8 @@ static void zone_handed(void) {
 }
 
 /* a choice made in the band */
+static int keep_progress(void);
+
 static void picked(void) {
     const int c = re_host()->dialogue_choice();
     if (c == -1 || s_pick == PICK_NONE) return;
@@ -379,7 +403,10 @@ static void picked(void) {
         return;
     }
     if (mode == PICK_SAVE) {
-        if (c == 0 && !pe_re_lose(&s_session.progress, PE_RE2_INK_RIBBON, 1)) s_typing = TYPE_OPEN, s_typed = 0;
+        if (c == 0) {
+            if (!keep_progress()) say("Imported progress cannot be saved in this slot.");
+            else if (!pe_re_lose(&s_session.progress, PE_RE2_INK_RIBBON, 1)) s_typing = TYPE_OPEN, s_typed = 0;
+        }
         return;
     }
     if (mode == PICK_USE) {
@@ -416,11 +443,13 @@ static void show_room(int place) {
         re_host()->hide_room();
         pe_re_session_end(&s_session);
         s_playing = 0;
+        pe_re_music_stop();
         return;
     }
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     apply_collision(1);
     sync_scene_controls();
+    pe_re_music_update(&s_session);
     snprintf(s_status, sizeof s_status, "Room %x-%02X, camera %d.", (unsigned)s_session.stage + 1,
              (unsigned)s_session.room, s_session.camera);
 }
@@ -442,31 +471,32 @@ static void show_cut(void) {
 }
 
 static int keep_progress(void) {
-    if (!s_enabled && s_registered) s_enabled = pe_extension_enable(&s_section) == PE_REG_OK;
+    if (!s_enabled && s_registered) s_enabled = re_host()->enable_progress() == 0;
     return s_enabled;
 }
 
 static void stop(void) {
+    pe_re_music_stop();
     s_start_pending = 0;
     s_climbing = 0;
     pe_re_door_cancel();
     re_host()->forget_dialogue();
     s_typing = TYPE_NONE;
-    if (s_session.game && keep_progress()) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
+    if (s_session.game && (!s_registered || keep_progress())) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) re_host()->hide_room();
     pe_re_session_end(&s_session);
     s_playing = 0;
     s_room_reported = 0;
     re_host()->set_placements(NULL, 0);
     s_battle_paused = 0;
-    re_host()->release_backdrop();
+    if (re_host()->release_backdrop) re_host()->release_backdrop();
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
 static void start_room(void) {
     s_start_pending = 0;
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
-    if (!keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
+    if (s_registered && !keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     show_room(0);
@@ -529,8 +559,9 @@ static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
     pe_re_door_cancel();
+    pe_re_music_stop();
     s_battle_paused = 0;
-    re_host()->release_backdrop();
+    if (re_host()->release_backdrop) re_host()->release_backdrop();
     s_typing = TYPE_NONE;
     re_host()->set_placements(NULL, 0);
     if (s_playing) {                            /* the loaded save replaces what was being played */
@@ -559,9 +590,16 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
 
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
-    if (s_start_pending && re_host()->start_ready()) start_room();
+    if (s_start_pending && (!re_host()->start_ready || re_host()->start_ready())) start_room();
     if (s_resume && !s_playing && re_host()->field_free()) resume();
-    if (!s_playing || s_battle_paused) return 0;
+    if (!s_playing) return 0;
+    const ReHost *music_host = re_host();
+    if (s_battle_paused ||
+        (music_host->struct_size >= offsetof(ReHost, native_battle_active) + sizeof music_host->native_battle_active &&
+         music_host->native_battle_active && music_host->native_battle_active())) {
+        pe_re_music_suspend();
+        return 0;
+    }
     if (s_typing == TYPE_OPEN && re_host()->room_active() && !re_host()->dialogue_busy() && re_host()->field_free()) {
         if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);   /* the ribbon already used */
         re_host()->open_save_screen();
@@ -615,6 +653,7 @@ static int on_frame(void *ctx, void *user) {
     }
     picked();
     const PeReChange script_change = pe_re_session_tick(&s_session);
+    pe_re_music_update(&s_session);
     switch (script_change) {
     case PE_RE_SAID: say(s_session.said); break;
     case PE_RE_ZONE: zone_handed(); break;
@@ -817,7 +856,7 @@ static void to_ledge(void) {
 
 static void to_ramp(void) {
     if (!s_playing || s_battle_paused) return;
-    if (!re_host()->place_at_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
+    if (!re_host()->place_at_ramp || !re_host()->place_at_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     s_session.floor = re_host()->player_floor();
     snprintf(s_status, sizeof s_status, "At the foot of a slope or stairs: walk onto it.");
@@ -870,7 +909,25 @@ static void text_status(char *out, unsigned size) {
     else snprintf(out, size, "%s", s_status);
 }
 
+static int valid_host(const ReHost *host)
+{
+    return host && RE_HOST_HAS(host, bind_lifecycle) &&
+        host->init && host->shutdown && host->show_room && host->hide_room &&
+        host->room_active && host->room_fade && host->player_pose && host->player_floor &&
+        host->place_player && host->face_player && host->position_blocked &&
+        host->set_masks && host->set_player_size && host->player_scale &&
+        host->set_placement_markers && host->set_placement_meshes && host->set_placement_idle &&
+        host->set_placements && host->say && host->choose && host->dialogue_choice &&
+        host->dialogue_busy && host->forget_dialogue && host->field_free && host->held_buttons &&
+        host->consume_native_interact && host->native_menu_active;
+}
+
 static int init(void) {
+    const ReHost *host = re_host();
+    if (!valid_host(host)) {
+        pe_mod_log(MOD_ID, "missing required RE host callbacks");
+        return 1;
+    }
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
     re_host()->init(MOD_ID, s_store);
     pe_menu_begin(PAGE);
@@ -912,8 +969,9 @@ static int init(void) {
                          &s_enemy_debug_slot, -1, 15, 1);
     pe_menu_register_info("Testing", "Enemy movement", "Enemy position, script routine and movement status in this room.", text_enemy_movement);
     re_host()->bind_lifecycle(MOD_ID, on_frame, on_save_read, on_new_game);
-    s_registered = pe_extension_register(&s_section) >= 0;
-    pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    s_enabled = 0;
+    s_registered = host->open_save_screen && RE_HOST_HAS(host, register_progress) &&
+                   RE_HOST_HAS(host, enable_progress) && !host->register_progress(&s_progress, on_committed);
     s_room_event = pe_event_id(RE_PLAY_EVENT_ROOM), s_enemies_event = pe_event_id(RE_PLAY_EVENT_ENEMIES);
     pe_service_publish(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION, &s_api, MOD_ID);
     if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");

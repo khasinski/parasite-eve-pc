@@ -15,6 +15,7 @@
  * Positions are the source game's room units (x, z on the floor, y down, 1,800 a floor). A placed
  * enemy's killed flag is the game's own: report a defeat with defeated() and the room's scripts stop
  * placing it, as after a kill in the source game (RE2: Enemy_flg, Enemy_flg2 from stage 4). */
+#include <stddef.h>
 #include <stdint.h>
 
 #define RE_PLAY_SERVICE "re_play"
@@ -42,6 +43,15 @@ typedef struct PeReRoomEvent {
 } PeReRoomEvent;
 
 enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
+
+/* Native combat reports source-room slots, independent of the host's actor IDs.
+ * A loss with no defeated slots needs only resume_after_battle(). */
+typedef struct PeReBattleResult {
+    const char *game;
+    uint32_t stage, room;
+    uint16_t defeated_slots;
+    uint16_t canister_slots;  /* subset of defeated_slots with an authored canister finish */
+} PeReBattleResult;
 
 typedef struct PeRePlayApi {
     uint32_t struct_size;
@@ -76,6 +86,9 @@ typedef struct PeRePlayApi {
     /* Optional: advance field enemies once before checking for an automatic encounter.
      * Updates the current room snapshot in place. */
     void (*advance_enemies)(double x, double z, int floor);
+    /* Optional. Apply to a reported room after resuming. Returns the number applied,
+     * 0 while the room is unavailable, or -1 for a mismatch or empty result. */
+    int (*apply_battle_result)(const PeReBattleResult *result);
 } PeRePlayApi;
 
 #endif

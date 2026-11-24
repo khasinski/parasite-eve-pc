@@ -1,6 +1,8 @@
 #ifndef PE1_AKAO_SPU_VOICE_H
 #define PE1_AKAO_SPU_VOICE_H
 
+/* Gate sequenced BGM at the output while retaining native playback state. */
+void Akao_SetMusicMuted(int muted);
 void AkaoSpuVoice_SetVolume(unsigned int index, unsigned int left, unsigned int right);
 void AkaoSpuVoice_SetPitch(unsigned int index, unsigned int value);
 void AkaoSpuVoice_SetStartAddress(unsigned int index, unsigned int value);

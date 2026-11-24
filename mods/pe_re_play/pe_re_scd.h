@@ -170,6 +170,11 @@ typedef struct {
     int waiting;                               /* tasks running after the last tick */
     uint8_t aot_on[PE_RE_AOT_ON_MAX];          /* aot_on: zones the scripts set off, for the caller */
     uint32_t enemy[PE_RE_ENEMIES_MAX];         /* sce_em_set instructions that ran (RDT offsets) */
+    uint8_t sound_cues[16], sound_count;
+    uint16_t voice_track;
+    uint8_t voice_mode, voice_pending, voice_busy, voice_managed, voice_volume, voice_volume_set;
+    uint32_t bgm_revision[3];
+    uint8_t bgm_command[3];
     int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
     uint8_t arrived[PE_RE_WORKS];              /* plc_dest's arrival flag (Room_flg bit) per walker, set every

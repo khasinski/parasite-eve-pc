@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_extension_section.h"
 #include "pe_mod_api.h"
 #include "pe_mod_menu.h"
 #include "pe_re_door.h"
@@ -27,7 +26,7 @@ static struct {
     ReHostCallback frame, save_read, new_game, save_committed;
     PeMenuAction start, next_door, jump, typewriter, give_ribbon;
     int *scenario, *stage, *room_number;
-    const PeExtensionSection *progress;
+    const ReHostProgress *progress;
     const PeRePlayApi *api;
     const char *store;
 } s;
@@ -91,6 +90,17 @@ static void bind(const char *mod_id, ReHostCallback frame, ReHostCallback save_r
     s.new_game = new_game;
 }
 
+static int register_progress(const ReHostProgress *progress, ReHostCallback committed)
+{
+    s.progress = progress;
+    s.save_committed = committed;
+    return 0;
+}
+
+static int enable_progress(void) { return 0; }
+
+static int s_exploration_only;
+
 const ReHost *re_host(void) {
     static const ReHost host = {
         .struct_size = sizeof host, .init = init, .shutdown = noop, .show_room = show_room,
@@ -102,8 +112,17 @@ const ReHost *re_host(void) {
         .dialogue_busy = busy, .forget_dialogue = forget, .field_free = field_free, .held_buttons = buttons,
         .consume_native_interact = noop, .open_save_screen = open_save, .native_menu_active = menu_active,
         .arm_backdrop = arm, .release_backdrop = release, .bind_lifecycle = bind,
+        .register_progress = register_progress, .enable_progress = enable_progress,
     };
-    return &host;
+    if (!s_exploration_only) return &host;
+    static ReHost exploration;
+    exploration = host;
+    exploration.open_save_screen = NULL;
+    exploration.arm_backdrop = NULL;
+    exploration.release_backdrop = NULL;
+    exploration.register_progress = NULL;
+    exploration.enable_progress = NULL;
+    return &exploration;
 }
 
 /* The shared mod-host services the production mod uses. The registered callbacks and save bytes
@@ -141,14 +160,7 @@ int pe_mod_path(char *out, size_t n, const char *file) { (void)file; return snpr
 void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id; (void)fmt; }
 void pe_toast(const char *text) { (void)text; }
 int pe_event_id(const char *name) {
-    if (!strcmp(name, PE_EVENT_SAVE_COMMITTED)) return 1;
     return !strcmp(name, RE_PLAY_EVENT_ROOM) ? 2 : 3;
-}
-int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id) {
-    (void)user; (void)priority; (void)mod_id;
-    if (id != 1) return -1;
-    s.save_committed = fn;
-    return 0;
 }
 int pe_event_emit(int id, void *ctx) { (void)id; (void)ctx; return 0; }
 int pe_service_publish(const char *name, int version, const void *api, const char *mod_id) {
@@ -160,12 +172,6 @@ int pe_service_publish(const char *name, int version, const void *api, const cha
 const void *pe_service_get(const char *name, int version) {
     return version == RE_PLAY_SERVICE_VERSION && !strcmp(name, RE_PLAY_SERVICE) ? s.api : NULL;
 }
-int pe_extension_register(const PeExtensionSection *section) { s.progress = section; return 0; }
-PeRegResult pe_extension_enable(const PeExtensionSection *section) {
-    (void)section;
-    return PE_REG_OK;
-}
-
 static void frames(unsigned count, uint16_t held) {
     s.buttons = held;
     for (unsigned i = 0; i < count; i++) s.frame(NULL, NULL);
@@ -263,7 +269,7 @@ static int play(unsigned scenario) {
     }
     const int remaining = room.count;
     PeReSaved saved;
-    EXPECT(!pe_re_save_decode(s.progress->data, &saved) && saved.playing && saved.player == scenario);
+    EXPECT(!pe_re_save_decode(s.progress->bytes, &saved) && saved.playing && saved.player == scenario);
     s.save_read(NULL, NULL);
     EXPECT(!s.active);
     frames(1, 0);
@@ -338,7 +344,7 @@ static int play(unsigned scenario) {
     s.save_committed(NULL, NULL);
     s.menu = 0;
     frames(1, 0);
-    EXPECT(!pe_re_save_decode(s.progress->data, &saved) && !pe_re_has(&saved.progress, PE_RE2_INK_RIBBON));
+    EXPECT(!pe_re_save_decode(s.progress->bytes, &saved) && !pe_re_has(&saved.progress, PE_RE2_INK_RIBBON));
     return 0;
 }
 
@@ -363,5 +369,21 @@ int re_headless_smoke(const char *store, unsigned scenario) {
     EXPECT(!pe_mod_pe_re_play.init());
     const int result = play(scenario);
     pe_mod_pe_re_play.shutdown();
-    return result;
+    if (result) return result;
+
+    memset(&s, 0, sizeof s);
+    s.store = store;
+    s_exploration_only = 1;
+    const int init_result = pe_mod_pe_re_play.init();
+    int explored = 0;
+    if (!init_result) {
+        *s.scenario = (int)scenario;
+        s.start();
+        frames(2, 0);
+        explored = s.active && !s.progress && !s.saves && !strcmp(s.room, "re2:room/100");
+        pe_mod_pe_re_play.shutdown();
+    }
+    s_exploration_only = 0;
+    EXPECT(explored);
+    return 0;
 }

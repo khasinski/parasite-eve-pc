@@ -58,6 +58,7 @@ int pe_imp_disc_sectors(PeImpDisc *d, uint32_t lba, uint32_t count, uint8_t *out
  * sound groups. Only raw images (.bin, 2352-byte sectors) keep them: -1 for a cooked .iso.
  * *data is malloc'd (free it). */
 #define PE_IMP_XA_RECORD 2308u
+int pe_imp_disc_xa_indexed(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n);
 int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n);
 
 /* ---- Model: a skeleton, parts bound to bones, an 8-bit indexed texture ----
@@ -184,7 +185,7 @@ int pe_imp_imageset_load(const char *folder, PeImpImageSet **set, char *why, siz
  *   u32 size (from the start of the frame data), the frame data, then the audio records. */
 #define PE_IMP_MOVIE_VERSION 1
 #define PE_IMP_MOVIE_MAX (160u << 20)
-enum { PE_IMP_XA_BOTH = 2 };
+enum { PE_IMP_XA_BOTH = 2, PE_IMP_XA_INDEXED = 3 };
 typedef struct {
     uint32_t width, height, frames, audio_records;
     uint32_t *offset, *size;                  /* per frame, into frame_data */

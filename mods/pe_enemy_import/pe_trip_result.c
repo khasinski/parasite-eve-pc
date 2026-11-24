@@ -101,7 +101,19 @@ int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
 
 int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
-    if (!t->armed || !t->defeated || !has_slot_api(api)) { t->armed = 0; return -1; }
+    if (!t->armed || !t->defeated) { t->armed = 0; return -1; }
+    if (api && api->struct_size >= offsetof(PeRePlayApi, apply_battle_result) + sizeof api->apply_battle_result &&
+        api->apply_battle_result) {
+        PeReBattleResult result = {.game = t->game, .stage = t->stage, .room = t->room};
+        for (int i = 0; i < t->count; ++i)
+            if ((t->defeated & (1u << i)) && t->slot[i] < 16)
+                result.defeated_slots |= (uint16_t)(1u << t->slot[i]);
+        if (t->canister_detonated) result.canister_slots = result.defeated_slots;
+        const int applied = api->apply_battle_result(&result);
+        if (applied) t->armed = 0;
+        return applied;
+    }
+    if (!has_slot_api(api)) { t->armed = 0; return -1; }
     if (api->room(&room)) return 0;                        /* not running yet: the trip back, a door */
     t->armed = 0;
     if (!room.game || strcmp(room.game, t->game) || room.stage != t->stage || room.room != t->room) return -1;

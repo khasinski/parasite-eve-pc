@@ -18,8 +18,19 @@ enum { RE_HOST_CROSS = 0x0040, RE_HOST_SQUARE = 0x0080 };
 /* Room IDs refer to the shared catalog. Positions are in RE room units.
  * A full turn is 4096 facing units, with 0 facing -z.
  * The adapter may resolve pictures, cameras and masks directly from that catalog.
- * All callbacks in this revision are required. Append new callbacks at the end. */
+ * Required callbacks are unmarked. Optional features may leave a callback NULL.
+ * Append callbacks and check struct_size before accessing optional tail fields. */
 struct PeReEffect;
+typedef struct ReHostProgress {
+    const char *key;
+    uint16_t version, min_reader, size;
+    void *bytes;
+    int (*upgrade)(void *candidate, const void *old, unsigned size, unsigned version);
+} ReHostProgress;
+
+#define RE_HOST_HAS(host, member) \
+    ((host)->struct_size >= offsetof(ReHost, member) + sizeof (host)->member && (host)->member)
+
 typedef struct ReHost {
     uint32_t struct_size;
     void (*init)(const char *mod_id, const char *store);
@@ -38,7 +49,7 @@ typedef struct ReHost {
     void (*face_player)(int facing);
     int (*position_blocked)(double x, double z);
     void (*set_collision_id)(unsigned slot, unsigned id);  /* optional: a script switched box `slot` (Id top bits) */
-    int (*place_at_ramp)(void);
+    int (*place_at_ramp)(void); /* optional testing helper */
     void (*set_masks)(int on);
     void (*set_player_size)(int percent);
     double (*player_scale)(void);
@@ -56,9 +67,9 @@ typedef struct ReHost {
     int (*field_free)(void);
     uint16_t (*held_buttons)(void);
     void (*consume_native_interact)(void);
-    void (*open_save_screen)(void);
+    void (*open_save_screen)(void); /* optional, paired with progress registration */
     int (*native_menu_active)(void);
-    int (*arm_backdrop)(void);
+    int (*arm_backdrop)(void); /* optional, paired with release_backdrop */
     void (*release_backdrop)(void);
     void (*bind_lifecycle)(const char *mod_id, ReHostCallback frame, ReHostCallback save_read,
                            ReHostCallback new_game);
@@ -77,6 +88,12 @@ typedef struct ReHost {
     int (*place_at_ledge)(int *camera);
     void (*scene_controls)(int locked, int move_mode);
     void (*set_mask_groups)(const uint8_t groups[16]);
+    void (*set_native_music_muted)(int muted);
+    int (*native_battle_active)(void);
+    /* Optional. The adapter persists these bytes and delivers save_read/new_game through
+     * bind_lifecycle. Call committed only after a native save succeeds. Return zero on success. */
+    int (*register_progress)(const ReHostProgress *progress, ReHostCallback committed);
+    int (*enable_progress)(void);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

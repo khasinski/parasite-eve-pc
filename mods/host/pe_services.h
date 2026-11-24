@@ -86,6 +86,13 @@ typedef struct {
      * first is cut off. volume 0-1, times the game's volume. 1 playing, -1 unavailable. Main thread. */
     int (*play_effect)(const int16_t *pcm, uint32_t frames, uint32_t rate, float volume);
     void (*stop_effects)(void);
+    /* Dedicated imported field music voices. They do not replace the preview. */
+    int (*play_field_song)(unsigned slot, PeAssetHandle handle, unsigned sequence, unsigned loops);
+    void (*stop_field_song)(unsigned slot);
+    void (*pause_field_songs)(int paused);
+    int (*play_field_clip)(PeAssetHandle handle, float gain);
+    int (*field_song_active)(unsigned slot);
+    void (*set_field_song_gain)(unsigned slot, float gain);
 } PeAudioApi;
 
 /* Economy armor effects, in the game's unused armor effect numbers 17-20. */

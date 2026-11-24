@@ -3,8 +3,10 @@
 #include "pe_re_stage.h"
 
 #include "pe_game.h"
+#include "pe_extension_section.h"
 #include "pe_mod_host.h"
 #include "pe1/field_movement.h"
+#include "pe1/akao/spu_voice.h"
 #include "pe1/game_state.h"
 #include "pe1/script_queue.h"
 #include "pe1/menu_dialog.h"
@@ -32,6 +34,10 @@ static void open_save_screen(void) {
     Menu_OpenStartupMemCardDialog();
     g_GameState.flags |= 0x9000;
     g_GameStateFlags |= 4;
+}
+
+static int native_battle_active(void) {
+    return (g_GameStateBlock.flags & 2) != 0;
 }
 
 static int native_menu_active(void) {
@@ -92,6 +98,21 @@ static void bind_lifecycle(const char *mod_id, ReHostCallback frame, ReHostCallb
     pe_hook_add(PE_HOOK_NEW_GAME, new_game, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
 
+static PeExtensionSection s_progress;
+
+static int register_progress(const ReHostProgress *progress, ReHostCallback committed)
+{
+    s_progress = (PeExtensionSection){progress->key, progress->version, progress->min_reader,
+                                      progress->size, progress->bytes, progress->upgrade, NULL, NULL};
+    if (pe_extension_register(&s_progress) < 0) return -1;
+    return pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), committed, NULL, PE_PRIORITY_NORMAL, "pe_re_play") < 0 ? -1 : 0;
+}
+
+static int enable_progress(void)
+{
+    return pe_extension_enable(&s_progress) == PE_REG_OK ? 0 : -1;
+}
+
 const ReHost *re_host(void) {
     static const ReHost host = {
         .struct_size = sizeof host,
@@ -134,6 +155,10 @@ const ReHost *re_host(void) {
         .place_at_ledge = pe_re_stage_to_ledge,
         .scene_controls = pe_re_stage_scene_controls,
         .set_mask_groups = pe_re_stage_set_mask_groups,
+        .set_native_music_muted = Akao_SetMusicMuted,
+        .native_battle_active = native_battle_active,
+        .register_progress = register_progress,
+        .enable_progress = enable_progress,
         .room_collision = pe_re_stage_collision,
         .start_from_title = start_from_title,
         .start_ready = start_ready,

@@ -4,6 +4,7 @@
 #include "pe1/akao/commands.h"
 #include "pe1/akao/globals.h"
 #include "pe1/akao/spu_registers.h"
+#include "pe1/akao/spu_voice.h"
 #include "pe1/akao/tick.h"
 #include "pe1/akao/track.h"
 #include "pe1/akao/voice_masks.h"
@@ -763,8 +764,20 @@ void AkaoSpuVoice_SetAdsrReleaseRate(u32 index, u32 left, u32 right) {
     Psyz_AudioUnlock();
 }
 
-/* All callers use the two values consumed by the original procedure. */
-void Akao_WriteVoiceParam(int voice_index, AkaoVoiceParams *params)
+static int s_music_muted;
+
+void Akao_SetMusicMuted(int muted)
+{
+    muted = muted != 0;
+    if (muted == s_music_muted) return;
+    s_music_muted = muted;
+    for (unsigned i = 0; i < AKAO_VOICE_COUNT; i++) {
+        g_AkaoVoiceStateTable[i].update_flags |= AKAO_VOICE_PARAM_VOLUME;
+        g_AkaoVoiceStateTable2[i].update_flags |= AKAO_VOICE_PARAM_VOLUME;
+    }
+}
+
+static void write_voice_param(int voice_index, AkaoVoiceParams *params, int mute_volume)
 {
     unsigned int flags;
     unsigned int cur;
@@ -779,7 +792,7 @@ void Akao_WriteVoiceParam(int voice_index, AkaoVoiceParams *params)
             }
         }
         if (flags & AKAO_VOICE_PARAM_VOLUME) {
-            AkaoSpuVoice_SetVolume(voice_index, params->volume_left, params->volume_right);
+            AkaoSpuVoice_SetVolume(voice_index, mute_volume ? 0 : params->volume_left, mute_volume ? 0 : params->volume_right);
             params->flags &= ~AKAO_VOICE_PARAM_VOLUME;
             if (params->flags == 0) {
                 return;
@@ -1418,21 +1431,27 @@ void Spu_CopyVoiceToStereoSlot(AkaoTrack *track, int stereo_voice_index) {
     stereo->volume_right = (right * (track->pan_target)) >> 16;
     stereo->pitch = track->pitch;
     stereo->update_flags |= (*track).update_flags;
-    Akao_WriteVoiceParam(track->assigned_voice_index, (AkaoVoiceParams *)(&track->assigned_voice_index));
-    Akao_WriteVoiceParam(stereo_voice_index, (AkaoVoiceParams *)(&stereo->assigned_voice_index));
+    write_voice_param(track->assigned_voice_index, &AKAO_TRACK_VOICE(track), s_music_muted);
+    write_voice_param(stereo_voice_index, &AKAO_TRACK_VOICE(stereo), s_music_muted);
 }
 
 void Spu_RestoreVoiceFromStereoSlot(AkaoTrack *track, int stereo_voice_index) {
     AkaoTrack *stereo;
     AkaoS16 right;
 
-    Akao_WriteVoiceParam(track->assigned_voice_index, &AKAO_TRACK_VOICE(track));
+    write_voice_param(track->assigned_voice_index, &AKAO_TRACK_VOICE(track), s_music_muted);
     stereo = &g_AkaoVoiceStateTable[stereo_voice_index];
     track->volume_left = stereo->volume_left;
     right = stereo->volume_right;
     track->update_flags |= 0x1FF93;
     track->volume_right = right;
-    Akao_WriteVoiceParam(stereo_voice_index, &AKAO_TRACK_VOICE(track));
+    write_voice_param(stereo_voice_index, &AKAO_TRACK_VOICE(track), s_music_muted);
+}
+
+/* SFX and other native callers use their ordinary, unmuted voice path. */
+void Akao_WriteVoiceParam(int voice_index, AkaoVoiceParams *params)
+{
+    write_voice_param(voice_index, params, 0);
 }
 
 void Akao_StepVoiceNote(AkaoTrack *track, unsigned mask, unsigned direct, unsigned *output) {
@@ -1475,7 +1494,7 @@ void Akao_StepVoiceNote(AkaoTrack *track, unsigned mask, unsigned direct, unsign
                     track->volume_left = 0;
                 }
                 if ((unsigned)track->assigned_voice_index < 24)
-                    Akao_WriteVoiceParam(track->assigned_voice_index, (AkaoVoiceParams *)&track->assigned_voice_index);
+                    write_voice_param(track->assigned_voice_index, &AKAO_TRACK_VOICE(track), s_music_muted);
             }
             mask &= ~bit;
         }

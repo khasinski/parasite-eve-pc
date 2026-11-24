@@ -282,7 +282,11 @@ static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDi
     const char *path = pe_imp_disc_name(d, i);
     uint8_t *data;
     uint32_t size;
-    if (rd->xa == 1 ? pe_imp_disc_xa(d, i, &data, &size, why, sizeof why) : pe_imp_disc_read(d, i, &data, &size, why, sizeof why)) {
+    int read_error;
+    if (rd->xa == PE_IMP_XA_INDEXED) read_error = pe_imp_disc_xa_indexed(d, i, &data, &size, why, sizeof why);
+    else if (rd->xa == 1) read_error = pe_imp_disc_xa(d, i, &data, &size, why, sizeof why);
+    else read_error = pe_imp_disc_read(d, i, &data, &size, why, sizeof why);
+    if (read_error) {
         out->refused++;
         snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
         return;

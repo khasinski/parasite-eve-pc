@@ -305,7 +305,7 @@ int pe_imp_disc_read(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *
     return 0;
 }
 
-int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n) {
+static int disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n, int indexed) {
     *data = NULL, *size = 0;
     if (i < 0 || i >= d->files) return fail(why, n, "%s", "no such file");
     if (d->rofs) return fail(why, n, "%s", "a PC game folder has no streamed CD audio");
@@ -324,11 +324,27 @@ int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *wh
         }
         if (memcmp(s, k_sync, 12)) { free(buf); return fail(why, n, "%s", "a sector has no sync pattern"); }
         /* mode 2, form 2 (submode bit 5), audio (bit 2) */
-        if (s[15] != 2 || (s[18] & 0x24) != 0x24) continue;
+        if (s[15] != 2 || (s[18] & 0x24) != 0x24) {
+            if (indexed) {
+                memset(buf + used, 0, PE_IMP_XA_RECORD);
+                used += PE_IMP_XA_RECORD;
+            }
+            continue;
+        }
         memcpy(buf + used, s + 16, 4);
         memcpy(buf + used + 4, s + 24, 2304);
         used += PE_IMP_XA_RECORD;
     }
     *data = buf, *size = used;
     return 0;
+}
+
+int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n)
+{
+    return disc_xa(d, i, data, size, why, n, 0);
+}
+
+int pe_imp_disc_xa_indexed(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n)
+{
+    return disc_xa(d, i, data, size, why, n, 1);
 }
