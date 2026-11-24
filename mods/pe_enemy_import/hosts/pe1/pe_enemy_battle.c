@@ -1292,6 +1292,14 @@ void pe_enemy_packs_changed(void) { SDL_SetAtomicInt(&s_rescan, 1); }
 
 static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
+    if (s_here_phase == 0x3B && !pe_in_battle()) {
+        /* the battle is over and its entry's last step still waits: the field again, so that step
+         * (clearing the entry's flag 0x800000, which keeps Aya from moving) can't wait any longer */
+        pe_mod_log(MOD_ID, "battle: its entry hadn't finished (story flags %X); finished now",
+                   (unsigned)g_GameState.story_day_flags);
+        g_GameState.flags &= ~0x800000u;
+        s_here_phase = -1;
+    }
     if (!s.active && !s_armed && SDL_GetAtomicInt(&s_rescan)) {
         SDL_SetAtomicInt(&s_rescan, 0);
         pe_free_resources();

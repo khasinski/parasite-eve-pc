@@ -142,6 +142,7 @@ static const char *const k_counts[] = {"1", "2", "3"};
 static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
     int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview, automatic;
+    int here, move_lock;     /* started in place; the field's movement lock bit 1 before it */
     unsigned origin, target;
     int x, z, yaw;
     uintptr_t roll_next;   /* the forced roll's PeHookScriptRandom.next */
@@ -280,6 +281,9 @@ static void pe_end_trip(void) {
 /* Fight over (or never started): put the script variables back and go home. */
 static void pe_go_home(void) {
     memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars);
+    /* A room battle's script locks Aya's field movement around it and unlocks it after; a battle
+     * started in place has no room script, and the lock stayed on until the next battle */
+    if (s.here) g_FieldMoveLock = (g_FieldMoveLock & ~1) | s.move_lock, s.here = 0;
     if (s.same_room) {
         pe_place(s.x, s.z, s.yaw);
         pe_end_trip();
@@ -454,6 +458,7 @@ static void pe_leave(void) {
     s.saw_enemies = 0;
     if (s.automatic) {   /* an imported room's encounter: the battle starts here, no room of PE's needed */
         s.same_room = 1;
+        s.here = 1, s.move_lock = g_FieldMoveLock & 1;
         if (pe_enemy_battle_start_here(PE_HERE_MODE)) {
             pe_finish("the battle couldn't start here");
             pe_end_trip();

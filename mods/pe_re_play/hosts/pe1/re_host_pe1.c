@@ -106,12 +106,13 @@ enum {
     PE_TITLE_SCENE = 0xA9400048u,
     PE_PROLOGUE_SCENE = 0xA80830C8u,
     PE_OPENING_DIALOGUE_SCENE = 0xA8001048u,
-    /* The PE room under an imported game started from the title: Central Park (map 59), free on
-     * Day 2 (story 0xE4). Never shown. Its area's Aya (her own outfit, model bank 12) has her battle
-     * moves, which a battle started in place needs: Carnegie Hall's foyer (bank 11) has none, and
-     * posed with them she folded up. The Day 1 sewer (bank 10) drew her too large, in pieces, and
-     * the imported enemies' textures wrong. */
-    PE_HOST_FIELD_SCENE = 0xA80054C8u,
+    /* The PE room under an imported game started from the title: a Central Park path (map 66), free
+     * on Day 2 (story 0xE4). Never shown. Its area's Aya (her own outfit, model bank 12) has her
+     * battle moves, which a battle started in place needs: Carnegie Hall's foyer (bank 11) has none,
+     * and posed with them she folded up. The Day 1 sewer (bank 10) drew her too large, in pieces,
+     * and the imported enemies' textures wrong; the park's entrance (map 59) has a police car whose
+     * flashing light showed through the imported room, and map 75 has phone booths. */
+    PE_HOST_FIELD_SCENE = 0xA8006348u,
     PE_STORY_VAR = 74,
     PE_HOST_FREE_FIELD_STORY = 0xE4
 };

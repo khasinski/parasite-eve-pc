@@ -61,8 +61,12 @@ enum { PE_RE_PAL = 1 };
 #define FIELD_TEX_Y 64
 #define FIELD_TEX_WORDS 64
 #define FIELD_TEX_HEIGHT 128
-#define FIELD_CLUT_X 320
-#define FIELD_CLUT_Y 496
+/* the field meshes' palettes: the first empty spot of these for the mesh's rows (a PE room may have
+ * filled the first: Central Park's does) */
+static const struct { int x, y, rows; } k_field_clut_spots[] = {{320, 496, 16}, {0, 475, 5}, {0, 508, 4}};
+static int s_clut_x = 320, s_clut_y = 496;
+#define FIELD_CLUT_X s_clut_x
+#define FIELD_CLUT_Y s_clut_y
 #define FIELD_CLUT_ROWS 16
 #define BACKDROP_SETTLE 10       /* frames Aya stands still before the battle's camera is fixed */
 #define FIELD_TURN_RADIANS (6.283185307179586 / 4096.0)
@@ -1113,11 +1117,22 @@ static void prepare_field_texture(void) {
             break;
         }
     }
-    if (kind < 0) return;
+    if (kind < 0) {               /* no mesh loaded yet (they load as placements show): next frame */
+        s_texture_checked = 0;
+        return;
+    }
     RECT texture = {FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT};
     const PeImpModel *model = &s_field_mesh[kind].model;
-    RECT clut = {FIELD_CLUT_X, FIELD_CLUT_Y, 256, model->pal_rows};
-    if (!empty_texture_area(&texture) || !empty_texture_area(&clut)) return;
+    if (!empty_texture_area(&texture)) return;
+    RECT clut = {0, 0, 256, model->pal_rows};
+    int spot = -1;
+    for (int i = 0; spot < 0 && i < (int)(sizeof k_field_clut_spots / sizeof *k_field_clut_spots); i++) {
+        if ((int)model->pal_rows > k_field_clut_spots[i].rows) continue;
+        clut.x = k_field_clut_spots[i].x, clut.y = k_field_clut_spots[i].y;
+        if (empty_texture_area(&clut)) spot = i;
+    }
+    if (spot < 0) return;
+    s_clut_x = clut.x, s_clut_y = clut.y;
     /* Pack two 128-texel source columns at half resolution into a single
      * checked VRAM rectangle. The full atlas does not fit beside native textures. */
     const unsigned width = model->w < 4 * FIELD_TEX_WORDS ? model->w : 4 * FIELD_TEX_WORDS;
