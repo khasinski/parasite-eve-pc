@@ -182,11 +182,16 @@ static int api_battle_result(const PeReBattleResult *result)
     return applied ? applied : -1;
 }
 
+static double api_units_per_pe_unit(void) {
+    const ReHost *host = re_host();
+    return s_playing && host->player_scale ? host->player_scale() : 0;
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
     NULL, /* field movement is driven by the room, independently of encounter selection */
-    api_battle_result
+    api_battle_result, api_units_per_pe_unit
 };
 
 static void report_enemies(void) {

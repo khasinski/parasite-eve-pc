@@ -374,10 +374,10 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
 static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
+    double x = 0, z = 0;
+    int floor, at_aya = 0;
     if (api->room(&room)) return 0;
     if (s.automatic) {
-        double x, z;
-        int floor;
         if (api->struct_size < offsetof(PeRePlayApi, encounter_reachable) || !api->encounter_position ||
             room.stage != s_approach.stage || room.room != s_approach.room ||
             api->encounter_position(&x, &z, &floor)) return 0;
@@ -385,11 +385,22 @@ static int pe_room_creature(const PeRePlayApi *api) {
                      pe_trip_select_approach(api, &room, x, z, floor, close);
         room.enemies = close;
         if (!room.count) return 0;
+        at_aya = 1;
     }
     pe_enemy_battle_begin_roster();
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    /* the battle opens with each enemy where it stood beside Aya in the room, as the battle's
+     * backdrop draws the room around her */
+    const double units = at_aya && api->struct_size >= offsetof(PeRePlayApi, units_per_pe_unit) +
+                         sizeof api->units_per_pe_unit && api->units_per_pe_unit ? api->units_per_pe_unit() : 0;
+    for (int i = 0; units > 0 && i < count; ++i)
+        for (int k = 0; k < room.count; ++k)
+            if (room.enemies[k].slot == s_trip.slot[i]) {
+                pe_enemy_battle_set_start(i, (room.enemies[k].x - x) / units, (room.enemies[k].z - z) / units);
+                break;
+            }
     if (count && !strcmp(room.game, "re2")) {
         /* Consulted bio2-ds EM28.C: the first adult G uses move 5 to produce EM27 offspring. */
         for (int i = 0; i < room.count; ++i) {

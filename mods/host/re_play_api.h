@@ -89,6 +89,10 @@ typedef struct PeRePlayApi {
     /* Optional. Apply to a reported room after resuming. Returns the number applied,
      * 0 while the room is unavailable, or -1 for a mismatch or empty result. */
     int (*apply_battle_result)(const PeReBattleResult *result);
+    /* Optional. The imported room's units per PE field unit, as the host draws it (a battle in
+     * front of the room places its enemies where they stood: PE offset = room offset / this);
+     * 0 while no room is up. */
+    double (*units_per_pe_unit)(void);
 } PeRePlayApi;
 
 #endif

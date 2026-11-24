@@ -314,8 +314,18 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     s_armed = 1;
 }
 
+/* Where each roster enemy stood beside Aya in the imported room (PE field units from her), so
+ * the battle opens with them there instead of in a row ahead of her. */
+static struct { int set; double dx, dz; } s_start[PE_FOES_MAX];
+
+void pe_enemy_battle_set_start(int i, double dx, double dz) {
+    if (i < 0 || i >= PE_FOES_MAX) return;
+    s_start[i].set = 1, s_start[i].dx = dx, s_start[i].dz = dz;
+}
+
 void pe_enemy_battle_begin_roster(void) {
     if (s.active) return;
+    memset(s_start, 0, sizeof s_start);
     s_armed = 0;
     s_count = 0;
     s.foes = s.placed_foes = 0;
@@ -922,9 +932,10 @@ static void pe_join(int early) {
             pe_mod_log(MOD_ID, "battle: no VRAM left for %s", resource->pack.name);
             break;
         }
-        if (!pe_spawn(resource, s_entrance[i].pose, s_entrance[i].wake, s_entrance[i].loop,
-                      x + (int)(sin(ang) * side * 65536.0), y,
-                      z + (int)(cos(ang) * side * 65536.0))) break;
+        int fx = x + (int)(sin(ang) * side * 65536.0), fz = z + (int)(cos(ang) * side * 65536.0);
+        if (s_start[i].set)
+            fx = aya->pos_x + (int)(s_start[i].dx * 65536.0), fz = aya->pos_z + (int)(s_start[i].dz * 65536.0);
+        if (!pe_spawn(resource, s_entrance[i].pose, s_entrance[i].wake, s_entrance[i].loop, fx, y, fz)) break;
         if (!resource->uploaded) pe_vram(resource, 0);
     }
     s.placed_foes = s.foes;
@@ -1044,7 +1055,9 @@ static void pe_foe_think(PeFoe *f) {
     if (!core) return;
     hp = core->hpAlive;
     if (hp <= 0 && !f->dead && pe_transform(f, core)) return;
-    if (g_GameStateFlags & 0x100) { pe_place_targets(f); return; }   /* enemies stopped */
+    /* time stopped, as for the game's own enemies: they move only while the battle runs (mode 0);
+     * Aya's command menu (mode 1, flag 4), her action and its aftermath, or an enemies-stop (0x100) */
+    if ((g_GameStateFlags & (0x100 | 4)) || g_BattleModeState != 0) { pe_place_targets(f); return; }
     pe_step_lift(f, aya, hp);
     if (f->entrance_frames && hp > 0) {
         /* Hold the source pose through the battle opening or until a hit. */

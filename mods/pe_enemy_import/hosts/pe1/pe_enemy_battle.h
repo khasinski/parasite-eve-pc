@@ -17,6 +17,9 @@ int pe_enemy_battle_preview(PeEnemyPack *pack);
 void pe_enemy_battle_arm(int choice, int count, int send_away);
 /* Prepare a roster that replaces native foes. Each successful add corresponds to one source slot. */
 void pe_enemy_battle_begin_roster(void);
+/* Roster enemy i starts dx, dz PE field units from Aya (where it stood in an imported room);
+ * after begin_roster, before the battle. */
+void pe_enemy_battle_set_start(int i, double dx, double dz);
 int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move, int follow_forms);
 void pe_enemy_battle_arm_summon(int parent, const char *offspring, unsigned move);
 void pe_enemy_battle_arm_canister(void);

@@ -106,9 +106,13 @@ enum {
     PE_TITLE_SCENE = 0xA9400048u,
     PE_PROLOGUE_SCENE = 0xA80830C8u,
     PE_OPENING_DIALOGUE_SCENE = 0xA8001048u,
-    PE_CARNEGIE_FIELD_SCENE = 0xA8000148u,
+    /* The PE room under an imported game started from the title: the Day 1 sewer's entry (map 26),
+     * free at story 0x68. Never shown, but its area's Aya (model bank 10) carries her battle moves,
+     * which a battle started in place needs; Carnegie Hall's foyer (bank 11) has none, and posed
+     * with them she folded up. */
+    PE_HOST_FIELD_SCENE = 0xA8002348u,
     PE_STORY_VAR = 74,
-    PE_CARNEGIE_FREE_FIELD_STORY = 9
+    PE_HOST_FREE_FIELD_STORY = 0x68
 };
 
 static int s_title_start, s_opening_transfer;
@@ -138,8 +142,8 @@ static int start_ready(void) {
     if (s_opening_transfer && token == PE_OPENING_DIALOGUE_SCENE) {
         /* New Game has created Aya and her inventory. Use PE's normal room transfer
          * to give the imported room an initialized field without its opening dialogue. */
-        int target = PE_CARNEGIE_FIELD_SCENE, *args[] = {&target};
-        g_ScriptVariableBank[PE_STORY_VAR] = PE_CARNEGIE_FREE_FIELD_STORY;
+        int target = PE_HOST_FIELD_SCENE, *args[] = {&target};
+        g_ScriptVariableBank[PE_STORY_VAR] = PE_HOST_FREE_FIELD_STORY;
         Script_EncodeBarcode(args);
         s_opening_transfer = 0;
         return 0;
