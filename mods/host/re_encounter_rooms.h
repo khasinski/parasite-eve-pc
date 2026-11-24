@@ -11,7 +11,7 @@ static inline int pe_re2_ivy(unsigned kind) {
 }
 
 static inline int pe_re2_ground_pursuit_kind(unsigned kind) {
-    return (kind >= 0x10 && kind <= 0x20) || kind == 0x22 || kind == 0x24 || pe_re2_ivy(kind);
+    return (kind >= 0x10 && kind <= 0x20) || kind == 0x22 || kind == 0x24 || kind == 0x25 || pe_re2_ivy(kind);
 }
 
 static inline int pe_re2_opening_street(unsigned stage, unsigned room) {

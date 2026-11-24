@@ -1168,6 +1168,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             unsigned index = 0;
             if (p->kind == 0x20) index = moving ? 2 : 0;
             else if (p->kind == 0x24 || pe_re2_ivy(p->kind)) index = moving ? 1 : 0;
+            else if (p->kind == 0x25 && !(type & 0xf)) index = moving ? 2 : 0;
             else if (zombie) {
                 if (mode == PE_RE_ZOMBIE_CRAWL) index = moving ? 4 : 0x17;
                 else if (type == 2 || type == 5) index = 0x16;

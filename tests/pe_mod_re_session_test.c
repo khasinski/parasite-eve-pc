@@ -489,6 +489,31 @@ static void test_climb_camera_floors(const char *store) {
     }
 }
 
+static void test_reciprocal_camera_overlap(const char *store) {
+    static const struct {
+        unsigned stage, room;
+        int a, b, x, overlap_z, forward_z, reverse_z;
+    } cases[] = {
+        {0, 0x0a, 13, 14, -17400, 310, 1000, 0},
+        {5, 0x03, 8, 10, -16410, -16490, -18530, -13210},
+    };
+    for (unsigned i = 0; i < sizeof cases / sizeof *cases; i++) {
+        for (int player = 0; player < 2; player++) {
+            char id[PE_IMP_ID_MAX];
+            pe_re_logic_id("re2", cases[i].stage, cases[i].room, player, id, sizeof id);
+            PeImpRoomLogic *room = NULL;
+            CHECK(!pe_imp_catalog_roomlogic(store, id, &room, NULL, 0));
+            if (!room) continue;
+            const int a = cases[i].a, b = cases[i].b, x = cases[i].x, seam = cases[i].overlap_z;
+            CHECK(pe_re_camera_at(room, a, 0, x, seam) == a);
+            CHECK(pe_re_camera_at(room, a, 0, x, cases[i].forward_z) == b);
+            CHECK(pe_re_camera_at(room, b, 0, x, seam) == b);
+            CHECK(pe_re_camera_at(room, b, 0, x, cases[i].reverse_z) == a);
+            free(room);
+        }
+    }
+}
+
 static void test_enemy_room_bindings(const char *store) {
     static PeReSession s;
     s.game = pe_re_game_named("re2");
@@ -515,7 +540,7 @@ static void test_enemy_room_bindings(const char *store) {
 }
 
 static void test_ground_enemy_assets(const char *store) {
-    static const unsigned kinds[] = {0x24, 0x2e, 0x39};
+    static const unsigned kinds[] = {0x24, 0x2e, 0x39, 0x25};
     for (unsigned i = 0; i < sizeof kinds / sizeof *kinds; i++) {
         char id[PE_IMP_ID_MAX], why[128];
         PeImpModel model = {0};
@@ -524,7 +549,8 @@ static void test_ground_enemy_assets(const char *store) {
         CHECK(!pe_imp_catalog_model(store, id, &model, why, sizeof why));
         snprintf(id, sizeof id, "re2:enemy/em%02x/moves", kinds[i]);
         CHECK(!pe_imp_catalog_animation(store, id, &animation, why, sizeof why));
-        CHECK(model.bones == animation.bones && animation.moves > 1 && animation.move[1].frames);
+        const unsigned walk = kinds[i] == 0x25 ? 2 : 1;
+        CHECK(model.bones == animation.bones && animation.moves > walk && animation.move[walk].frames);
         for (unsigned b = 0; b < model.bones; b++)
             CHECK(model.parent[b] < (int)b && (!b || model.parent[b] >= 0));
         for (unsigned b = 0; b < model.parts && b < model.bones; b++)
@@ -541,8 +567,9 @@ static void test_ground_enemy_variants(void) {
     const PeRe2RoomCollision room = {0};
     int16_t *work = s.run.works[2];
     work[0] = 1;
-    for (unsigned i = 0; i < 3; i++) {
-        const unsigned kind = i == 0 ? 0x24 : i == 1 ? 0x2e : 0x39;
+    static const unsigned kinds[] = {0x24, 0x2e, 0x39, 0x25};
+    for (unsigned i = 0; i < sizeof kinds / sizeof *kinds; i++) {
+        const unsigned kind = kinds[i];
         PeReEnemyPlacement enemy = {.kind = kind};
         work[PE_RE_MEMBER_ID] = kind;
         s.run.em_alerted[0] = 0;
@@ -557,8 +584,8 @@ static void test_ground_enemy_variants(void) {
         for (int tick = 0; tick < 6; tick++)
             CHECK(pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0) == 1);
         CHECK(enemy.x > 0 && enemy.z == 0 && enemy.dir == 0);
-        if (kind == 0x24) {
-            enemy.behaviour = 2;   /* wall variant keeps its own routine */
+        if (kind == 0x24 || kind == 0x25) {
+            enemy.behaviour = kind == 0x25 ? 3 : 2;   /* mounted variants need their own routines */
             CHECK(!pe_re_session_chase(&s, &room, &enemy, 1, 2400, 0, 0));
         }
     }
@@ -573,6 +600,7 @@ int main(void) {
         test_re2_script_mask_groups(effect_store);
         test_kendo_player_control(effect_store);
         test_climb_camera_floors(effect_store);
+        test_reciprocal_camera_overlap(effect_store);
         test_enemy_room_bindings(effect_store);
         test_ground_enemy_assets(effect_store);
     }
