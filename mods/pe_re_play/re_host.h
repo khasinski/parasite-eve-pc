@@ -104,6 +104,8 @@ typedef struct ReHost {
      * bytes (progress.bin, which loads like a room checkpoint), a screenshot and the end of its log. Returns 0
      * and the folder in `where`, or -1. */
     int (*write_report)(const char *text, const void *progress, size_t size, char *where, size_t n);
+    /* Optional. Whether a room point (x, z, standing on `y`) is in the current camera's picture. */
+    int (*in_view)(double x, double y, double z);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

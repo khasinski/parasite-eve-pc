@@ -349,7 +349,7 @@ static int play(unsigned scenario) {
         EXPECT(nearby[0].slot == 1 && nearby[1].slot == 5 && nearby[2].slot == 7);
         s.test_wall = 0;
         rpd.stage = 2; rpd.room = 5;
-        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == PE_TRIP_FOES_MAX);
+        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == PE_TRIP_GROUP_MAX);
         EXPECT(nearby[0].slot == 0 && nearby[1].slot == 1 && nearby[2].slot == 5);
     }
 

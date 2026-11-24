@@ -81,14 +81,14 @@ int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
     out[0] = *lead;
     int count = 1;
     unsigned selected = 1u << lead->slot;
-    while (count < PE_TRIP_FOES_MAX) {
+    while (count < PE_TRIP_GROUP_MAX) {
         const PeReEnemyPlacement *neighbor = nearest_enemy(room, lead->x, lead->z, floor,
                                                             group_radius * group_radius, selected, reachable);
         if (!neighbor) break;
         out[count++] = *neighbor;
         selected |= 1u << neighbor->slot;
     }
-    if (count < PE_TRIP_FOES_MAX && lead->kind == 0x28 && lead->slot == 0) {
+    if (count < PE_TRIP_GROUP_MAX && lead->kind == 0x28 && lead->slot == 0) {
         for (int i = 0; i < room->count; i++) {
             const PeReEnemyPlacement *e = &room->enemies[i];
             if (e->floor != floor || !pe_re2_g_attached_embryo(room->stage, room->room, e)) continue;
@@ -130,8 +130,32 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
 
 int pe_trip_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z, int floor,
                               PeReEnemyPlacement *close) {
-    return pe_trip_approach(room, x, z, floor,
-                           api->struct_size >= offsetof(PeRePlayApi, encounter_boss) ? api->encounter_reachable : NULL, close);
+    int count = pe_trip_approach(room, x, z, floor,
+                                 api->struct_size >= offsetof(PeRePlayApi, encounter_boss) ? api->encounter_reachable : NULL, close);
+    if (count < 1 || api->struct_size < offsetof(PeRePlayApi, in_view) + sizeof api->in_view || !api->in_view ||
+        api->in_view(&close[0]) < 0)
+        return count;
+    /* the one that reached her starts it; the battle takes in every enemy she can see (on her
+     * floor, in the camera's picture), nearest to it first, as RE's own fights are what's on screen */
+    const PeReEnemyPlacement lead = close[0];
+    unsigned selected = 1u << lead.slot;
+    count = 1;
+    while (count < PE_TRIP_FOES_MAX) {
+        const PeReEnemyPlacement *next = NULL;
+        double best = 0;
+        for (int i = 0; i < room->count; i++) {
+            const PeReEnemyPlacement *e = &room->enemies[i];
+            if ((selected & (1u << e->slot)) || e->floor != floor ||
+                !pe_re2_proximity_enemy(e, pe_re2_opening_street(room->stage, room->room)) || api->in_view(e) != 1)
+                continue;
+            const double dx = e->x - lead.x, dz = e->z - lead.z, d = dx * dx + dz * dz;
+            if (!next || d < best) next = e, best = d;
+        }
+        if (!next) break;
+        close[count++] = *next;
+        selected |= 1u << next->slot;
+    }
+    return count;
 }
 
 int pe_trip_select_boss(const PeRePlayApi *api, const PeReRoomEvent *room, PeReEnemyPlacement *out) {

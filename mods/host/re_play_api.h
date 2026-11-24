@@ -93,6 +93,9 @@ typedef struct PeRePlayApi {
      * front of the room places its enemies where they stood: PE offset = room offset / this);
      * 0 while no room is up. */
     double (*units_per_pe_unit)(void);
+    /* Optional. Whether a placed enemy is in the current camera's picture (an encounter takes in
+     * every enemy the player can see); -1 when the host can't tell. */
+    int (*in_view)(const PeReEnemyPlacement *enemy);
 } PeRePlayApi;
 
 #endif

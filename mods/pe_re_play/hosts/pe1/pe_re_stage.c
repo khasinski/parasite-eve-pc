@@ -526,7 +526,40 @@ static int on_player_scene_render(void *ctx, void *user) {
     return 1;
 }
 
+/* Aya's battle moves against the imported room's walls, not the PE room's under it: once she has
+ * settled, the PE room's floor checks leave her (flag 0x80, Entity_UpdateList), and each frame her
+ * step, taken into the room by the backdrop's mapping, slides along the room's collision as her
+ * field walk does. Otherwise the PE room's own floor bounded her battle, a different shape. */
+static struct { int on, own_flag; double x, z; } s_battle_walk;
+
+static void battle_walk_off(void) {
+    if (s_battle_walk.on && g_PlayerEntity && !s_battle_walk.own_flag) g_PlayerEntity->flags &= ~0x80u;
+    s_battle_walk.on = 0;
+}
+
+static void battle_walk(FieldActor *aya) {
+    const double k = RE_UNITS_PER_PE_UNIT;
+    const double x = s_backdrop.room[0] + (aya->pos_x / 65536.0 - s_backdrop.anchor[0]) * k;
+    const double z = s_backdrop.room[2] + (aya->pos_z / 65536.0 - s_backdrop.anchor[2]) * k;
+    if (!s_battle_walk.on) {
+        s_battle_walk.on = 1, s_battle_walk.own_flag = (aya->flags & 0x80) != 0;
+        aya->flags |= 0x80;
+        s_battle_walk.x = x, s_battle_walk.z = z;
+        return;
+    }
+    const double dx = x - s_battle_walk.x, dz = z - s_battle_walk.z;
+    if (dx == 0 && dz == 0) return;
+    double wx = s_battle_walk.x, wz = s_battle_walk.z;
+    pe_imp_re2_slide_on(&s_walk.collision, (unsigned)s_walk.floor, &wx, &wz, dx, dz, AYA_ROOM_RADIUS);
+    s_battle_walk.x = wx, s_battle_walk.z = wz;
+    if (wx != x || wz != z) {                         /* a wall: where the slide left her */
+        aya->pos_x = (int)lround((s_backdrop.anchor[0] + (wx - s_backdrop.room[0]) / k) * 65536.0);
+        aya->pos_z = (int)lround((s_backdrop.anchor[2] + (wz - s_backdrop.room[2]) / k) * 65536.0);
+    }
+}
+
 static void backdrop_off(int restore) {
+    battle_walk_off();
     if (!s_backdrop.on) return;
     if (restore) {
         GeomScrollCoordinates *c = &g_GeomScroll.state.position;
@@ -631,6 +664,8 @@ static int on_camera(void *ctx, void *user) {
                 const int moved = x != s_backdrop.anchor[0] || y != s_backdrop.anchor[1] || z != s_backdrop.anchor[2];
                 s_backdrop.anchor[0] = x, s_backdrop.anchor[1] = y, s_backdrop.anchor[2] = z;
                 s_backdrop.still = moved ? 0 : s_backdrop.still + 1;
+            } else if (s_walk.collision.count) {
+                battle_walk((FieldActor *)aya);
             }
             backdrop_camera(camera);
             return 1;
@@ -996,6 +1031,18 @@ static int project_field_point(double x, double y, double z, double screen[3]) {
     screen[1] = FIELD_H / 2 + s_camera.distance * view[1] / view[2];
     screen[2] = depth;
     return fabs(screen[0]) < 1024 && fabs(screen[1]) < 1024;
+}
+
+/* A person standing at x, z on floor height y is in the picture: their feet or their chest is. */
+int pe_re_stage_in_view(double x, double y, double z) {
+    if (!s_show || !s_camera.distance) return 0;
+    for (int i = 0; i < 2; i++) {
+        double screen[3];
+        if (project_field_point(x, y - 1500.0 * i, z, screen) && screen[0] >= 0 && screen[0] < PIC_W &&
+            screen[1] >= 0 && screen[1] < FIELD_H)
+            return 1;
+    }
+    return 0;
 }
 
 static void free_field_mesh(unsigned kind) {

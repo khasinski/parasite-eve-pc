@@ -187,11 +187,17 @@ static double api_units_per_pe_unit(void) {
     return s_playing && host->player_scale ? host->player_scale() : 0;
 }
 
+static int api_in_view(const PeReEnemyPlacement *e) {
+    const ReHost *host = re_host();
+    if (!s_playing || host->struct_size < offsetof(ReHost, in_view) + sizeof host->in_view || !host->in_view) return -1;
+    return host->in_view(e->x, e->y, e->z);
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
     NULL, /* field movement is driven by the room, independently of encounter selection */
-    api_battle_result, api_units_per_pe_unit
+    api_battle_result, api_units_per_pe_unit, api_in_view
 };
 
 static void report_enemies(void) {

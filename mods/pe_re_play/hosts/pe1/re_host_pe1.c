@@ -193,6 +193,7 @@ const ReHost *re_host(void) {
         .position_blocked = pe_re_stage_blocked,
         .set_collision_id = pe_re_stage_collision_id,
         .place_at_ramp = pe_re_stage_to_ramp,
+        .in_view = pe_re_stage_in_view,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,
         .player_scale = pe_re_stage_scale,

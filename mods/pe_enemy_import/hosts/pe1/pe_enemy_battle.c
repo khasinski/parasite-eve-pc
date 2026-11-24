@@ -62,7 +62,7 @@
 #include "pe1/render_packets.h"
 
 #define MOD_ID "pe_enemy_import"
-#define PE_FOES_MAX 3
+#define PE_FOES_MAX 6
 #define PE_FORMS_MAX 5
 #define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256
