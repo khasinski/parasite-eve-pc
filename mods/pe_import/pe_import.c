@@ -623,6 +623,7 @@ static void say_builds(void) {
 static int worker(void *user) {
     (void)user;
     pe_import_job_run(&s_job);
+    pe_imp_catalog_release();
     SDL_SetAtomicInt(&s_state, 2);
     return 0;
 }

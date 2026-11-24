@@ -349,6 +349,9 @@ int pe_imp_catalog_animation(const char *root, const char *asset_id, PeImpAnimat
 int pe_imp_catalog_sound(const char *root, const char *asset_id, PeImpSound **sound, char *why, size_t n);
 int pe_imp_catalog_song(const char *root, const char *asset_id, PeImpSong **song, char *why, size_t n);
 int pe_imp_catalog_imageset(const char *root, const char *asset_id, PeImpImageSet **set, char *why, size_t n);
+/* Lookups keep the catalog they read, per thread, until its file changes; a thread that's done
+ * looking things up (a worker about to end) lets its copy go. */
+void pe_imp_catalog_release(void);
 /* A game's catalog entries, sorted by ID; *out is malloc'd (free it). */
 typedef struct PeImpAsset {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];

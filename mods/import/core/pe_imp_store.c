@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #ifdef _WIN32
 #include <direct.h>
 #define WIN32_LEAN_AND_MEAN
@@ -161,15 +162,62 @@ static void sink_free(PeImpSink *s) {
 typedef struct { char sha[65], dir[8], platform[16], image[128], path[128]; } Source;
 typedef struct {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];
-    Source src[MAX_SOURCES];
-    int srcs;
+    Source *src;                                  /* srcs of them (up to MAX_SOURCES), grown as noted */
+    int srcs, scap;
 } Entry;
-typedef struct { Entry *e; int n, cap; } Catalog;
+
+static Source *src_add(Entry *e) {
+    if (e->srcs >= MAX_SOURCES) return NULL;
+    if (e->srcs == e->scap) {
+        int cap = e->scap ? e->scap * 2 : 2;
+        Source *g = realloc(e->src, (size_t)cap * sizeof *g);
+        if (!g) return NULL;
+        e->src = g, e->scap = cap;
+    }
+    return &e->src[e->srcs++];
+}
+/* hash: indices + 1 into e by ID (0: empty), so finding one isn't a walk of every entry; a mixed
+ * store's catalog has some 10,000, and loading it walked them once per entry (about a second) */
+typedef struct { Entry *e; int n, cap; int *hash; int hcap; } Catalog;
+
+static uint32_t id_hash(const char *id) {
+    uint32_t h = 2166136261u;
+    for (; *id; id++) h = (h ^ (uint8_t)*id) * 16777619u;
+    return h;
+}
+
+static void hash_put(Catalog *c, int i) {
+    for (uint32_t k = id_hash(c->e[i].id) & (uint32_t)(c->hcap - 1);; k = (k + 1) & (uint32_t)(c->hcap - 1))
+        if (!c->hash[k]) { c->hash[k] = i + 1; return; }
+}
+
+/* (re)build the index for n entries: it stays at most half full */
+static void hash_build(Catalog *c) {
+    int cap = 1024;
+    while (cap < c->n * 2 + 2) cap *= 2;
+    int *h = calloc((size_t)cap, sizeof *h);
+    free(c->hash);
+    c->hash = h, c->hcap = h ? cap : 0;
+    if (h) for (int i = 0; i < c->n; i++) hash_put(c, i);
+}
 
 static Entry *cat_find(Catalog *c, const char *id) {
-    for (int i = 0; i < c->n; i++) if (!strcmp(c->e[i].id, id)) return &c->e[i];
+    if (!c->hash) {                                   /* no index (out of memory): walk them */
+        for (int i = 0; i < c->n; i++) if (!strcmp(c->e[i].id, id)) return &c->e[i];
+        return NULL;
+    }
+    for (uint32_t k = id_hash(id) & (uint32_t)(c->hcap - 1); c->hash[k]; k = (k + 1) & (uint32_t)(c->hcap - 1))
+        if (!strcmp(c->e[c->hash[k] - 1].id, id)) return &c->e[c->hash[k] - 1];
     return NULL;
 }
+
+static void cat_free(Catalog *c) {
+    for (int i = 0; i < c->n; i++) free(c->e[i].src);
+    free(c->e), free(c->hash);
+    memset(c, 0, sizeof *c);
+}
+
+static void cat_sort(Catalog *c);
 
 static Entry *cat_add(Catalog *c, const char *id) {
     Entry *e = cat_find(c, id);
@@ -184,6 +232,8 @@ static Entry *cat_add(Catalog *c, const char *id) {
     e = &c->e[c->n++];
     memset(e, 0, sizeof *e);
     snprintf(e->id, sizeof e->id, "%s", id);
+    if (!c->hash || c->n * 2 + 2 > c->hcap) hash_build(c);
+    else hash_put(c, c->n - 1);
     return e;
 }
 
@@ -200,7 +250,8 @@ static void cat_load(Catalog *c, const char *path) {
         const PjNode *ss = pj_get(x, "sources");
         for (int i = 0; i < MAX_SOURCES && pj_at(ss, i); i++) {
             const PjNode *s = pj_at(ss, i);
-            Source *d = &e->src[e->srcs++];
+            Source *d = src_add(e);
+            if (!d) break;
             snprintf(d->sha, sizeof d->sha, "%s", pj_str(pj_get(s, "sha256"), ""));
             snprintf(d->dir, sizeof d->dir, "%s", pj_str(pj_get(s, "item"), ""));
             snprintf(d->platform, sizeof d->platform, "%s", pj_str(pj_get(s, "platform"), ""));
@@ -224,6 +275,12 @@ static int src_cmp(const void *a, const void *b) {
 
 static int entry_cmp(const void *a, const void *b) { return strcmp(((const Entry *)a)->id, ((const Entry *)b)->id); }
 
+/* by ID; the index is rebuilt, as the entries have moved */
+static void cat_sort(Catalog *c) {
+    qsort(c->e, (size_t)c->n, sizeof *c->e, entry_cmp);
+    if (c->hash) hash_build(c);
+}
+
 /* A finished file over the old one in one step. Removing the old file first lost the catalog on
  * Windows when something (a virus scanner) still held the new .tmp: the rename failed after the
  * delete, leaving only catalog.json.tmp ("re2:logic/100-0 is not in the catalog"). Now a holder only
@@ -240,12 +297,14 @@ static int replace_file(const char *from, const char *to) {
 #endif
 }
 
+static volatile unsigned s_catalog_saves;
+
 static int cat_save(Catalog *c, const char *path) {
     char tmp[PE_IMP_PATH_MAX];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     FILE *f = fopen(tmp, "wb");
     if (!f) return -1;
-    qsort(c->e, (size_t)c->n, sizeof *c->e, entry_cmp);
+    cat_sort(c);
     fputs("{\n", f);
     int first = 1;
     for (int i = 0; i < c->n; i++) {
@@ -268,7 +327,9 @@ static int cat_save(Catalog *c, const char *path) {
     }
     fputs(first ? "}\n" : "\n}\n", f);
     if (fclose(f)) return -1;
-    return replace_file(tmp, path);
+    if (replace_file(tmp, path)) return -1;
+    s_catalog_saves++;                             /* lookups read it again (catalog_cached) */
+    return 0;
 }
 
 static void cat_note(Catalog *c, const char *game, const char *proposed, const char *name, uint32_t type,
@@ -285,7 +346,8 @@ static void cat_note(Catalog *c, const char *game, const char *proposed, const c
     snprintf(e->tags, sizeof e->tags, "%s", tags ? tags : "");
     for (int s = 0; s < e->srcs; s++)
         if (!strcmp(e->src[s].sha, src->sha) && !strcmp(e->src[s].dir, src->dir)) { e->src[s] = *src; return; }
-    if (e->srcs < MAX_SOURCES) e->src[e->srcs++] = *src;
+    Source *d = src_add(e);
+    if (d) *d = *src;
 }
 
 /* ---- scanning a disc image ---- */
@@ -536,7 +598,7 @@ static int scan_disc(const char *root, const char *image, const char *game, cons
                 scan_file(&cat, root, label, d, i, rd, out);
         }
     int rc = cat_save(&cat, cat_path);
-    free(cat.e);
+    cat_free(&cat);
     pe_imp_disc_close(d);
     if (rc) snprintf(out->last_error, sizeof out->last_error, "can't write %s", cat_path);
     return rc;
@@ -557,8 +619,8 @@ int pe_imp_catalog_assets(const char *root, const char *game, PeImpAsset **out) 
     Catalog cat;
     cat_load(&cat, path);
     PeImpAsset *a = calloc((size_t)(cat.n ? cat.n : 1), sizeof *a);
-    if (!a) { free(cat.e); return -1; }
-    qsort(cat.e, (size_t)cat.n, sizeof *cat.e, entry_cmp);
+    if (!a) { cat_free(&cat); return -1; }
+    cat_sort(&cat);
     for (int i = 0; i < cat.n; i++) {
         Entry *e = &cat.e[i];
         qsort(e->src, (size_t)e->srcs, sizeof *e->src, src_cmp);
@@ -573,9 +635,39 @@ int pe_imp_catalog_assets(const char *root, const char *game, PeImpAsset **out) 
         }
     }
     int n = cat.n;
-    free(cat.e);
+    cat_free(&cat);
     *out = a;
     return n;
+}
+
+/* The catalog a lookup reads, kept per thread while its file is unchanged (size, time, and no save
+ * here since). Reading it each time cost a camera change some 80 ms of parsing for a mixed store's
+ * 4 MB catalog, and a room entry several of those. */
+static _Thread_local struct {
+    char path[PE_IMP_PATH_MAX];
+    long long size, mtime;
+    unsigned saves;
+    int kept;
+    Catalog cat;
+} s_cached;
+
+static Catalog *catalog_cached(const char *path) {
+    struct stat st;
+    const int found = !stat(path, &st);
+    const long long size = found ? (long long)st.st_size : -1, mtime = found ? (long long)st.st_mtime : -1;
+    if (s_cached.kept && !strcmp(s_cached.path, path) && s_cached.size == size && s_cached.mtime == mtime &&
+        s_cached.saves == s_catalog_saves)
+        return &s_cached.cat;
+    cat_free(&s_cached.cat);
+    cat_load(&s_cached.cat, path);
+    snprintf(s_cached.path, sizeof s_cached.path, "%s", path);
+    s_cached.size = size, s_cached.mtime = mtime, s_cached.saves = s_catalog_saves, s_cached.kept = 1;
+    return &s_cached.cat;
+}
+
+void pe_imp_catalog_release(void) {
+    cat_free(&s_cached.cat);
+    s_cached.kept = 0;
 }
 
 static int catalog_lookup(const char *root, const char *asset_id, uint32_t type,
@@ -593,9 +685,7 @@ static int catalog_lookup(const char *root, const char *asset_id, uint32_t type,
         if (why && n) snprintf(why, n, "invalid catalog asset ID or path");
         return -1;
     }
-    Catalog cat;
-    cat_load(&cat, path);
-    Entry *e = cat_find(&cat, asset_id);
+    Entry *e = cat_find(catalog_cached(path), asset_id);
     int rc = -1;
     if (!e || !e->srcs) {
         if (why && n) snprintf(why, n, "%s is not in the catalog: scan its disc first", asset_id);
@@ -630,7 +720,6 @@ static int catalog_lookup(const char *root, const char *asset_id, uint32_t type,
             if ((*movie)->frame_number) break;
         }
     }
-    free(cat.e);
     return rc;
 }
 
