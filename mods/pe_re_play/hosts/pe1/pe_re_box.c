@@ -175,7 +175,8 @@ int pe_re_box_choice(void) {
 }
 
 void pe_re_box_forget(void) {
-    if (box_open()) s_box->state = 0;
+    if (box_open()) close_box();
+    s_result = -1;
     s_box = NULL, s_at = -1, s_locked = 0, s_taken = 0, s_choosing = 0;    /* a room load starts the field afresh */
 }
 

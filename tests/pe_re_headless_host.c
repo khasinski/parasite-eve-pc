@@ -25,7 +25,7 @@ static struct {
     int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
-    PeMenuAction start, next_door, jump, typewriter, give_ribbon;
+    PeMenuAction start, title, next_door, jump, typewriter, give_ribbon;
     int *scenario, *stage, *room_number;
     const ReHostProgress *progress;
     const PeRePlayApi *api;
@@ -128,11 +128,13 @@ const ReHost *re_host(void) {
 
 /* The shared mod-host services the production mod uses. The registered callbacks and save bytes
  * let the test exercise the same paths as the game menu, encounter service and companion store. */
+void pe_mod_panel_close(void) {}
 void pe_menu_begin(const char *page) { (void)page; }
 int pe_menu_top_page(const char *page, const char *desc, int order) { (void)page; (void)desc; (void)order; return 0; }
 int pe_menu_register_action(const char *sub, const char *label, const char *desc, PeMenuAction action) {
     (void)sub; (void)desc;
     if (!strcmp(label, "Start")) s.start = action;
+    if (!strcmp(label, "RE2 title menu")) s.title = action;
     if (!strcmp(label, "Go to the next door")) s.next_door = action;
     if (!strcmp(label, "Go to that room")) s.jump = action;
     if (!strcmp(label, "Go to the next typewriter")) s.typewriter = action;
@@ -187,6 +189,14 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
+    EXPECT(s.title);
+    s.title();
+    frames(1, 0);
+    EXPECT(s.busy && !s.active && !strcmp(s.text, "Resident Evil 2"));
+    s.choice = 4;  /* Continue current save */
+    s.busy = 0;
+    frames(2, 0);
+    EXPECT(s.active && !s.api->room(&room) && room.room == 0);
     EXPECT(s.api->enemy_archive && !strcmp(s.api->enemy_archive(), scenario ? "cdemd1" : "cdemd0"));
     PeTripResult trip;
     {   /* a trip from here fights the room's own creature: RE2's kind -> model table picks it */
@@ -383,6 +393,13 @@ int re_headless_smoke(const char *store, unsigned scenario) {
         controls->start();
         frames(2, 0);
         explored = s.active && !s.start && !s.progress && !s.saves && !strcmp(s.room, "re2:room/100");
+        controls->open_title();
+        frames(1, 0);
+        explored = explored && s.busy && !s.active;
+        s.choice = 2 + (int)scenario;  /* select the B scenario on the imported disc */
+        s.busy = 0;
+        frames(2, 0);
+        explored = explored && s.active && !strcmp(s.room, "re2:room/104");
         pe_re_play_shutdown();
     }
     s_exploration_only = 0;

@@ -6,6 +6,12 @@
 
 #define PAGE "Play imported games"
 
+static void open_title(void)
+{
+    pe_mod_panel_close();
+    pe_re_play_controls()->open_title();
+}
+
 static int init(void)
 {
     char store[1100];
@@ -18,6 +24,7 @@ static int init(void)
     pe_menu_register_int(0, "Scenario", "RE2: 0 Leon, 1 Claire.", controls->player, 0, 1, 1);
     pe_menu_register_toggle(0, "Foreground", "Let the room's foreground cover Aya.", controls->masks, NULL);
     pe_menu_register_int(0, "Aya's size", "Percent of an RE person's height (100: as tall as Leon).", controls->size, 50, 200, 5);
+    pe_menu_register_action(0, "RE2 title menu", "Choose a new RE2 scenario or continue the current save.", open_title);
     pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", controls->start);
     pe_menu_register_action(0, "Continue", "Back where you left this save's imported game.", controls->resume);
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", controls->stop);

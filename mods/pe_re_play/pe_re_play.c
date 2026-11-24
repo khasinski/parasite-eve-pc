@@ -38,7 +38,7 @@
 
 static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
-static int s_offers, s_pick, s_player, s_listed, s_masks = 1, s_size = 100, s_jump_stage = 1, s_jump_room;
+static int s_offers, s_game_pick, s_player, s_listed, s_masks = 1, s_size = 100, s_jump_stage = 1, s_jump_room;
 static PeReSession s_session;
 /* The progress, in the save's companion (pe_re_save.h). Enabled before the first change; kept
  * encoded while playing, and on Stop (so Continue picks it up). Loading a save that was in a game
@@ -49,6 +49,8 @@ static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERS
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_climbing;
+enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING };
+static int s_title;
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -477,9 +479,11 @@ static int keep_progress(void) {
 static void stop(void) {
     pe_re_music_stop();
     s_start_pending = 0;
+    s_title = TITLE_CLOSED;
     s_climbing = 0;
     pe_re_door_cancel();
     re_host()->forget_dialogue();
+    s_pick = PICK_NONE;
     s_typing = TYPE_NONE;
     if (s_session.game && (!s_registered || keep_progress())) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) re_host()->hide_room();
@@ -501,19 +505,18 @@ static void start_room(void) {
     show_room(0);
 }
 
-static void start(void) {
+static void start_game(const PeReGame *game, unsigned player, int scenario_b)
+{
     char why[200] = "";
     if (s_battle_paused) return;
-    list_games();
     stop();
-    if (s_pick >= s_offers) { snprintf(s_status, sizeof s_status, "Import a game first (F1 > Import)."); return; }
-    if (!s_offer[s_pick]->playable) {
-        snprintf(s_status, sizeof s_status, "%s isn't playable yet: only RE2 rooms are.", s_offer[s_pick]->title);
-        return;
-    }
     const ReHost *host = re_host();
-    if (pe_re_session_start(&s_session, s_store, s_offer[s_pick], (uint32_t)s_player, why, sizeof why)) {
+    const int error = scenario_b ?
+        pe_re_session_start_b(&s_session, s_store, game, player, why, sizeof why) :
+        pe_re_session_start(&s_session, s_store, game, player, why, sizeof why);
+    if (error) {
         snprintf(s_status, sizeof s_status, "Couldn't start: %s.", why);
+        pe_toast(s_status);
         return;
     }
     if (host->start_from_title && host->start_from_title()) {
@@ -525,6 +528,19 @@ static void start(void) {
         pe_re_session_end(&s_session);
         snprintf(s_status, sizeof s_status, "Start is available at the title or in the free field.");
     }
+}
+
+static void start(void)
+{
+    if (s_battle_paused) return;
+    list_games();
+    if (s_game_pick >= s_offers) { snprintf(s_status, sizeof s_status, "Import a game first (F1 > Import)."); return; }
+    const PeReGame *game = s_offer[s_game_pick];
+    if (!game->playable) {
+        snprintf(s_status, sizeof s_status, "%s isn't playable yet: only RE2 rooms are.", game->title);
+        return;
+    }
+    start_game(game, (unsigned)s_player, 0);
 }
 
 /* Where the save (or the last Stop) left off. */
@@ -553,10 +569,72 @@ static void resume(void) {
     show_room(1);
 }
 
+enum { TITLE_LEON_A, TITLE_CLAIRE_A, TITLE_LEON_B, TITLE_CLAIRE_B, TITLE_CONTINUE, TITLE_BACK };
+
+static void open_title(void)
+{
+    const ReHost *host = re_host();
+    if (s_battle_paused || pe_re_door_busy() || host->dialogue_busy() || s_typing != TYPE_NONE) return;
+    if (!pe_re_imported(s_store, pe_re_game_named("re2"))) {
+        pe_toast("Import Resident Evil 2 first.");
+        return;
+    }
+    stop();
+    s_resume = 0;
+    if ((!host->start_from_title || !host->start_from_title()) &&
+        host->start_ready && !host->start_ready()) {
+        pe_toast("Open the RE2 title menu from the title or the free field.");
+        return;
+    }
+    s_title = TITLE_WAIT_FIELD;
+    snprintf(s_status, sizeof s_status, "Opening the RE2 title menu...");
+}
+
+static void tick_title(void)
+{
+    const ReHost *host = re_host();
+    if (s_title == TITLE_WAIT_FIELD) {
+        if (host->native_menu_active() || (host->start_ready ? !host->start_ready() : !host->field_free())) return;
+        static const char *const options[] = {
+            "New Game: Leon A", "New Game: Claire A", "New Game: Leon B",
+            "New Game: Claire B", "Continue current save", "Back"
+        };
+        if (host->choose("Resident Evil 2", options, sizeof options / sizeof *options, TITLE_LEON_A)) {
+            s_title = TITLE_CHOOSING;
+            snprintf(s_status, sizeof s_status, "Resident Evil 2 title menu.");
+        } else {
+            s_title = TITLE_CLOSED;
+            pe_toast("The RE2 title menu could not open.");
+        }
+        return;
+    }
+
+    const int choice = host->dialogue_choice();
+    if (choice == -1 && host->dialogue_busy()) return;
+    if (choice >= TITLE_LEON_A && choice <= TITLE_CLAIRE_B) {
+        start_game(pe_re_game_named("re2"), (unsigned)choice % 2, choice >= TITLE_LEON_B);
+        return;
+    }
+    if (choice == TITLE_CONTINUE) {
+        PeReSaved saved;
+        if (!pe_re_save_decode(s_saved, &saved) && saved.game == pe_re_game_named("re2")) {
+            resume();
+            return;
+        }
+        pe_toast("No RE2 progress in the current save. Load a card in Parasite Eve first.");
+        s_title = TITLE_WAIT_FIELD;
+        return;
+    }
+    s_title = TITLE_CLOSED;
+    snprintf(s_status, sizeof s_status, "Not playing.");
+}
+
 /* The host has put this save's bytes (or zeros) in s_saved. */
 static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
+    if (s_title != TITLE_CLOSED) re_host()->forget_dialogue();
+    s_title = TITLE_CLOSED;
     pe_re_door_cancel();
     pe_re_music_stop();
     s_battle_paused = 0;
@@ -581,7 +659,7 @@ static int on_save_read(void *ctx, void *user) {
 
 static int on_new_game(void *ctx, void *user) {    /* the host has cleared the section */
     (void)ctx, (void)user;
-    if (!s_start_pending) stop();
+    if (!s_start_pending && s_title != TITLE_WAIT_FIELD) stop();
     memset(s_saved, 0, sizeof s_saved);
     s_resume = 0;
     return 0;
@@ -589,6 +667,10 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
 
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
+    if (s_title != TITLE_CLOSED) {
+        tick_title();
+        return 0;
+    }
     if (s_start_pending && (!re_host()->start_ready || re_host()->start_ready())) start_room();
     if (s_resume && !s_playing && re_host()->field_free()) resume();
     if (!s_playing) return 0;
@@ -948,13 +1030,14 @@ void pe_re_play_shutdown(void) {
 const PeRePlayControls *pe_re_play_controls(void)
 {
     static const PeRePlayControls controls = {
-        .pick = &s_pick,
+        .pick = &s_game_pick,
         .game_count = game_count,
         .game_name = game_name,
         .player = &s_player,
         .masks = &s_masks,
         .size = &s_size,
         .start = start,
+        .open_title = open_title,
         .resume = resume,
         .stop = stop,
         .placement_markers = &s_placement_markers,

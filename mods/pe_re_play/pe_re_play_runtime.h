@@ -10,6 +10,7 @@ typedef struct PeRePlayControls {
     int *masks;
     int *size;
     void (*start)(void);
+    void (*open_title)(void);
     void (*resume)(void);
     void (*stop)(void);
     int *placement_markers;
