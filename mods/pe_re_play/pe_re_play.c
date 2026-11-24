@@ -86,6 +86,8 @@ static int s_nenemies, s_room_reported;
 static int s_enemy_debug_slot = -1;
 static int s_battle_paused;
 static int s_movie_playing, s_movie_cross;
+enum { ENDING_NONE, ENDING_MOVIE, ENDING_RESULTS };
+static int s_ending;
 static int s_placement_markers;
 static int s_placement_meshes;
 static int s_placement_idle = 1;
@@ -119,7 +121,7 @@ static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
 static void advance_enemies(double x, double z, int floor);
 
-static int scene_locked(void) { return s_movie_playing || s_session.run.movie_request || pe_re_session_controls_locked(&s_session); }
+static int scene_locked(void) { return s_ending || s_movie_playing || s_session.run.movie_request || pe_re_session_controls_locked(&s_session); }
 
 /* Aya's pose while a scene has her: a scripted walk's mode, else a scripted clip from her sub bank 0,
  * which holds the walk (move 0), run (1) and idle (2) as Spl_sce04-06 play them (SPL_SCE.C); other
@@ -637,8 +639,10 @@ typedef struct {
 
 enum {
     RE2_MOVIE_OPENING_FIRST = 3,
+    RE2_MOVIE_B_ENDING = 14,
     RE2_MOVIE_A_OPENING_SECOND = 15,
-    RE2_MOVIE_B_OPENING_SECOND = 16
+    RE2_MOVIE_B_OPENING_SECOND = 16,
+    RE2_MOVIE_A_ENDING = 17
 };
 
 /* OPENING.C selects the second clip by scenario. FILECODE.H maps the clip IDs to each disc. */
@@ -661,10 +665,11 @@ static const ReMovie s_movies[] = {
     [11] = {.asset = "re2:movie/r409"},
     [12] = {.asset = "re2:movie/r700l", .leon_only = 1},
     [13] = {.asset = "re2:movie/r703l", .leon_only = 1},
-    [14] = {.asset = "re2:movie/r704l", .last_frame = 9187, .leon_only = 1},
+    [RE2_MOVIE_B_ENDING] = {.asset = "re2:movie/r704l", .claire_asset = "re2:movie/r704c", .last_frame = 9187},
     [RE2_MOVIE_A_OPENING_SECOND] = {.asset = "re2:movie/opn2ndl", .claire_asset = "re2:movie/opn2ndc"},
     [RE2_MOVIE_B_OPENING_SECOND] = {.asset = "re2:movie/opn2ndrl", .claire_asset = "re2:movie/opn2ndrc"},
-    [17] = {.asset = "re2:movie/r704l", .start_sector = 4589 * 5, .last_frame = 9247, .leon_only = 1, .silent = 1},
+    [RE2_MOVIE_A_ENDING] = {.asset = "re2:movie/r704l", .claire_asset = "re2:movie/r704c",
+                           .start_sector = 4589 * 5, .last_frame = 9247, .silent = 1},
 };
 
 static void movie_input(unsigned buttons) {
@@ -720,6 +725,7 @@ static int movie_frame(void) {
 }
 
 static void stop(void) {
+    s_ending = ENDING_NONE;
     stop_movie();
     pe_re_music_stop();
     s_start_pending = 0;
@@ -946,6 +952,7 @@ static void tick_title(void)
 static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
+    s_ending = ENDING_NONE;
     stop_movie();
     if (s_title != TITLE_CLOSED) re_host()->forget_dialogue();
     s_title = TITLE_CLOSED;
@@ -978,6 +985,49 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
     memset(s_saved, 0, sizeof s_saved);
     s_resume = 0;
     return 0;
+}
+
+/* ENDING.C selects the full B movie or the silent A excerpt. Both go to
+ * the results after playback. Keep the field scripts parked from SYS_ENDING. */
+static int tick_ending(void)
+{
+    if (!s_ending && !pe_re_flag(&s_session.progress.flags, 0, 0x0A)) return 0;
+    const ReHost *host = re_host();
+    if (!s_ending) {
+        const int scenario_b = pe_re_flag(&s_session.progress.flags, PE_RE_FG_STATUS, 1);
+        s_ending = ENDING_MOVIE;
+        if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
+        if (start_movie(scenario_b ? RE2_MOVIE_B_ENDING : RE2_MOVIE_A_ENDING)) {
+            snprintf(s_status, sizeof s_status, "Playing the RE2 ending.");
+            pe_mod_log(MOD_ID, "RE2 ending movie started for player %u scenario %c",
+                       (unsigned)s_session.player, scenario_b ? 'B' : 'A');
+            return 1;
+        }
+    }
+    if (s_ending == ENDING_MOVIE) {
+        if (tick_movie()) return 1;
+        s_ending = ENDING_RESULTS;
+        pe_re_music_stop();
+        host->forget_dialogue();
+        sync_scene_controls();
+        const char *character = s_session.player ? "Claire" : "Leon";
+        const char scenario = pe_re_flag(&s_session.progress.flags, PE_RE_FG_STATUS, 1) ? 'B' : 'A';
+        char title[48];
+        snprintf(title, sizeof title, "%s %c complete", character, scenario);
+        snprintf(s_status, sizeof s_status, "RE2 results: %s.", title);
+        pe_mod_log(MOD_ID, "%s", s_status);
+        static const char *const choices[] = {"Return to RE2 title"};
+        if (!host->choose(title, choices, 1, 0)) {
+            stop();
+            s_title = TITLE_WAIT_FIELD;
+        }
+        return 1;
+    }
+    if (host->dialogue_choice() != -1 || !host->dialogue_busy()) {
+        stop();
+        s_title = TITLE_WAIT_FIELD;
+    }
+    return 1;
 }
 
 static int on_frame(void *ctx, void *user) {
@@ -1049,7 +1099,11 @@ static int on_frame(void *ctx, void *user) {
         if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         return 0;
     }
-    if (movie_frame()) return 0;
+    if (s_ending) {
+        tick_ending();
+        return 0;
+    }
+    if (movie_frame() || tick_ending()) return 0;
     s_session.talking = re_host()->dialogue_busy;
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
         const uint16_t pad = re_host()->dialogue_busy() ? 0 : re_host()->held_buttons();
@@ -1067,12 +1121,7 @@ static int on_frame(void *ctx, void *user) {
     case PE_RE_CAMERA: break;
     default: break;
     }
-    {   /* SYS_ENDING (script bit 0x0A of System_flg): the scenario is over; its ending isn't played here */
-        static int s_ending_said;
-        const int ending = pe_re_flag(&s_session.progress.flags, 0, 0x0A);
-        if (ending && !s_ending_said) say("The end. (The game's ending would play here.)");
-        s_ending_said = ending;
-    }
+    if (tick_ending()) return 0;
     if (s_session.moved) {                       /* a cutscene walked her somewhere: she's there */
         if (s_session.floor != re_host()->player_floor()) show_room(1);   /* on another floor: the room again there */
         else {

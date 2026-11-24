@@ -25,6 +25,7 @@ static struct {
     int facing, camera, floor, active, shade, curtain, hold, backdrop;
     unsigned rooms, placements, saves;
     unsigned movie_starts, movie_stops, movie_frames;
+    int test_ending;
     unsigned movie_missing;
     int movie_enabled, movie_muted, movie_locked, movie_muted_at_room_start;
     char movie_assets[2][PE_IMP_ID_MAX];
@@ -114,7 +115,12 @@ static int start_movie(const char *asset, unsigned start_sector, unsigned last_f
     const unsigned index = s.movie_starts++;
     if (index >= sizeof s.movie_assets / sizeof *s.movie_assets) return 0;
     snprintf(s.movie_assets[index], sizeof s.movie_assets[index], "%s", asset);
-    if (s.active || (s.movie_missing & (1u << index)) || start_sector || last_frame || silent) return 0;
+    if (s.movie_missing & (1u << index)) return 0;
+    if (s.test_ending) {
+        const int scenario_b = s.test_ending == 2;
+        if (!s.active || start_sector != (scenario_b ? 0u : 4589u * 5u) ||
+            last_frame != (scenario_b ? 9187u : 9247u) || silent != !scenario_b) return 0;
+    } else if (s.active || start_sector || last_frame || silent) return 0;
     s.movie_frames = 4;
     return 1;
 }
@@ -522,6 +528,42 @@ static int test_opening(void) {
             EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, scenario_b ? "re2:room/104" : "re2:room/100"));
             EXPECT(!s.movie_muted_at_room_start);
         }
+        pe_mod_pe_re_play.shutdown();
+    }
+
+    for (unsigned ending = 0; ending < 5; ++ending) {
+        const unsigned player = ending % 2;
+        const int scenario_b = ending >= 2, movie_missing = ending == 4;
+        memset(&s, 0, sizeof s);
+        s.store = store;
+        s.movie_enabled = 1;
+        s.test_ending = scenario_b ? 2 : 1;
+        s.movie_missing = (unsigned)movie_missing;
+        EXPECT(!pe_mod_pe_re_play.init());
+        s.start();
+        frames(2, 0);
+        EXPECT(s.active && s.progress);
+        uint8_t *progress = s.progress->bytes;
+        progress[2] = (uint8_t)player;
+        progress[304 + 1] |= 1u << 2;  /* SYS_ENDING */
+        if (scenario_b) progress[336] |= 1u << 1;
+        s.save_read(NULL, NULL);
+        frames(2, 0);
+        EXPECT(s.movie_starts == 1 && s.movie_locked);
+        EXPECT(!strcmp(s.movie_assets[0], player ? "re2:movie/r704c" : "re2:movie/r704l"));
+        if (!movie_missing) {
+            EXPECT(s.movie_frames && s.movie_muted);
+            frames(player ? 8 : 1, player ? 0 : RE_HOST_CROSS);
+            EXPECT(s.movie_stops == 1);
+        }
+        frames(2, 0);
+        char results[32];
+        snprintf(results, sizeof results, "%s %c complete", player ? "Claire" : "Leon", scenario_b ? 'B' : 'A');
+        EXPECT(s.busy && !strcmp(s.text, results));
+        s.choice = 0;
+        s.busy = 0;
+        frames(2, 0);
+        EXPECT(!s.active && s.busy && !strcmp(s.text, "Resident Evil 2"));
         pe_mod_pe_re_play.shutdown();
     }
     return 0;
