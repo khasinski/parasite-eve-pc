@@ -400,12 +400,19 @@ static void test_kendo_zombies(const char *store) {
     CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/101-0", &room, NULL, 0));
     if (!room) return;
     pe_re_scd_run(room, &flags, NULL, &run);
+    /* The opening setup parks all four window actors outside the shot. */
+    for (int slot = 1; slot <= 4; slot++) {
+        const int16_t *work = run.works[2 + slot];
+        CHECK(work[0] && work[PE_RE_MEMBER_ID] == 0x1f);
+        CHECK(work[PE_RE_MEMBER_POS_X] == -32000);
+    }
     pe_re_scd_exec(room, &run, 2, 10);  /* the shop's window event */
-    int advanced = 0, fed = 0, released = 0;
+    int entered = 0, advanced = 0, fed = 0, released = 0;
     int last_x = 0, last_z = 0;
     for (int tick = 0; tick < 450; tick++) {
         pe_re_scd_tick(room, &flags, NULL, &run);
         const int16_t *work = run.works[6];  /* first zombie that attacks Kendo */
+        if (run.camera == 9 && work[PE_RE_MEMBER_POS_X] > -30000) entered = 1;
         if (work[PE_RE_MEMBER_ROUTINE0] == 8 && run.scene[4].active && run.scene[4].move == 10) {
             if (run.scene[4].elapsed && (last_x != work[PE_RE_MEMBER_POS_X] || last_z != work[PE_RE_MEMBER_POS_Z]))
                 advanced = 1;
@@ -414,7 +421,7 @@ static void test_kendo_zombies(const char *store) {
         if (advanced && run.scene[4].active && run.scene[4].move == 21) fed = 1;
         if (fed && work[PE_RE_MEMBER_ROUTINE0] == 1 && !(work[PE_RE_MEMBER_TYPE] & 0x4000)) released = 1;
     }
-    CHECK(advanced && fed && released);
+    CHECK(entered && advanced && fed && released);
     free(room);
 }
 

@@ -258,6 +258,74 @@ static void disc(const char *label, const char *cue, const char *game, const PeI
     assert(masked_pixels && color_error < 15 * 3 * masked_pixels);
 }
 
+/* Decode existing imports so a mask audit needs no disc scan or game window. */
+static unsigned audit_room_masks(const char *store, const char *id, unsigned *views, unsigned *unmasked, unsigned *placeholders) {
+    PeImpImageSet *set = NULL;
+    char why[160];
+    if (pe_imp_catalog_imageset(store, id, &set, why, sizeof why)) {
+        fprintf(stderr, "%s: %s\n", id, why);
+        return 1;
+    }
+    static uint16_t depth[320 * 240];
+    unsigned failures = 0;
+    for (uint32_t camera = 0; camera < set->count; camera++) {
+        PeImpRoomView view;
+        const int rc = pe_imp_room_view(set, camera, &view);
+        if (!rc && !view.game && !view.projection && !view.mask_count) {
+            ++*placeholders;
+            continue;
+        }
+        ++*views;
+        if (rc || view.game != PE_IMP_RE2 || !view.projection) {
+            fprintf(stderr, "%s camera %u: invalid camera data\n", id, camera);
+            failures++;
+            continue;
+        }
+        if (!view.mask_count) {
+            ++*unmasked;
+            continue;
+        }
+        if (pe_imp_room_foreground_depth(set, camera, &view, depth)) {
+            fprintf(stderr, "%s camera %u: foreground could not be decoded\n", id, camera);
+            failures++;
+            continue;
+        }
+        unsigned covered = 0;
+        uint16_t nearest = UINT16_MAX, farthest = 0;
+        for (unsigned i = 0; i < sizeof depth / sizeof *depth; i++) {
+            if (depth[i] == UINT16_MAX) continue;
+            covered++;
+            if (depth[i] < nearest) nearest = depth[i];
+            if (depth[i] > farthest) farthest = depth[i];
+        }
+        if (!covered) {
+            fprintf(stderr, "%s camera %u: empty foreground\n", id, camera);
+            failures++;
+        }
+        if (!strcmp(id, "re2:room/101"))
+            printf("Kendo camera %u: %u foreground pixels, depth %u..%u\n", camera, covered, nearest, farthest);
+    }
+    free(set);
+    return failures;
+}
+
+static unsigned audit_re2_masks(const char *store) {
+    unsigned views = 0, unmasked = 0, placeholders = 0, failures = 0;
+    if (!getenv("PE_TEST_RE2_MASK_AUDIT")) {
+        failures = audit_room_masks(store, "re2:room/101", &views, &unmasked, &placeholders);
+    } else {
+        PeImpAsset *assets = NULL;
+        const int count = pe_imp_catalog_assets(store, "re2", &assets);
+        for (int i = 0; i < count; i++)
+            if (!strncmp(assets[i].id, "re2:room/", 9))
+                failures += audit_room_masks(store, assets[i].id, &views, &unmasked, &placeholders);
+        free(assets);
+    }
+    printf("Imported RE2 mask audit: %u cameras, %u without mask records, %u unused picture entries, %u issues\n",
+           views, unmasked, placeholders, failures);
+    return failures || !views || views == unmasked;
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
@@ -274,6 +342,8 @@ int main(void) {
         if (cue && *cue) disc(k_games[g].label, cue, k_games[g].game, k_games[g].reader);
         else printf("%s not set: %s rooms skipped\n", k_games[g].env, k_games[g].label);
     }
+    const char *store = getenv("PE_TEST_RE2_STORE");
+    if (store && *store && audit_re2_masks(store)) return 1;
     printf("MDEC passed\n");
     return 0;
 }
