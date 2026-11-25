@@ -2,6 +2,7 @@
 #ifndef PE_ENEMY_BATTLE_H
 #define PE_ENEMY_BATTLE_H
 #include <stddef.h>
+#include <stdint.h>
 #include "../../pe_enemy_pack.h"
 
 #define PE_ENEMY_PACKS_MAX 512
@@ -20,6 +21,18 @@ void pe_enemy_battle_begin_roster(void);
 /* Roster enemy i starts dx, dz PE field units from Aya (where it stood in an imported room);
  * after begin_roster, before the battle. */
 void pe_enemy_battle_set_start(int i, double dx, double dz);
+/* Roster enemy i stands for this room slot (an imported room's battle, reported back by slot). */
+void pe_enemy_battle_set_room_slot(int i, int slot);
+/* A running battle takes in one more of the room's enemies: its pack (folder under the enemy packs),
+ * at x, z (16.16 field units). The foe's index, or -1 (no battle, no place, no VRAM). */
+int pe_enemy_battle_join(const char *pack, int room_slot, int x, int z);
+typedef struct { int room_slot; double x, z; int alive; } PeEnemyBattleFoe;
+/* The battle's foes that stand for room enemies (summons left out): slot, field position, alive. */
+int pe_enemy_battle_foe_slots(PeEnemyBattleFoe *out, int max);
+/* D10: the targets in this order of room slots (on screen first, nearest first), others after. */
+void pe_enemy_battle_order_targets(const uint8_t *order, int n);
+/* The chosen target's position (16.16) while the player picks one: 0, or -1. */
+int pe_enemy_battle_chosen_target(int *x, int *z);
 int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move, int follow_forms);
 void pe_enemy_battle_arm_summon(int parent, const char *offspring, unsigned move);
 void pe_enemy_battle_arm_canister(void);

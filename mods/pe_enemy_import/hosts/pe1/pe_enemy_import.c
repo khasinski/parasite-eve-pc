@@ -135,6 +135,9 @@ static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
 static int s_street_encounters = 1;
 static int s_rpd_encounters = 1;
 static int s_re2_encounters = 1;
+/* D18: after an escape, its survivors can't start a fight for this long or until Aya is this far
+ * from them, halved on each further escape from the same ones. Tuned in play (F1 > Fights). */
+static int s_grace_seconds = 3, s_grace_distance = 4000, s_grace_halve = 1;
 enum { PE_MANUAL_FIGHT, PE_PROXIMITY_FIGHT, PE_SCRIPTED_FIGHT };
 static struct {
     int latched, floor, won, slot, retry, effect;
@@ -146,6 +149,8 @@ static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
     int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview, automatic;
     int here, move_lock;     /* started in place; the field's movement lock bit 1 before it */
+    int directed;            /* RE play's battle director runs this battle (docs/RE_PLAY_BATTLES.md) */
+    unsigned dead_slots;     /* room slots whose foes died in it, reported to the director */
     int anchored;            /* Aya's native position moved off the host room's map (D14) */
     unsigned host_token;     /* the host room when the battle started: it must not change (I5) */
     int room_pos_known;      /* her room position at the encounter (RE play can't say once paused) */
@@ -445,6 +450,93 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
     return 1;
 }
 
+static int pe_director(const PeRePlayApi *api) {
+    return api && api->struct_size >= offsetof(PeRePlayApi, battle_point) + sizeof api->battle_point &&
+           api->battle_begin && api->battle_step && api->battle_point;
+}
+
+/* The packs the battle began with, by asset: a joiner of the same kind fights with the same one. */
+static struct { char asset[PE_IMP_ID_MAX], pack[64]; } s_battle_packs[PE_TRIP_FOES_MAX];
+static int s_battle_pack_count;
+
+/* The pack a joining room enemy fights with: its kind's pack from the battle's start, else the one
+ * its asset names (the room's archive variant first, as the encounter chooses). No build mid-battle:
+ * a pack that isn't there refuses the join. */
+static int pe_pack_for(const PeRePlayApi *api, const PeReEnemyPlacement *e, char pack[64]) {
+    char asset[PE_IMP_ID_MAX], variant[PE_IMP_ID_MAX];
+    if (pe_imp_enemy_kind_asset("re2", e->kind, asset, sizeof asset)) return 0;
+    for (int i = 0; i < s_battle_pack_count; i++)
+        if (!strcmp(s_battle_packs[i].asset, asset)) { snprintf(pack, 64, "%s", s_battle_packs[i].pack); return 1; }
+    const char *archive = api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive ?
+                          api->enemy_archive() : NULL;
+    if (archive && snprintf(variant, sizeof variant, "%s-%s", asset, archive) < (int)sizeof variant &&
+        !pe_enemy_pack_name(variant, pack, 64)) return 1;
+    return !pe_enemy_pack_name(asset, pack, 64);
+}
+
+/* D19's cue over a joining enemy: a mark for a second (the stage has marks 1..3 for them) */
+#define PE_CUES 3
+#define PE_CUE_FRAMES 60
+static struct { int slot, frames; } s_cue[PE_CUES];
+static int s_cue_next;
+
+static int pe_marks(const PeRePlayApi *api) {
+    return api->struct_size >= offsetof(PeRePlayApi, battle_mark) + sizeof api->battle_mark && api->battle_mark;
+}
+
+/* One battle frame of a directed battle: the foes' room positions and deaths to the director, its
+ * step (pursuit while the clock runs, who comes into view), and the joiners into the battle. */
+static void pe_direct_battle(const PeRePlayApi *api) {
+    FieldActor *aya = g_PlayerEntity;
+    double ax, az;
+    if (!api || !aya || api->battle_point(1, aya->pos_x / 65536.0, aya->pos_z / 65536.0, &ax, &az)) return;
+    PeEnemyBattleFoe foes[PE_TRIP_FOES_MAX];
+    const int nf = pe_enemy_battle_foe_slots(foes, PE_TRIP_FOES_MAX);
+    for (int i = 0; i < nf; i++) {
+        const unsigned slot = (unsigned)foes[i].room_slot;
+        if (slot >= 32) continue;
+        if (foes[i].alive) {
+            double rx, rz;
+            if (!api->battle_point(1, foes[i].x, foes[i].z, &rx, &rz)) api->battle_foe_moved((uint8_t)slot, rx, rz);
+        } else if (!(s.dead_slots & (1u << slot))) {
+            s.dead_slots |= 1u << slot;
+            api->battle_foe_died((uint8_t)slot);
+        }
+    }
+    const int time_runs = g_BattleModeState == 0 && !(g_GameStateFlags & (4 | 0x100));
+    PeReEnemyPlacement joins[PE_TRIP_FOES_MAX];
+    const int nj = api->battle_step(ax, az, time_runs, joins, PE_TRIP_FOES_MAX);
+    for (int i = 0; i < nj; i++) {
+        char pack[64];
+        double hx, hz;
+        const int got = pe_pack_for(api, &joins[i], pack), pt = api->battle_point(0, joins[i].x, joins[i].z, &hx, &hz);
+        if (!got || pt) continue;
+        if (pe_enemy_battle_join(pack, joins[i].slot, (int)lround(hx * 65536.0), (int)lround(hz * 65536.0)) < 0)
+            continue;
+        if (s_trip.count < PE_TRIP_FOES_MAX) s_trip.slot[s_trip.count++] = joins[i].slot;
+        s_cue[s_cue_next].slot = joins[i].slot, s_cue[s_cue_next].frames = PE_CUE_FRAMES;   /* D19 */
+        s_cue_next = (s_cue_next + 1) % PE_CUES;
+    }
+    /* D10: on screen first, nearest first; the chosen one's arrow while it is off the picture */
+    uint8_t order[PE_TRIP_FOES_MAX];
+    if (api->battle_target_order)
+        pe_enemy_battle_order_targets(order, api->battle_target_order(order, PE_TRIP_FOES_MAX));
+    if (!pe_marks(api)) return;
+    int tx, tz;
+    if (!pe_enemy_battle_chosen_target(&tx, &tz)) api->battle_mark(0, PE_RE_MARK_TARGET, tx / 65536.0, tz / 65536.0);
+    else api->battle_mark(0, 0, 0, 0);
+    for (int c = 0; c < PE_CUES; c++) {
+        int shown = 0;
+        if (s_cue[c].frames > 0) {
+            s_cue[c].frames--;
+            for (int i = 0; i < nf && !shown; i++)
+                if (foes[i].room_slot == s_cue[c].slot && foes[i].alive)
+                    api->battle_mark(1 + c, PE_RE_MARK_CUE, foes[i].x, foes[i].z), shown = 1;
+        }
+        if (!shown) api->battle_mark(1 + c, 0, 0, 0);
+    }
+}
+
 static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
@@ -455,10 +547,26 @@ static int pe_room_creature(const PeRePlayApi *api) {
         if (api->struct_size < offsetof(PeRePlayApi, encounter_reachable) || !api->encounter_position ||
             room.stage != s_approach.stage || room.room != s_approach.room ||
             api->encounter_position(&x, &z, &floor)) return 0;
+        const PeReEnemyPlacement *all = room.enemies;
+        const int all_count = room.count;
         room.count = s.automatic == PE_SCRIPTED_FIGHT ? pe_trip_select_boss(api, &room, close) :
                      pe_trip_select_approach(api, &room, x, z, floor, close);
         room.enemies = close;
         if (!room.count) return 0;
+        /* an approach's battle: RE play's director picks who is in it (the one that reached her and
+         * the others in view) and runs it from here (docs/RE_PLAY_BATTLES.md, phases 4-5) */
+        s.directed = 0, s.dead_slots = 0;
+        memset(s_cue, 0, sizeof s_cue);
+        if (s.automatic == PE_PROXIMITY_FIGHT && pe_director(api)) {
+            uint8_t slots[PE_TRIP_FOES_MAX];
+            if (api->battle_settings) api->battle_settings(s_grace_seconds, s_grace_distance, s_grace_halve);
+            const int n = api->battle_begin(close[0].slot, slots, PE_TRIP_FOES_MAX);
+            int kept = 0;
+            for (int i = 0; i < n; i++)
+                for (int k = 0; k < all_count; k++)
+                    if (all[k].slot == slots[i]) { close[kept++] = all[k]; break; }
+            if (kept) room.count = kept, s.directed = 1;
+        }
         at_aya = 1;
         s.room_x = x, s.room_z = z, s.room_pos_known = 1;
     }
@@ -466,6 +574,12 @@ static int pe_room_creature(const PeRePlayApi *api) {
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    for (int i = 0; i < count; ++i) pe_enemy_battle_set_room_slot(i, s_trip.slot[i]);
+    s_battle_pack_count = 0;
+    for (int i = 0; i < packs.count && i < PE_TRIP_FOES_MAX; i++, s_battle_pack_count++) {
+        snprintf(s_battle_packs[i].asset, sizeof s_battle_packs[i].asset, "%s", packs.assets[i]);
+        snprintf(s_battle_packs[i].pack, sizeof s_battle_packs[i].pack, "%s", packs.packs[i]);
+    }
     /* the battle opens with each enemy where it stood beside Aya in the room, as the battle's
      * backdrop draws the room around her */
     const double units = at_aya && api->struct_size >= offsetof(PeRePlayApi, units_per_pe_unit) +
@@ -601,11 +715,27 @@ static void pe_step(void) {
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
         if (s.automatic && s.live_enemies) {
-            s_approach.retry = 180;
+            if (!s.directed) s_approach.retry = 180;   /* a directed battle's survivors get their own grace (D18) */
             s_approach.latched = 0;
         }
         if (s.automatic == PE_PROXIMITY_FIGHT) s_approach.won = !s.live_enemies;
-        pe_trip_defeated(&s_trip, s.automatic || !s.live_enemies ? pe_enemy_battle_defeated_mask() : 0);
+        if (s.directed) {
+            const PeRePlayApi *api = pe_imported_room_api();
+            PeEnemyBattleFoe foes[PE_TRIP_FOES_MAX];
+            const int nf = pe_enemy_battle_foe_slots(foes, PE_TRIP_FOES_MAX);
+            for (int i = 0; i < nf; i++)
+                if (!foes[i].alive && (unsigned)foes[i].room_slot < 32) s.dead_slots |= 1u << foes[i].room_slot;
+            unsigned mask = 0;
+            int beaten = 0;
+            for (int t = 0; t < s_trip.count; t++)
+                if (s.dead_slots & (1u << s_trip.slot[t])) mask |= 1u << t, beaten++;
+            pe_trip_defeated(&s_trip, mask);
+            if (api && api->battle_end) api->battle_end(s.live_enemies > 0);
+            pe_mod_log(MOD_ID, "battle: end %s, %d of %d in it beaten", s.live_enemies ? "escaped" : "won",
+                       beaten, s_trip.count);
+        } else {
+            pe_trip_defeated(&s_trip, s.automatic || !s.live_enemies ? pe_enemy_battle_defeated_mask() : 0);
+        }
         s_trip.canister_detonated = s.automatic == PE_SCRIPTED_FIGHT && s_approach.effect == PE_RE_BOSS_CANISTER &&
                                     pe_enemy_battle_canister_detonated();
         s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
@@ -663,6 +793,8 @@ static void pe_check_approach(void) {
     if (!scripted && api->struct_size >= sizeof *api && api->advance_enemies)
         api->advance_enemies(x, z, floor);
     if (!scripted && !pe_trip_select_approach(api, &room, x, z, floor, close)) return;
+    if (!scripted && pe_director(api) && api->battle_encounter_allowed_for &&
+        !api->battle_encounter_allowed_for(close[0].slot)) return;   /* that one escaped her moments ago (D18) */
     const int effect = scripted && api->struct_size >= offsetof(PeRePlayApi, defeated_by_canister) && api->prepare_boss ?
         api->prepare_boss(close[0].slot) : PE_RE_BOSS_STANDARD;
     if (effect == PE_RE_BOSS_WAIT) return;
@@ -694,6 +826,7 @@ static int pe_on_frame(void *ctx, void *user) {
 static int pe_on_battle(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (s.state == PE_FIGHT) {
+        if (s.directed && pe_enemy_battle_joined()) pe_direct_battle(pe_imported_room_api());
         int live = pe_live_enemies();
         if (live) s.saw_enemies = 1;
         if (s.saw_enemies) s.live_enemies = live;
@@ -965,6 +1098,15 @@ static int enemy_import_init(void) {
                             &s_rpd_encounters, NULL);
     pe_menu_register_toggle(0, "RE2 other encounters", "Enable encounters in the rest of RE2, including supported story fights.",
                             &s_re2_encounters, NULL);
+    pe_menu_register_int(0, "Escape grace (seconds)",
+                         "After an escape, the enemies left can't start a fight again for this long.",
+                         &s_grace_seconds, 0, 30, 1);
+    pe_menu_register_int(0, "Escape grace distance",
+                         "Or until Aya is this far from them (room units), whichever comes first.",
+                         &s_grace_distance, 0, 20000, 500);
+    pe_menu_register_toggle(0, "Halve grace on repeat escapes",
+                            "Each further escape from the same enemies halves their grace.",
+                            &s_grace_halve, NULL);
     pe_menu_register_action(0, "Start fight",
                             "Takes Aya to the fight (once the panel closes) and back afterwards. The story "
                             "is set to the fight's point for the trip.",

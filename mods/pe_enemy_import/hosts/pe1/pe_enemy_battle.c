@@ -58,6 +58,7 @@
 #include "pe1/gte_types.h"
 #include "pe1/player_entity.h"
 #include "pe1/psyq_gpu.h"
+#include "pe1/psyq_tim.h"
 #include "pe1/render_camera.h"
 #include "pe1/render_object.h"
 #include "pe1/render_packets.h"
@@ -107,6 +108,7 @@ typedef struct {
     int drawn_frames, tris, hits, damage_done, attacks_started;
     int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
+    int room_slot;                   /* the imported room's enemy slot it stands for; -1: a summon */
 } PeFoe;
 
 static struct { char folder[64], name[32]; } s_list[PE_ENEMY_PACKS_MAX];
@@ -318,11 +320,16 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
 
 /* Where each roster enemy stood beside Aya in the imported room (PE field units from her), so
  * the battle opens with them there instead of in a row ahead of her. */
-static struct { int set; double dx, dz; } s_start[PE_FOES_MAX];
+static struct { int set; double dx, dz; int slot, has_slot; } s_start[PE_FOES_MAX];
 
 void pe_enemy_battle_set_start(int i, double dx, double dz) {
     if (i < 0 || i >= PE_FOES_MAX) return;
     s_start[i].set = 1, s_start[i].dx = dx, s_start[i].dz = dz;
+}
+
+void pe_enemy_battle_set_room_slot(int i, int slot) {
+    if (i < 0 || i >= PE_FOES_MAX) return;
+    s_start[i].slot = slot, s_start[i].has_slot = 1;
 }
 
 void pe_enemy_battle_begin_roster(void) {
@@ -630,6 +637,7 @@ static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int loop, in
     core->effect = &core->records[0];
     core->effect->state = 0;
     memset(f, 0, sizeof *f);
+    f->room_slot = -1;
     f->actor = a;
     f->resource = resource;
     f->serial = a->field_sfx_id;
@@ -798,14 +806,17 @@ static void pe_mark_words(const u32 *w, int n, u32 *tpage) {
     }
 }
 
-/* Stage 1 of the room picture hook: the frame is linked, from entry 4095 (drawn first) down. */
+/* Stage 1 of the room picture hook: the frame is linked, from entry 4095 (drawn first) down. Looked at
+ * through the opening, and every fourth frame of the battle after it: an enemy that joins later
+ * (docs/RE_PLAY_BATTLES.md, D6) keeps out of what the battle itself reads (G5). */
 static int pe_on_background(void *ctx, void *user) {
+    static unsigned s_tick;
     const PeHookFieldBackground *b = (const PeHookFieldBackground *)ctx;
     const RenderNativeTag *p;
     u32 tpage = 0, words[256];
     int guard = 0;
     (void)user;
-    if (b->stage != 1 || !s.active || s.joined || !b->ordering) return 0;
+    if (b->stage != 1 || !s.active || !b->ordering || (s.joined && (s_tick++ & 3))) return 0;
     for (p = (const RenderNativeTag *)b->ordering + 4095; p && guard < 1000000; ++guard) {
         const int n = (int)p->length;
         if (n > 0 && n <= 256) {
@@ -852,7 +863,34 @@ static void pe_room_vram(void) {
                         api->vram_reserved ? api->vram_reserved(s_room_rects, PE_ROOM_RECTS_MAX) : 0;
 }
 
+/* What the battle uploads while it runs (G5): its images keep their places, whether or not a frame
+ * drew them yet. */
+#define PE_BATTLE_UPLOADS_MAX 32
+static RECT s_battle_uploads[PE_BATTLE_UPLOADS_MAX];
+static int s_battle_upload_count;
+
+static int pe_on_tim_upload(void *ctx, void *user) {
+    const TimFile *tim = ctx;
+    (void)user;
+    if (!s.active || !tim) return 0;
+    const TimBlock *block = &tim->first_block;
+    for (int k = 0; k < ((tim->flags & 8) ? 2 : 1); k++) {
+        const RECT r = block->header.rect;
+        int known = 0;
+        for (int i = 0; i < s_battle_upload_count && !known; i++)
+            known = !memcmp(&s_battle_uploads[i], &r, sizeof r);
+        if (!known && s_battle_upload_count < PE_BATTLE_UPLOADS_MAX && r.w > 0 && r.h > 0)
+            s_battle_uploads[s_battle_upload_count++] = r;
+        block = (const TimBlock *)&block->bytes[block->header.length];
+    }
+    return 0;
+}
+
 static int pe_vram_reserved(int x, int y, int w, int h) {
+    for (int i = 0; i < s_battle_upload_count; i++) {
+        const RECT *r = &s_battle_uploads[i];
+        if (pe_overlap(x, y, w, h, r->x, r->y, r->w, r->h)) return 1;
+    }
     for (int i = 0; i < s_room_rect_count; i++) {
         const int *r = &s_room_rects[i * 4];
         if (pe_overlap(x, y, w, h, r[0], r[1], r[2], r[3])) return 1;
@@ -954,6 +992,7 @@ static void pe_join(int early) {
         if (s_start[i].set)
             fx = aya->pos_x + (int)(s_start[i].dx * 65536.0), fz = aya->pos_z + (int)(s_start[i].dz * 65536.0);
         if (!pe_spawn(resource, s_entrance[i].pose, s_entrance[i].wake, s_entrance[i].loop, fx, y, fz)) break;
+        if (s_start[i].has_slot) s.foe[s.foes - 1].room_slot = s_start[i].slot;
         if (!resource->uploaded) pe_vram(resource, 0);
     }
     s.placed_foes = s.foes;
@@ -968,6 +1007,7 @@ static void pe_begin(void) {
     memset(&s, 0, sizeof s);
     memset(s_used, 0, sizeof s_used);
     s_used_frames = 0;
+    s_battle_upload_count = 0;
     s.active = 1;
     s.canister_exposed = s_canister_armed;
     if (s_here_direct) {        /* no room enemies to take their places and start the clock: now */
@@ -1510,6 +1550,99 @@ void pe_enemy_battle_init(void) {
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_ACTOR_RENDER, pe_on_render, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, pe_on_background, NULL, PE_PRIORITY_LATE, MOD_ID);
+    pe_hook_add(PE_HOOK_TIM_UPLOAD, pe_on_tim_upload, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_HP_LOSS, pe_on_hp_loss, NULL, PE_PRIORITY_EARLY, MOD_ID);
     pe_hook_add(PE_HOOK_ENEMY_DAMAGE, pe_on_enemy_damage, NULL, PE_PRIORITY_LATE + 50, MOD_ID);
+}
+
+/* An imported room's enemy joins the running battle (docs/RE_PLAY_BATTLES.md, D6, D19): its pack
+ * (shared with any of the same kind already in it), its place in VRAM, and an actor at x, z (16.16)
+ * walking in from where it stood, its attack clock empty. The foe's index, or -1. */
+int pe_enemy_battle_join(const char *pack, int room_slot, int x, int z) {
+    char dir[1200];
+    FieldActor *aya = g_PlayerEntity;
+    if (!s.active || !s.joined || !aya || s.foes >= PE_FOES_MAX) return -1;
+    const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
+    if (written < 0 || (size_t)written >= sizeof dir) return -1;
+    PeBattlePack *resource = pe_load(dir);
+    if (!resource) return -1;
+    if (!resource->uploaded && !pe_place(resource)) {
+        pe_mod_log(MOD_ID, "battle: no VRAM left for %s to join", resource->pack.name);
+        return -1;
+    }
+    if (!pe_spawn(resource, -1, -1, 0, x, aya->pos_y, z)) return -1;
+    if (!resource->uploaded) pe_vram(resource, 0);
+    PeFoe *f = &s.foe[s.foes - 1];
+    f->room_slot = room_slot;
+    pe_mod_log(MOD_ID, "battle: room slot %d (%s) joins at %d,%d", room_slot, resource->pack.name, x >> 16, z >> 16);
+    return s.foes - 1;
+}
+
+int pe_enemy_battle_foe_slots(PeEnemyBattleFoe *out, int max) {
+    int n = 0;
+    for (int i = 0; i < s.foes && n < max; i++) {
+        const PeFoe *f = &s.foe[i];
+        if (f->room_slot < 0 || !f->actor) continue;
+        const EnemyCombatant *core = pe_core(f);
+        out[n].room_slot = f->room_slot;
+        out[n].x = f->actor->pos_x / 65536.0, out[n].z = f->actor->pos_z / 65536.0;
+        out[n].alive = !f->dead && core && core->hpAlive > 0;
+        n++;
+    }
+    return n;
+}
+
+/* D10: the battle's targets in the director's order (on screen first, nearest first; `order` holds room
+ * slots), the rest after them as PE sorted them. A list PE has just built starts on the first; one already
+ * shown keeps the target the player has chosen. */
+void pe_enemy_battle_order_targets(const uint8_t *order, int n) {
+    static BattleEntity *s_written[BATTLE_TARGET_CAPACITY];
+    static int s_written_n;
+    const int count = g_BattleTargetCount;
+    if (!s.active || count < 2 || count > BATTLE_TARGET_CAPACITY) return;
+    int fresh = count != s_written_n;
+    for (int i = 0; i < count && !fresh; i++) fresh = g_BattleTargetList[i].actor != s_written[i];
+    BattleEntity *const chosen = g_BattleTargetList[g_BattleTargetIndex].actor;
+    int rank[BATTLE_TARGET_CAPACITY];
+    for (int i = 0; i < count; i++) {
+        rank[i] = n + i;
+        for (int f = 0; f < s.foes; f++) {
+            if ((BattleEntity *)s.foe[f].actor != g_BattleTargetList[i].actor || s.foe[f].room_slot < 0) continue;
+            for (int k = 0; k < n; k++)
+                if (order[k] == s.foe[f].room_slot) { rank[i] = k; break; }
+            break;
+        }
+    }
+    for (int i = 1; i < count; i++)                    /* stable: ties keep PE's nearest-first */
+        for (int j = i; j > 0 && rank[j] < rank[j - 1]; j--) {
+            const BattleTarget t = g_BattleTargetList[j];
+            const int r = rank[j];
+            g_BattleTargetList[j] = g_BattleTargetList[j - 1], rank[j] = rank[j - 1];
+            g_BattleTargetList[j - 1] = t, rank[j - 1] = r;
+        }
+    if (fresh) {
+        char line[96];
+        int at = 0;
+        g_BattleTargetIndex = 0;
+        for (int i = 0; i < count && at < (int)sizeof line - 8; i++)
+            at += snprintf(line + at, sizeof line - at, " %d", rank[i] < n ? order[rank[i]] : -1);
+        static char s_last[96];
+        if (strcmp(line, s_last)) pe_mod_log(MOD_ID, "battle: targets in order (room slots):%s", line);
+        snprintf(s_last, sizeof s_last, "%s", line);
+    }
+    else
+        for (int i = 0; i < count; i++)
+            if (g_BattleTargetList[i].actor == chosen) { g_BattleTargetIndex = (s8)i; break; }
+    for (int i = 0; i < count; i++) s_written[i] = g_BattleTargetList[i].actor;
+    s_written_n = count;
+}
+
+/* The chosen target's position (16.16), for its marker: 0, or -1 with no target shown. */
+int pe_enemy_battle_chosen_target(int *x, int *z) {
+    if (!s.active || g_BattleModeState == 0 || g_BattleTargetCount <= 0 ||
+        g_BattleTargetIndex < 0 || g_BattleTargetIndex >= g_BattleTargetCount) return -1;
+    const BattleEntity *a = g_BattleTargetList[g_BattleTargetIndex].actor;
+    if (!a) return -1;
+    *x = ((const FieldActor *)a)->pos_x, *z = ((const FieldActor *)a)->pos_z;
+    return 0;
 }

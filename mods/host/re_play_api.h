@@ -102,6 +102,23 @@ typedef struct PeRePlayApi {
     /* Optional. The VRAM the room's drawing uses now, as (x, y, w, h) rectangles into `out` (at most
      * `max`): a battle's own textures keep out of it (G2). Returns how many, 0 when there's none. */
     int (*vram_reserved)(int *out, int max);
+    /* Optional: the battle director (docs/RE_PLAY_BATTLES.md, layer 2), owned by RE play. The
+     * adapter drives it; RE play steps its grace in the field. Slots are the room's enemy slots. */
+    int (*battle_begin)(uint8_t lead_slot, uint8_t *slots, int max);         /* first roster; count, or -1 */
+    int (*battle_step)(double aya_x, double aya_z, int time_runs, PeReEnemyPlacement *joins, int max);  /* new joiners */
+    void (*battle_foe_moved)(uint8_t slot, double x, double z);              /* room units */
+    void (*battle_foe_died)(uint8_t slot);
+    void (*battle_end)(int escaped);
+    int (*battle_target_order)(uint8_t *slots, int max);                    /* on screen first, nearest first */
+    int (*battle_encounter_allowed_for)(uint8_t slot);                      /* 0 while its grace runs (D18) */
+    void (*battle_settings)(double grace_seconds, double grace_distance, int halve_on_repeat);
+    /* host <-> room positions through the battle backdrop's own mapping (0, or -1 with no battle) */
+    int (*battle_point)(int to_room, double x, double z, double *out_x, double *out_z);
+    /* a mark in the battle at a host position (D10's off-screen target, D19's joining cue); kind 0 clears */
+    void (*battle_mark)(int id, int kind, double x, double z);
 } PeRePlayApi;
+
+#define PE_RE_MARK_TARGET 1
+#define PE_RE_MARK_CUE 2
 
 #endif

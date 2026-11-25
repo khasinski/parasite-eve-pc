@@ -50,6 +50,15 @@ double pe_re_stage_scale(void);
 int pe_re_stage_battle_camera(int camera);
 /* The VRAM the room's drawing uses: (x, y, w, h) rectangles into out, at most max; returns how many. */
 int pe_re_stage_vram_reserved(int *out, int max);
+/* In battle: host <-> room positions by the backdrop's mapping. 0, or -1 with no backdrop. */
+int pe_re_stage_battle_point(int to_room, double x, double z, double *out_x, double *out_z);
+/* In battle: mark id (0 .. PE_RE_STAGE_MARKS - 1) of kind PE_RE_MARK_* at a host position; 0 clears it. */
+#define PE_RE_STAGE_MARKS 4
+#ifndef PE_RE_MARK_TARGET
+#define PE_RE_MARK_TARGET 1   /* the chosen target: an edge arrow while it is off the picture (D10) */
+#define PE_RE_MARK_CUE 2      /* a joining enemy (D19) */
+#endif
+void pe_re_stage_battle_mark(int id, int kind, double x, double z);
 int pe_re_stage_in_view(double x, double y, double z);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned last_frame, int silent);

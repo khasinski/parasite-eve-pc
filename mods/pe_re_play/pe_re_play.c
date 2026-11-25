@@ -30,6 +30,7 @@
 #include "pe_re_door.h"
 #include "pe_re_music.h"
 #include "pe_re_save.h"
+#include "pe_re_battle.h"
 #include "pe_re_session.h"
 #include "re_host.h"
 #include "re_encounter_rooms.h"
@@ -217,11 +218,86 @@ static int api_vram_reserved(int *out, int max) {
     return host->vram_reserved(out, max);
 }
 
+/* The battle director (docs/RE_PLAY_BATTLES.md, layer 2): one battle at a time, with the room's
+ * grace periods after it. The PE adapter drives it through the API below; RE play steps its grace
+ * on field frames. */
+static PeReBattle s_battle;
+static int s_battle_ready;
+
+static PeReBattle *battle(void) {
+    if (!s_battle_ready) pe_re_battle_init(&s_battle), s_battle_ready = 1;
+    return &s_battle;
+}
+
+static int battle_in_view(const PeReEnemyPlacement *e) {
+    const ReHost *host = re_host();
+    if (host->struct_size < offsetof(ReHost, in_view) + sizeof host->in_view || !host->in_view) return -1;
+    return host->in_view(e->x, e->y, e->z);
+}
+
+static int api_battle_begin(uint8_t lead_slot, uint8_t *slots, int max) {
+    PeReEnemyPlacement enemies[PE_RE_ENEMIES_MAX];
+    if (!s_playing || !s_session.game) return -1;
+    const PeReBattleRules *rules = pe_re_battle_rules(s_session.game->game);
+    const int n = pe_re_session_enemies(&s_session, enemies, PE_RE_ENEMIES_MAX);
+    for (int i = 0; i < n; i++)
+        if (enemies[i].slot == lead_slot) {
+            PeReBattle *b = battle();
+            if (pe_re_battle_begin(b, &s_session, rules, &enemies[i], battle_in_view)) return -1;
+            int count = 0;
+            for (int k = 0; k < b->initial_count && count < max; k++) slots[count++] = b->initial_slots[k];
+            return count;
+        }
+    return -1;
+}
+
+static int api_battle_step(double aya_x, double aya_z, int time_runs, PeReEnemyPlacement *joins, int max) {
+    PeReBattleEvent ev[PE_RE_ENEMIES_MAX];
+    PeReEnemyPlacement enemies[PE_RE_ENEMIES_MAX];
+    if (!s_playing) return 0;
+    const int n = pe_re_battle_step(battle(), &s_session, aya_x, aya_z, time_runs, battle_in_view, ev,
+                                    max < PE_RE_ENEMIES_MAX ? max : PE_RE_ENEMIES_MAX);
+    const int placed = n ? pe_re_session_enemies(&s_session, enemies, PE_RE_ENEMIES_MAX) : 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        if (ev[i].kind != PE_RE_BATTLE_EV_JOIN || count >= max) continue;
+        for (int k = 0; k < placed; k++)
+            if (enemies[k].slot == ev[i].slot) { joins[count++] = enemies[k]; break; }
+    }
+    return count;
+}
+
+static void api_battle_foe_moved(uint8_t slot, double x, double z) { pe_re_battle_foe_moved(battle(), slot, x, z); }
+static void api_battle_foe_died(uint8_t slot) { pe_re_battle_foe_died(battle(), slot); }
+static void api_battle_end(int escaped) { if (s_playing) pe_re_battle_end(battle(), &s_session, escaped); }
+static int api_battle_target_order(uint8_t *slots, int max) { return pe_re_battle_target_order(battle(), slots, max); }
+static int api_battle_encounter_allowed_for(uint8_t slot) {
+    return s_playing ? pe_re_battle_encounter_allowed_for(battle(), &s_session, slot) : 1;
+}
+static void api_battle_settings(double seconds, double distance, int halve) {
+    PeReBattle *b = battle();
+    b->settings.seconds = seconds, b->settings.distance = distance, b->settings.halve_on_repeat = halve;
+}
+static int api_battle_point(int to_room, double x, double z, double *out_x, double *out_z) {
+    const ReHost *host = re_host();
+    if (host->struct_size < offsetof(ReHost, battle_point) + sizeof host->battle_point || !host->battle_point) return -1;
+    return host->battle_point(to_room, x, z, out_x, out_z);
+}
+
+static void api_battle_mark(int id, int kind, double x, double z) {
+    const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, battle_mark) + sizeof host->battle_mark && host->battle_mark)
+        host->battle_mark(id, kind, x, z);
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
     NULL, /* field movement is driven by the room, independently of encounter selection */
-    api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved
+    api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved,
+    api_battle_begin, api_battle_step, api_battle_foe_moved, api_battle_foe_died, api_battle_end,
+    api_battle_target_order, api_battle_encounter_allowed_for, api_battle_settings, api_battle_point,
+    api_battle_mark
 };
 
 static void report_enemies(void) {
@@ -1257,6 +1333,9 @@ static int on_frame(void *ctx, void *user) {
         report_enemies();
         if (!locked && re_host()->field_free() && !re_host()->dialogue_busy()) advance_enemies(x, z, s_session.floor);
     }
+    /* the survivors' grace after an escape runs in the field (D18) */
+    if (s_playing && s_battle_ready && s_battle.phase == PE_RE_BATTLE_GRACE)
+        pe_re_battle_step(&s_battle, &s_session, x, z, 1, NULL, NULL, 0);
     if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
 }

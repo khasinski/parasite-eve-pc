@@ -113,6 +113,8 @@ static struct {
     s8 tint_level, saved_tint_level;
     u8 shade, light_up, light_down;                    /* Aya's lighting in the room, given to every actor */
 } s_backdrop;
+static struct { int kind; double x, z; } s_marks[PE_RE_STAGE_MARKS];   /* draw_marks */
+static RenderColorTrianglePacket s_mark_packets[2][PE_RE_STAGE_MARKS];
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
 static uint8_t s_mask_groups[16];
@@ -593,6 +595,7 @@ static void backdrop_off(int restore) {
     free(s_backdrop.saved_pages);
     s_backdrop.saved_pages = NULL;
     s_backdrop.on = 0;
+    memset(s_marks, 0, sizeof s_marks);
 }
 
 static void backdrop_on(const FieldActor *aya) {
@@ -1775,6 +1778,49 @@ static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
         }
     }
 }
+/* Battle marks (docs/RE_PLAY_BATTLES.md): the chosen target, drawn only while it is off the picture, as
+ * an arrow at the picture's edge toward it (D10); and a joining enemy's cue, over it, or at the edge
+ * while it is out of the picture (D19). Positions are PE's (host units), taken into the room. */
+
+static void draw_marks(RenderNativeTag *ordering, int slot) {
+    const double k = RE_UNITS_PER_PE_UNIT, cx = PIC_W / 2.0, cy = FIELD_H / 2.0;
+    if (!s_camera.distance) return;
+    for (int i = 0; i < PE_RE_STAGE_MARKS; i++) {
+        if (!s_marks[i].kind) continue;
+        const double point[3] = {s_backdrop.room[0] + (s_marks[i].x - s_backdrop.anchor[0]) * k,
+                                 s_backdrop.room[1] - 1800.0,
+                                 s_backdrop.room[2] + (s_marks[i].z - s_backdrop.anchor[2]) * k};
+        double view[3] = {0};
+        for (int row = 0; row < 3; row++)
+            for (int col = 0; col < 3; col++)
+                view[row] += s_camera.view.m[row][col] * (point[col] - s_camera.eye[col]) / 4096.0;
+        double dx = view[0], dy = view[1];
+        if (view[2] > 1) dx = s_camera.distance * view[0] / view[2], dy = s_camera.distance * view[1] / view[2];
+        const int on = view[2] > 1 && fabs(dx) < cx - 4 && fabs(dy) < cy - 4;
+        if (s_marks[i].kind == PE_RE_MARK_TARGET && on) continue;
+        double ex, ey, ux, uy;                          /* where, and which way the arrow points */
+        if (on) {
+            ex = cx + dx, ey = cy + dy - 8, ux = 0, uy = 1;
+        } else {
+            const double len = sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) continue;
+            ux = dx / len, uy = dy / len;
+            const double tx = fabs(ux) > 1e-6 ? (cx - 10) / fabs(ux) : 1e9, ty = fabs(uy) > 1e-6 ? (cy - 10) / fabs(uy) : 1e9;
+            const double t = tx < ty ? tx : ty;
+            ex = cx + ux * t, ey = cy + uy * t;
+        }
+        const int cue = s_marks[i].kind == PE_RE_MARK_CUE;
+        RenderColorTrianglePacket *p = &s_mark_packets[slot][i];
+        *p = (RenderColorTrianglePacket){
+            .color.bytes = {cue ? 255 : 250, cue ? 210 : 60, cue ? 40 : 60, 0x20},
+            .x0 = (u16)lround(ex + ux * 6), .y0 = (u16)lround(ey + uy * 6),
+            .x1 = (u16)lround(ex - ux * 4 - uy * 5), .y1 = (u16)lround(ey - uy * 4 + ux * 5),
+            .x2 = (u16)lround(ex - ux * 4 + uy * 5), .y2 = (u16)lround(ey - uy * 4 - ux * 5),
+        };
+        link_field_triangle(&ordering[FIELD_UI_OT_LAST + 1], p);
+    }
+}
+
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
@@ -1796,6 +1842,7 @@ static int on_background(void *ctx, void *user) {
                 m->color.bytes.r = m->color.bytes.g = m->color.bytes.b = 128;
                 link_quad(&((RenderNativeTag *)b->ordering)[s_masks[i].depth], m);
             }
+        draw_marks((RenderNativeTag *)b->ordering, b->slot);
         return 1;
     }
     if (!s_show && !s_movie.asset) return 0;
@@ -2037,4 +2084,24 @@ int pe_re_stage_vram_reserved(int *out, int max) {
     }
 #undef RESERVE
     return n;
+}
+
+/* The backdrop's mapping: room = room_at_start + (host - anchor) * k, with the anchor where Aya
+ * settled for the battle (backdrop_camera uses the same). */
+void pe_re_stage_battle_mark(int id, int kind, double x, double z) {
+    if (id < 0 || id >= PE_RE_STAGE_MARKS) return;
+    s_marks[id].kind = s_backdrop.on ? kind : 0, s_marks[id].x = x, s_marks[id].z = z;
+}
+
+int pe_re_stage_battle_point(int to_room, double x, double z, double *out_x, double *out_z) {
+    const double k = RE_UNITS_PER_PE_UNIT;
+    if (!s_backdrop.on || !(k > 0)) return -1;
+    if (to_room) {
+        *out_x = s_backdrop.room[0] + (x - s_backdrop.anchor[0]) * k;
+        *out_z = s_backdrop.room[2] + (z - s_backdrop.anchor[2]) * k;
+    } else {
+        *out_x = s_backdrop.anchor[0] + (x - s_backdrop.room[0]) / k;
+        *out_z = s_backdrop.anchor[2] + (z - s_backdrop.room[2]) / k;
+    }
+    return 0;
 }

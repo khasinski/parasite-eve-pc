@@ -109,6 +109,11 @@ typedef struct ReHost {
     /* Optional. The VRAM the room's drawing uses now, as (x, y, w, h) rectangles into `out` (at most
      * `max`): a battle's own textures keep out of it (docs/RE_PLAY_BATTLES.md, G2). Returns how many. */
     int (*vram_reserved)(int *out, int max);
+    /* Optional. In battle: a host position to the room's (to_room) or back, by the backdrop's
+     * mapping. 0, or -1 with no battle backdrop. */
+    int (*battle_point)(int to_room, double x, double z, double *out_x, double *out_z);
+    /* Optional. In battle: mark id at a host position, kind PE_RE_MARK_* (re_play_api.h); 0 clears it. */
+    void (*battle_mark)(int id, int kind, double x, double z);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */
