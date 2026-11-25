@@ -66,6 +66,17 @@ typedef struct {
 int pe_imp_re2_room_effect(const uint8_t *rdt, uint32_t size, unsigned id, PeImpRe2RoomEffect *out);
 int pe_imp_re2_effect_frame(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectFrame *out);
 int pe_imp_re2_effect_sprite(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectSprite *out);
+/* Borrowed views into CORE00.ESP, CORE01.TIM and the TEX.TIM CLUT block.
+ * The 4-bit page has 256 texels on each row and a stride of 256 bytes. */
+typedef struct {
+    PeImpRe2RoomEffect sequence;
+    const uint8_t *page, *palette;
+} PeImpRe2CoreEffect;
+
+int pe_imp_re2_core_effect(const uint8_t *esp, uint32_t esp_size, const uint8_t *pixels, uint32_t pixel_size,
+                          const uint8_t *tex, uint32_t tex_size, unsigned id, unsigned palette_offset,
+                          PeImpRe2CoreEffect *out);
+
 /* The bytes of one instruction of `game` (0 for an opcode it doesn't know). */
 uint32_t pe_imp_scd_size(unsigned game, uint8_t opcode);
 /* Walks every procedure of the room's scripts (RE1: init and main, not its event scripts); returns the procedures walked, or -1 for a bad RDT.

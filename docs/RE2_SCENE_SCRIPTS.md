@@ -45,7 +45,7 @@ The turn fix changes procedure 30's heading and arrival. The single-model atlas 
 
 - The field renderer now keeps multiple model kinds resident and reserves each texture and palette rectangle during battle allocation. Wider imported atlases are retained. EM48's 384-pixel source texture needs three 128-pixel columns.
 - The room pose renderer uses the selected room bank and its authored root offset. The installed Leon and Claire variants contain 15- and 34-frame moves 11 and 12 in their EM48 room bindings. The session regression starts procedure 30 and checks that both commands select the room bank. Frame comparison from the natural trigger remains open.
-- The retail Leon disc has eight common effects in `COMMON/DATA/CORE00.ESP`, including IDs 00–03. The file has a reverse footer of block offsets. It carries animation data and native CLUT/TPage references. The companion `CORE01.TIM` is a 65536-byte raw image. Retail uploads its palette separately. The common bank needs the correct palette source, slot/part transforms and rendering before Kendo's attack sprite cues can be verified.
+- The retail Leon disc has eight common effects in `COMMON/DATA/CORE00.ESP`, including IDs 00–03. The file has a reverse footer of block offsets. It carries animation data and native CLUT/TPage references. The companion `CORE01.TIM` is a 65536-byte raw image. Retail loads the matching palettes from `COMMON/DATA/TEX.TIM`. The portable decoder resolves the sequence, raw page and palette using their native TPage and CLUT coordinates. Import store publication, slot/part transforms and rendering still need to be connected before Kendo's attack sprite cues can be verified.
 
 ## Scripted enemy and boss audit
 

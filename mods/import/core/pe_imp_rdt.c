@@ -121,6 +121,46 @@ int pe_imp_re2_room_effect(const uint8_t *rdt, uint32_t size, unsigned id, PeImp
     return 0;
 }
 
+int pe_imp_re2_core_effect(const uint8_t *esp, uint32_t esp_size, const uint8_t *pixels, uint32_t pixel_size,
+                          const uint8_t *tex, uint32_t tex_size, unsigned id, unsigned palette_offset,
+                          PeImpRe2CoreEffect *out) {
+    *out = (PeImpRe2CoreEffect){0};
+    if (!esp || esp_size < 40 || !pixels || pixel_size != 65536 || !tex || tex_size < 20 ||
+        le32(tex) != 16 || !(le32(tex + 4) & 8) || palette_offset >= 32) return -1;
+
+    unsigned count = 0, slot = 8;
+    while (count < 8 && esp[count] != 0xff) {
+        if (esp[count] == id) slot = count;
+        count++;
+    }
+    if (slot == 8) return -1;
+    const uint32_t footer = esp_size - count * 4;
+    const uint32_t at = le32(esp + esp_size - (slot + 1) * 4);
+    const uint32_t end = slot + 1 < count ? le32(esp + esp_size - (slot + 2) * 4) : footer;
+    if (at < 8 || end > footer || at > end || end - at < 8) return -1;
+    const uint8_t *block = esp + at;
+    const uint32_t frames = le16(block), sprites = le16(block + 2);
+    const uint32_t sprite_at = 8 + frames * 8;
+    if (!frames || sprite_at + sprites * 4 > end - at) return -1;
+
+    /* CORE01 is uploaded at native VRAM (896, 256), 128 words per row.
+     * Its CLUTs are in TEX.TIM, which retail loads separately. */
+    const unsigned page = le16(block + 6);
+    if (page != 0x1e && page != 0x1f) return -1;
+    const unsigned clut = le16(block + 4);
+    const unsigned x = (clut & 63) * 16, y = (clut >> 6) + palette_offset;
+    const unsigned tx = le16(tex + 12), ty = le16(tex + 14), w = le16(tex + 16), h = le16(tex + 18);
+    const uint32_t clut_bytes = le32(tex + 8);
+    if (clut_bytes < 12 || clut_bytes > tex_size - 8 ||
+        (uint64_t)w * h * 2 != clut_bytes - 12 || x < tx || x + 16 > tx + w || y < ty || y >= ty + h)
+        return -1;
+
+    out->sequence = (PeImpRe2RoomEffect){block + 8, block + sprite_at, NULL, frames, sprites, 0};
+    out->page = pixels + (page - 0x1e) * 128;
+    out->palette = tex + 20 + ((y - ty) * w + x - tx) * 2;
+    return 0;
+}
+
 int pe_imp_re2_effect_frame(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectFrame *out) {
     if (index >= effect->frame_count) return -1;
     const uint8_t *p = effect->frames + index * 8;
