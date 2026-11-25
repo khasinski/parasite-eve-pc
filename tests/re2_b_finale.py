@@ -36,7 +36,7 @@ FIRE = "battle: Aya fired the Tyrant rocket launcher"
 
 
 def progress_from(path):
-    """Read the version-2 RE play section from the host's PEEX companion."""
+    """Read RE play progress from the host's PEEX companion."""
     data = path.read_bytes()
     check(len(data) >= 96 and data[:8] == b"PEEX\x01\x00\x60\x00", f"{path}: invalid PEEX header")
     size, count = struct.unpack_from("<IH", data, 12)
@@ -46,7 +46,7 @@ def progress_from(path):
             continue
         version, _, offset, length, checksum = struct.unpack_from("<HHIII", data, entry + 48)
         section = data[offset:offset + length]
-        check(version == 2 and length == len(section) == 1808 and crc32(section) == checksum,
+        check({2: 1808, 3: 1954}.get(version) == length == len(section) and crc32(section) == checksum,
               f"{path}: invalid RE play section")
         check(section[:2] == b"\x02\x01", f"{path}: save is outside active RE2 play")
         return section

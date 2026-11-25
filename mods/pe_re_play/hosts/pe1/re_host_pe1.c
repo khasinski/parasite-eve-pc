@@ -21,6 +21,11 @@
 #include <SDL3/SDL.h>
 #include <psyz/video.h>
 
+void pe_re_weapon_hooks(void);
+int pe_re_weapon_pickup(const char *game, uint16_t item, unsigned count);
+void pe_re_weapon_loadout(const char *game, struct PeReProgress *progress);
+void pe_re_weapon_unload(int inventory_replaced);
+
 /* A tester's bug report: bug-reports/re-<date-time>/ beside the preferences, with report.txt, progress.bin,
  * screenshot.bmp (the game frame as it is now) and log-tail.txt (the end of pe_mods.log). */
 static int write_file(const char *dir, const char *name, const void *bytes, size_t size) {
@@ -76,6 +81,7 @@ static int write_report(const char *text, const void *progress, size_t size, cha
 static void init(const char *mod_id, const char *store) {
     pe_re_stage_init(mod_id, store);
     pe_re_box_init(mod_id);
+    pe_re_weapon_hooks();
 }
 
 static uint16_t held_buttons(void) {
@@ -198,6 +204,9 @@ const ReHost *re_host(void) {
         .battle_point = pe_re_stage_battle_point,
         .battle_mark = pe_re_stage_battle_mark,
         .pickup_ammo = pe_re_ammo_pickup,
+        .pickup_weapon = pe_re_weapon_pickup,
+        .weapon_loadout = pe_re_weapon_loadout,
+        .weapon_unload = pe_re_weapon_unload,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,
         .player_scale = pe_re_stage_scale,

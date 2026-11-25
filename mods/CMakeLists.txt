@@ -175,7 +175,8 @@ foreach(mod IN LISTS pe_enabled_mods)
             pe_re_play/hosts/pe1/re_host_pe1.c
             pe_re_play/hosts/pe1/pe_re_stage.c
             pe_re_play/hosts/pe1/pe_re_box.c
-            pe_re_play/hosts/pe1/pe_re_ammo.c)
+            pe_re_play/hosts/pe1/pe_re_ammo.c
+            pe_re_play/hosts/pe1/pe_re_weapons.c)
     elseif(mod STREQUAL "pe_enemy_import")
         file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_enemy_import/*.c)
         list(APPEND pe_mod_sources ${mod_files}

@@ -335,8 +335,8 @@ static void start_event(PeReSession *s, const uint8_t data[6], int again) {
 }
 
 static PeReChange take_pickup(PeReSession *s, const PeImpPickup *pk) {
-    pe_re_take_routed(&s->progress, s->logic, pk, s->items, s->said, sizeof s->said,
-                      s->game->game, s->pickup_ammo);
+    pe_re_take_equipment_or_item(&s->progress, s->logic, pk, s->items, s->said, sizeof s->said,
+                                 s->game->game, s->pickup_weapon, s->pickup_ammo);
     return PE_RE_SAID;
 }
 

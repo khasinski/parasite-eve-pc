@@ -48,7 +48,7 @@ static uint8_t s_saved[PE_RE_SAVE_SIZE];
 /* Room checkpoints, for testers: the progress as it was when she came into the room, kept beside the
  * import store (one file, overwritten each room), for the title and pause menus' "last room". */
 static void checkpoint_path(char *out, size_t n) { snprintf(out, n, "%s/../re_play_checkpoint.bin", s_store[0] ? s_store : "."); }
-static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1,
+static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERSION, PE_RE_SAVE_VERSION,
                                           sizeof s_saved, s_saved, pe_re_save_upgrade};
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
@@ -718,6 +718,7 @@ static void show_room(int place) {
         snprintf(s_status, sizeof s_status, "Stopped: %s.", why);
         pe_re_door_cancel();
         re_host()->hide_room();
+        if (RE_HOST_HAS(re_host(), weapon_unload)) re_host()->weapon_unload(0);
         pe_re_session_end(&s_session);
         s_playing = 0;
         pe_re_music_stop();
@@ -868,6 +869,7 @@ static void stop(void) {
     re_host()->forget_dialogue();
     s_pick = PICK_NONE;
     s_typing = TYPE_NONE;
+    if (RE_HOST_HAS(re_host(), weapon_unload)) re_host()->weapon_unload(0);
     if (s_session.game && (!s_registered || keep_progress())) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) re_host()->hide_room();
     pe_re_session_end(&s_session);
@@ -903,8 +905,9 @@ static int load_checkpoint(void) {
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
     const size_t got = fread(bytes, 1, sizeof bytes, f);
+    const int complete = fgetc(f) == EOF && !ferror(f);
     fclose(f);
-    if (got != sizeof bytes || pe_re_save_decode(bytes, &saved) || !saved.game || !saved.playing) return -1;
+    if (!complete || pe_re_save_decode_checkpoint(bytes, got, &saved) || !saved.game || !saved.playing) return -1;
     memcpy(s_saved, bytes, sizeof s_saved);
     return 0;
 }
@@ -1085,6 +1088,7 @@ static void tick_title(void)
 static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
+    if (RE_HOST_HAS(re_host(), weapon_unload)) re_host()->weapon_unload(1);
     s_ending = ENDING_NONE;
     stop_movie();
     if (s_title != TITLE_CLOSED) re_host()->forget_dialogue();
@@ -1114,6 +1118,7 @@ static int on_save_read(void *ctx, void *user) {
 
 static int on_new_game(void *ctx, void *user) {    /* the host has cleared the section */
     (void)ctx, (void)user;
+    if (RE_HOST_HAS(re_host(), weapon_unload)) re_host()->weapon_unload(1);
     if (!s_start_pending && s_title != TITLE_WAIT_FIELD) stop();
     memset(s_saved, 0, sizeof s_saved);
     s_resume = 0;
@@ -1187,6 +1192,8 @@ static int on_frame(void *ctx, void *user) {
         pe_re_music_suspend();
         return 0;
     }
+    if (RE_HOST_HAS(music_host, weapon_loadout) && music_host->field_free())
+        music_host->weapon_loadout(s_session.game->game, &s_session.progress);
     if (s_typing == TYPE_OPEN && re_host()->room_active() && !re_host()->dialogue_busy() && re_host()->field_free()) {
         if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);   /* the ribbon already used */
         re_host()->open_save_screen();
@@ -1241,6 +1248,7 @@ static int on_frame(void *ctx, void *user) {
     if (movie_frame() || tick_ending()) return 0;
     s_session.talking = re_host()->dialogue_busy;
     s_session.pickup_ammo = RE_HOST_HAS(re_host(), pickup_ammo) ? re_host()->pickup_ammo : NULL;
+    s_session.pickup_weapon = RE_HOST_HAS(re_host(), pickup_weapon) ? re_host()->pickup_weapon : NULL;
     /* ammo already in the pocket (picked up before typed reserves, or taken from the item box) joins
      * the combat reserves; what doesn't fit waits */
     if (s_playing && !s_battle_paused && s_session.game && re_host()->room_active())

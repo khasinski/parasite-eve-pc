@@ -878,6 +878,15 @@ static void test_music_table_script(void)
 }
 
 static unsigned routed_rounds;
+static unsigned weapon_grants;
+static int weapon_bag_full;
+
+static int route_test_weapon(const char *game, uint16_t item, unsigned count) {
+    if (strcmp(game, "re2") || item != 0x07) return 0;
+    if (count != 5 || weapon_bag_full) return -1;
+    weapon_grants++;
+    return 1;
+}
 
 static int route_test_pickup(const char *game, uint16_t item, unsigned count) {
     if (strcmp(game, "re2") || item != 0x14) return 0;
@@ -1120,6 +1129,23 @@ int main(int argc, char **argv) {
         CHECK(!pe_re_take_routed(&q, l, &got, NULL, say, sizeof say, "re2", route_test_pickup));
         CHECK(routed_rounds == 915 && q.ntaken == 1 && !q.held);
         CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, NULL) < 0);
+        memset(&q, 0, sizeof q);
+        got.item = 0x07;
+        got.count = 5;
+        weapon_bag_full = 1;
+        CHECK(pe_re_take_equipment_or_item(&q, l, &got, NULL, say, sizeof say, "re2",
+                                           route_test_weapon, route_test_pickup) < 0);
+        CHECK(!q.ntaken && !q.held && !weapon_grants);
+        weapon_bag_full = 0;
+        CHECK(!pe_re_take_equipment_or_item(&q, l, &got, NULL, say, sizeof say, "re2",
+                                            route_test_weapon, route_test_pickup));
+        CHECK(q.ntaken == 1 && !q.held && weapon_grants == 1);
+        CHECK(pe_re_take_equipment_or_item(&q, l, &got, NULL, say, sizeof say, "re2",
+                                           route_test_weapon, route_test_pickup) < 0 && weapon_grants == 1);
+        memset(&q, 0, sizeof q);
+        CHECK(!pe_re_take_equipment_or_item(&q, l, &got, NULL, say, sizeof say, "re3",
+                                            route_test_weapon, route_test_pickup));
+        CHECK(q.ntaken == 1 && pe_re_has(&q, 0x07) && weapon_grants == 1);
         CHECK(pe_re_message_at(l, NULL, 1200, 100) == 1 && pe_re_message_at(l, NULL, 600, 100) < 0);
         CHECK(!pe_re_message(l, 1, say, sizeof say) && !strcmp(say, "A paper, nothing useful."));
         CHECK(!pe_re_message(l, 0, say, sizeof say) && !strcmp(say, "First.") && pe_re_message(l, 2, say, sizeof say));
@@ -1460,6 +1486,8 @@ int main(int argc, char **argv) {
         r.x = 1234, r.z = -5678, r.facing = 1024, r.camera = 0;
         r.progress.box[0].item = 0x40, r.progress.box[0].count = 2, r.progress.boxed = 1;   /* v2: the box, work */
         r.progress.flags.work[20] = 1234;
+        r.progress.weapons[0] = (PeReOwnedWeapon){0x07, 5, 0x15};
+        r.progress.equipped_weapon = 0x07;
         pe_re_save_encode(&r, 1, bytes);
         {
             static uint8_t up[PE_RE_SAVE_SIZE];
@@ -1467,11 +1495,21 @@ int main(int argc, char **argv) {
             CHECK(!pe_re_save_upgrade(up, bytes, PE_RE_SAVE_SIZE_V1, 1) && !pe_re_save_decode(up, &old) &&
                   old.room == 0x05 && pe_re_has(&old.progress, 88) && !old.progress.boxed && !old.progress.flags.work[20]);
             CHECK(pe_re_save_upgrade(up, bytes, PE_RE_SAVE_SIZE_V1, 3) < 0);
+            CHECK(!pe_re_save_upgrade(up, bytes, PE_RE_SAVE_SIZE_V2, 2) && !pe_re_save_decode(up, &old) &&
+                  old.progress.flags.work[20] == 1234 && !old.progress.weapons[0].item);
+            memcpy(up, bytes, sizeof up);
+            CHECK(!pe_re_save_decode_checkpoint(up, PE_RE_SAVE_SIZE_V2, &old) &&
+                  !old.progress.equipped_weapon);
+            memcpy(up, bytes, sizeof up);
+            up[PE_RE_SAVE_SIZE_V2] = 0xff;
+            CHECK(pe_re_save_decode(up, &old) < 0); /* Equipped ID has no owned weapon. */
         }
         CHECK(!pe_re_save_decode(bytes, &saved) && saved.game == g && saved.playing && saved.room == 0x05 &&
               saved.x == 1234 && saved.z == -5678 && saved.facing == 1024 && pe_re_has(&saved.progress, 88));
         CHECK(!pe_re_session_resume(&back, s_store, &saved, why, sizeof why) && back.room == 0x05 && back.x == 1234);
         CHECK(pe_re_has(&back.progress, 88) && pe_re_flag(&back.progress.flags, PE_RE_FG_ITEM, 4));
+        CHECK(back.progress.equipped_weapon == 0x07 && back.progress.weapons[0].item == 0x07 &&
+              back.progress.weapons[0].loaded == 5 && back.progress.weapons[0].ammo_item == 0x15);
         CHECK(!memcmp(back.progress.unlocked, r.progress.unlocked, sizeof r.progress.unlocked));
         CHECK(back.progress.boxed == 1 && back.progress.box[0].item == 0x40 && back.progress.box[0].count == 2 &&
               back.progress.flags.work[20] == 1234);

@@ -21,6 +21,7 @@ enum { RE_HOST_CROSS = 0x0040, RE_HOST_SQUARE = 0x0080, RE_HOST_START = 0x0800, 
  * Required callbacks are unmarked. Optional features may leave a callback NULL.
  * Append callbacks and check struct_size before accessing optional tail fields. */
 struct PeReEffect;
+struct PeReProgress;
 typedef struct ReHostProgress {
     const char *key;
     uint16_t version, min_reader, size;
@@ -116,6 +117,10 @@ typedef struct ReHost {
     void (*battle_mark)(int id, int kind, double x, double z);
     /* Room pickup: 1 credited, 0 use the room pocket, -1 reserve full. */
     int (*pickup_ammo)(const char *game, uint16_t item, unsigned count);
+    /* Optional game-specific weapon grant. Count is the bundled ammunition. */
+    int (*pickup_weapon)(const char *game, uint16_t item, unsigned count);
+    void (*weapon_loadout)(const char *game, struct PeReProgress *progress);
+    void (*weapon_unload)(int inventory_replaced);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

@@ -30,8 +30,17 @@
 
 typedef struct { uint16_t item, count; } PeReHeld;
 
-/* What the player has done in the game so far (kept for the session; saving comes later). */
+#define PE_RE_OWNED_WEAPONS 24
+/* IDs belong to the imported game's item table. Native inventory slots are
+ * transient and are deliberately never stored with imported progression. */
 typedef struct {
+    uint16_t item;
+    uint16_t loaded;
+    uint16_t ammo_item;
+} PeReOwnedWeapon;
+
+/* What the player has done in the imported game so far. */
+typedef struct PeReProgress {
     uint8_t unlocked[PE_RE_LOCKS / 8];
     uint32_t taken[PE_RE_TAKEN_MAX];                /* stage << 24 | room << 16 | pickup flag */
     int ntaken;
@@ -40,6 +49,8 @@ typedef struct {
     PeReFlags flags;                               /* the game's flags, as its scripts set them */
     PeReHeld box[PE_RE_BOX_MAX];                   /* in the item boxes */
     int boxed;
+    PeReOwnedWeapon weapons[PE_RE_OWNED_WEAPONS];
+    uint16_t equipped_weapon;                    /* source item ID, 0 for native equipment */
     uint8_t item_group;                            /* the taken-item flags for this room's stage (not saved:
                                                     * set on each room's load; 0 reads as Item_flg) */
 } PeReProgress;
@@ -82,9 +93,16 @@ int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeR
  * script stops placing it); `say` gets "Picked up the Cabin Key." 0 or -1 (pocket full). */
 int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,
                char *say, size_t n);
+/* A router returns 1 after granting the whole pickup, 0 if it does not handle the
+ * item, and -1 if the pickup must stay in the room. The count is the source item's
+ * quantity (bundled rounds for a weapon). Only a successful grant consumes the flag. */
+typedef int (*PeRePickupRoute)(const char *game, uint16_t item, unsigned count);
 int pe_re_take_routed(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
                       const PeImpRoomLogic *items, char *say, size_t n, const char *game,
-                      int (*credit)(const char *, uint16_t, unsigned));
+                      PeRePickupRoute credit);
+int pe_re_take_equipment_or_item(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
+                                 const PeImpRoomLogic *items, char *say, size_t n, const char *game,
+                                 PeRePickupRoute weapon, PeRePickupRoute ammo);
 /* The message zone checked at (x, z): its message index, or -1. */
 int pe_re_message_at(const PeImpRoomLogic *room, const PeReScdRun *run, double x, double z);
 /* The kind a zone id has now: its last aot_reset's, else `sce`; data likewise. */

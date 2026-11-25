@@ -817,9 +817,11 @@ int main(void) {
         static uint8_t bytes[PE_RE_SAVE_SIZE];
         PeReSaved saved;
         FILE *f = fopen(start, "rb");
-        CHECK(f && fread(bytes, 1, sizeof bytes, f) == sizeof bytes);
+        const size_t got = f ? fread(bytes, 1, sizeof bytes, f) : 0;
+        CHECK(f && fgetc(f) == EOF && !ferror(f));
         if (f) fclose(f);
-        CHECK(!pe_re_save_decode(bytes, &saved) && !pe_re_session_resume(&s, s_store, &saved, why, sizeof why));
+        CHECK(!pe_re_save_decode_checkpoint(bytes, got, &saved) &&
+              !pe_re_session_resume(&s, s_store, &saved, why, sizeof why));
         if (!s_fail) printf("started from %s\n", start);
     } else if (getenv("PE_TEST_RE_HUNK") && *getenv("PE_TEST_RE_HUNK") == '1') {   /* the 4th Survivor (Leon's disc) */
         CHECK(!pe_re_session_start_hunk(&s, s_store, g, why, sizeof why));

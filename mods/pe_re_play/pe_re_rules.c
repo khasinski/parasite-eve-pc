@@ -178,22 +178,34 @@ int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeR
     return -1;
 }
 
-int pe_re_take_routed(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
-                      const PeImpRoomLogic *items, char *say, size_t n, const char *game,
-                      int (*credit)(const char *, uint16_t, unsigned)) {
+int pe_re_take_equipment_or_item(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
+                                 const PeImpRoomLogic *items, char *say, size_t n, const char *game,
+                                 PeRePickupRoute weapon, PeRePickupRoute ammo) {
     char name[48];
     pe_re_item_name(items, pk->item, name, sizeof name);
-    const int routed = p->ntaken >= PE_RE_TAKEN_MAX ? -1 :
-                       credit ? credit(game, pk->item, pk->count ? pk->count : 1) : 0;
+    if (pe_re_pickup_gone(room, NULL, p, pk)) return -1;
+    int routed = -1;
+    int weapon_granted = 0;
+    if (p->ntaken < PE_RE_TAKEN_MAX) {
+        routed = weapon ? weapon(game, pk->item, pk->count) : 0;
+        weapon_granted = routed > 0;
+        if (!routed && ammo) routed = ammo(game, pk->item, pk->count ? pk->count : 1);
+    }
     if (routed < 0 || (!routed && pe_re_give(p, pk->item, pk->count))) {
         snprintf(say, n, "No room for the %s.", name);
         return -1;
     }
     p->taken[p->ntaken++] = taken_key(room, pk->flag);
     pe_re_flag_set(&p->flags, p->item_group ? p->item_group : PE_RE_FG_ITEM, pk->flag, 1);
-    if (pk->count > 1) snprintf(say, n, "Picked up %u %s.", (unsigned)pk->count, name);
+    if (pk->count > 1 && !weapon_granted) snprintf(say, n, "Picked up %u %s.", (unsigned)pk->count, name);
     else snprintf(say, n, "Picked up the %s.", name);
     return 0;
+}
+
+int pe_re_take_routed(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
+                      const PeImpRoomLogic *items, char *say, size_t n, const char *game,
+                      PeRePickupRoute credit) {
+    return pe_re_take_equipment_or_item(p, room, pk, items, say, n, game, NULL, credit);
 }
 
 int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,

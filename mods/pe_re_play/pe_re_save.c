@@ -11,6 +11,8 @@
 #define HIGH_BYTES 16                      /* the first 128 bits of the others */
 #define BOX_AT 1040                        /* v2 */
 #define WORK_AT 1296
+#define EQUIPPED_AT PE_RE_SAVE_SIZE_V2
+#define WEAPONS_AT (EQUIPPED_AT + 2)
 
 static void put16(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v, p[1] = (uint8_t)(v >> 8); }
 static void put32(uint8_t *p, uint32_t v) { put16(p, v & 0xFFFF), put16(p + 2, v >> 16); }
@@ -39,6 +41,14 @@ void pe_re_save_encode(const PeReSession *s, int playing, uint8_t out[PE_RE_SAVE
     for (int i = 0; i < p->boxed && i < PE_RE_BOX_MAX; i++)
         put16(out + BOX_AT + 4 * i, p->box[i].item), put16(out + BOX_AT + 2 + 4 * i, p->box[i].count);
     for (int i = 0; i < PE_RE_WORK; i++) put16(out + WORK_AT + 2 * i, (uint16_t)p->flags.work[i]);
+    put16(out + EQUIPPED_AT, p->equipped_weapon);
+    for (int i = 0; i < PE_RE_OWNED_WEAPONS; i++) {
+        const PeReOwnedWeapon *weapon = &p->weapons[i];
+        uint8_t *record = out + WEAPONS_AT + 6 * i;
+        put16(record, weapon->item);
+        put16(record + 2, weapon->loaded);
+        put16(record + 4, weapon->ammo_item);
+    }
 }
 
 int pe_re_save_decode(const uint8_t in[PE_RE_SAVE_SIZE], PeReSaved *out) {
@@ -65,13 +75,37 @@ int pe_re_save_decode(const uint8_t in[PE_RE_SAVE_SIZE], PeReSaved *out) {
         p->box[p->boxed].item = item, p->box[p->boxed++].count = count;
     }
     for (int i = 0; i < PE_RE_WORK; i++) p->flags.work[i] = (int16_t)get16(in + WORK_AT + 2 * i);
+    p->equipped_weapon = (uint16_t)get16(in + EQUIPPED_AT);
+    int equipped_found = !p->equipped_weapon;
+    for (int i = 0; i < PE_RE_OWNED_WEAPONS; i++) {
+        const uint8_t *record = in + WEAPONS_AT + 6 * i;
+        PeReOwnedWeapon *weapon = &p->weapons[i];
+        weapon->item = (uint16_t)get16(record);
+        weapon->loaded = (uint16_t)get16(record + 2);
+        weapon->ammo_item = (uint16_t)get16(record + 4);
+        if (!weapon->item) {
+            if (weapon->loaded || weapon->ammo_item) return -1;
+            continue;
+        }
+        if (weapon->loaded > 999) return -1;
+        for (int j = 0; j < i; j++) if (p->weapons[j].item == weapon->item) return -1;
+        equipped_found |= weapon->item == p->equipped_weapon;
+    }
+    if (!equipped_found) return -1;
     return 0;
 }
 
+int pe_re_save_decode_checkpoint(uint8_t bytes[PE_RE_SAVE_SIZE], size_t size, PeReSaved *out) {
+    if (size != PE_RE_SAVE_SIZE && size != PE_RE_SAVE_SIZE_V2 && size != PE_RE_SAVE_SIZE_V1) return -1;
+    memset(bytes + size, 0, PE_RE_SAVE_SIZE - size);
+    return pe_re_save_decode(bytes, out);
+}
+
 int pe_re_save_upgrade(void *candidate, const void *old, unsigned size, unsigned version) {
-    if (version != 1 || size != PE_RE_SAVE_SIZE_V1) return -1;
+    if (!((version == 1 && size == PE_RE_SAVE_SIZE_V1) ||
+          (version == 2 && size == PE_RE_SAVE_SIZE_V2))) return -1;
     memset(candidate, 0, PE_RE_SAVE_SIZE);
-    memcpy(candidate, old, PE_RE_SAVE_SIZE_V1);
+    memcpy(candidate, old, size);
     return 0;
 }
 

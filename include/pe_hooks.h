@@ -105,6 +105,7 @@ typedef enum PeHookId {
                          * in a preview and restores her host-room position */
     PE_HOOK_AMMO_POOL, /* PeHookAmmoPool: which ammo pool record a weapon or ammo item uses
                         * (Inv_AmmoPoolIndex); a mod's ammo scheme may pick another; appended */
+    PE_HOOK_SAVE_INVENTORY, /* int *: 0 before native card serialization, 1 after (including failure) */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -184,7 +185,7 @@ typedef struct PeHookSpellDone {
 } PeHookSpellDone;
 
 typedef struct PeHookEquipmentGuard {
-    int kind; /* 0 native value, 1 record, 2 Tools selections */
+    int kind; /* 0 native value, 1 record, 2 Tools selections, 3 transfer from bag */
     int value;
     const struct ItemDataRecord *record;
     unsigned selection;
