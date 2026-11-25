@@ -37,6 +37,7 @@
 #include "pe1/game_timers.h"
 #include "pe1/inventory_state.h"
 #include "pe1/inventory_queries.h"
+#include "pe1/inventory.h"
 #include "pe1/memcard.h"
 #include "pe1/player_entity.h"
 #include "pe1/scene_dispatch.h"
@@ -67,6 +68,7 @@ BattleEnemySlot g_BattleEnemySlots[7];
 Combatant *g_ActiveActor;
 s32 g_ItemDropRngIndex;
 u8 g_ItemDropRngTable[521];
+InventoryItemWorkspace g_InventoryItemWorkspace;            /* src/main/item/active_list.c: the ammo pool records */
 static ItemDataRecord s_weapon;
 static PeMenuRow s_row;
 static int s_given;
