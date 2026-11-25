@@ -7,6 +7,7 @@
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
 #include "pe_imp_rdt.h"
+#include "pe_imp_pictures.h"
 #include "re_encounter_rooms.h"
 
 /* First rooms: RE2 and RE3 open in the street (room 1-00); RE1 in the mansion's main hall (1-06).
@@ -139,8 +140,20 @@ static int set_room_bgm(void *ctx, unsigned stage, unsigned room, uint16_t cue)
     return 0;
 }
 
+static int core_effect(void *ctx, unsigned id, unsigned palette, PeImpRe2CoreEffect *out) {
+    PeReSession *s = ctx;
+    if (id >= 8 || !s->store) return -1;
+    if (!s->core_effect_checked) {
+        s->core_effect_checked = 1;
+        pe_imp_catalog_pictures(s->store, "re2:effects/core-bank", &s->core_effect_bank, NULL, 0);
+        pe_imp_catalog_pictures(s->store, "re2:effects/core-palette", &s->core_effect_palettes, NULL, 0);
+    }
+    if (!s->core_effect_bank || !s->core_effect_palettes) return -1;
+    return pe_imp_re2_core_bank_effect(s->core_effect_bank, s->core_effect_palettes, id, palette, out);
+}
+
 static PeReScdHost host_of(PeReSession *s) {
-    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s, lose_item, give_item, set_room_bgm};
+    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s, lose_item, give_item, set_room_bgm, core_effect};
     return h;
 }
 
@@ -428,11 +441,14 @@ static void re2_partner(PeReSession *s) {
 static void step_player_destination(PeReSession *s) {
     PeReScdRun *r = &s->run;
     if (!r->player_dest.moving || r->actor_stopped[0]) return;
-    int facing = (s->facing + 1024) & 4095;
+    int facing = s->cdir_y;
+    r->player_dest.x = r->works[0][PE_RE_MEMBER_DEST_X];
+    r->player_dest.z = r->works[0][PE_RE_MEMBER_DEST_Z];
     if (pe_re_actor_destination_step(&r->player_dest, &s->x, &s->z, &facing)) {
         r->player_dest.moving = 0;
         r->arrived[0] = r->player_dest.arrival;
     }
+    s->cdir_y = (int16_t)facing;
     s->facing = pe_re_facing_of(facing);
     s->moved = 1;
 }
@@ -858,5 +874,7 @@ int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacemen
 void pe_re_session_end(PeReSession *s) {
     free(s->logic);
     free(s->items);
+    free(s->core_effect_bank);
+    free(s->core_effect_palettes);
     memset(s, 0, sizeof *s);
 }

@@ -520,10 +520,12 @@ static int step(Vm *vm, PeReScdTask *t) {
         vm->run->actor_stopped[t->work] ^= 1;
         t->pc += n;
         return CONTINUE;
-    case OP_PLC_DEST: {                                    /* walk to (x, z); ins[3]: the arrival flag */
+    case OP_PLC_DEST: {                                    /* actor routine, arrival flag, and two mode-specific operands */
         PeReScdRun *r = vm->run;
         const int16_t x = s16(ins + 4), z = s16(ins + 6);
-        if (t->work == 0 || (enemy_work(t->work) && walking_mode(ins[2]))) {
+        const int scenario_turn = ins[2] == PE_RE_DEST_TURN && enemy_work(t->work) &&
+            (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) >= 0x40;
+        if (t->work == 0 || scenario_turn || (enemy_work(t->work) && walking_mode(ins[2]))) {
             PeReActorDestination *dest = t->work == 0 ? &r->player_dest : &r->enemy_dest[t->work - 2];
             *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = (uint16_t)(ins[3] + 1), .x = x, .z = z};
             *member(vm, t, PE_RE_MEMBER_DEST_X) = x;
@@ -573,6 +575,28 @@ static int step(Vm *vm, PeReScdTask *t) {
         }
         t->pc += n;
         return CONTINUE;
+    case 0x7a:                                             /* parts_bomb */
+    case 0x7b: {                                           /* parts_down */
+        const unsigned part = ins[code == 0x7a ? 2 : 1];
+        if (!enemy_work(t->work) || part >= PE_RE_ACTOR_PARTS || !vm->run->works[t->work][0])
+            goto unsupported;
+        PeRePartCommand *cmd = &vm->run->enemy_parts[t->work - 2][part];
+        if (code == 0x7a) {
+            *cmd = (PeRePartCommand){
+                .action = PE_RE_PART_BURST, .rgb = {ins[3], ins[4], ins[5]},
+                .heading = s16(ins + 6), .speed = s16(ins + 8), .drag = s16(ins + 10),
+                .vertical_speed = s16(ins + 12), .gravity = s16(ins + 14)
+            };
+        } else {
+            *cmd = (PeRePartCommand){
+                .action = PE_RE_PART_FALL, .heading = s16(ins + 2), .speed = s16(ins + 4),
+                .vertical_speed = s16(ins + 6), .gravity = (int8_t)ins[8],
+                .spin = {s16(ins + 10), s16(ins + 12), s16(ins + 14)}
+            };
+        }
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_SCE_EM_SET: {                                  /* SCE2.C: the last successful spawn owns the slot. */
         const unsigned group = PE_RE_FG_ENEMY +
             (vm->flags->work[PE_RE_WORK_STAGE] >= 3 || pe_re_flag(vm->flags, PE_RE_FG_STATUS, 6));
@@ -594,6 +618,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             r->em_ready[slot - 2] = 0;
             r->scene[slot - 2] = (PeReSceneMotion){0};
             r->enemy_dest[slot - 2] = (PeReActorDestination){0};
+            memset(r->enemy_parts[slot - 2], 0, sizeof r->enemy_parts[slot - 2]);
             r->actor_stopped[slot] = r->arrived[slot] = 0;
             if (pe_re_scene_kind(ins[3])) {
                 w[PE_RE_MEMBER_ROUTINE0] = ins[3] == 0x2c ? 1 : 2;
@@ -675,8 +700,15 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_ESPR_ON2: {
         PeReScdRun *r = vm->run;
         PeImpRe2RoomEffect asset;
-        if (ins[4] > 4 || r->effect_count == PE_RE_EFFECT_MAX ||
-            pe_imp_re2_room_effect(vm->rdt, vm->size, ins[2], &asset)) goto unsupported;
+        PeImpRe2CoreEffect common = {0};
+        const unsigned attachment = ins[4];
+        const int enemy_part = (attachment & 0xe0) == 0xc0 && ins[5] < PE_RE_ENEMIES_MAX;
+        if ((attachment > 4 && !enemy_part) || r->effect_count == PE_RE_EFFECT_MAX) goto unsupported;
+        if (pe_imp_re2_room_effect(vm->rdt, vm->size, ins[2], &asset)) {
+            if (!vm->host || !vm->host->core_effect ||
+                vm->host->core_effect(vm->host->ctx, ins[2], ins[3] >> 3, &common)) goto unsupported;
+            asset = common.sequence;
+        }
         unsigned duration = 0;
         PeImpRe2EffectFrame frame;
         for (unsigned i = 0; !pe_imp_re2_effect_frame(&asset, i, &frame) && frame.time && frame.time != 0xff; i++)
@@ -688,7 +720,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             .x = s16(ins + 8), .y = s16(ins + 10), .z = s16(ins + 12),
             .duration = duration * 2, .id = ins[2], .type = ins[3], .scale = ins[7],
             .attachment = ins[4], .target = ins[5], .handle = ins[1], .loop = loop,
-            .tagged = code == OP_ESPR_ON2
+            .tagged = code == OP_ESPR_ON2, .common = common
         };
         t->pc += n;
         return CONTINUE;
@@ -1012,8 +1044,22 @@ static int zombie_rise(PeReScdRun *run, int slot) {
     return 1;
 }
 
-/* Script-owned paths follow authored destinations in room coordinates. */
+/* RE2 mode 0x15 uses Goto01. The operands are a heading and a turn step.
+ * Translation from the native turning clip still needs a root-motion sampler. */
 int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing) {
+    if (dest->mode == PE_RE_DEST_TURN) {
+        int direction = dest->x;
+        int step = dest->z;
+        if (((direction - *facing + 128) & 4095) < 256) return 1;
+        if (step < 0) {
+            step = -step;
+            direction = (direction + 2048) & 4095;
+        }
+        const int error = (step + direction - *facing) & 4095;
+        if (error < 2 * step) *facing = direction;
+        else *facing = (int16_t)(*facing + (error <= 2048 ? step : -step));
+        return 0;
+    }
     const double dx = dest->x - *x, dz = dest->z - *z;
     const double distance = hypot(dx, dz);
     const double speed = dest->mode == 5 ? 135 : dest->mode == 8 ? 38 : 80;
@@ -1165,7 +1211,9 @@ int pe_re_scd_effects(const PeReScdRun *run, PeReEffect out[PE_RE_EFFECT_MAX]) {
     int count = 0;
     for (int i = 0; i < run->effect_count; i++) {
         PeReEffect e = run->effects[i];
-        if (e.attachment) {
+        if ((e.attachment & 0xe0) == 0xc0) {
+            if (!run->works[2 + e.target][0] || run->em_dead[e.target]) continue;
+        } else if (e.attachment) {
             const int slot = work_slot(e.attachment, (int8_t)e.target);
             if (slot < 0 || (e.attachment == 3 && (!run->works[slot][0] || run->em_dead[e.target]))) continue;
             const int16_t *work = run->works[slot];

@@ -442,6 +442,7 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
         pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
+    target_sources(test-mod-re-session PRIVATE pe_src_re2/pe_src_re2_files.c)
     target_sources(test-mod-re-session PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-session PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
     set_tests_properties(mod-re-session PROPERTIES TIMEOUT 600)

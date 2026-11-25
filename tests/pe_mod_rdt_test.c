@@ -23,6 +23,7 @@ extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_it
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
 extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1, g_re1_door_models_ps1,
     g_re2_door_models_ps1, g_re3_door_models_ps1, g_re1_room_anims_ps1, g_re1_maps_ps1;
+extern const PeImpReader g_re2_core_bank_ps1, g_re2_core_palette_ps1;
 extern const PeImpReader g_re2_core_effects_ps1, g_re2_effects_ps1, g_re3_effects_ps1, g_re3_core_effects_ps1, g_re1_core_effects_ps1, g_re1_room_effects_ps1;
 extern const PeImpReader g_re3_emd_ps1, g_re3_room_anims_ps1, g_re2_emd_ps1, g_re1_monsters_ps1, g_re1_person_moves_ps1, g_re1_weapon_moves_ps1, g_re1_weapons_ps1, g_re2_player_moves_ps1, g_re2_weapons_ps1, g_re3_player_moves_ps1, g_re3_weapons_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
@@ -940,6 +941,54 @@ static void audit_room_enemies(const char *store) {
     assert(rooms && total);
 }
 
+static void check_core_effects(const char *cue) {
+    static const char *const paths[] = {
+        "COMMON/DATA/CORE00.ESP", "COMMON/DATA/CORE01.TIM", "COMMON/DATA/TEX.TIM"
+    };
+    char why[160];
+    PeImpDisc *disc = pe_imp_disc_open(cue, why, sizeof why);
+    assert(disc != NULL);
+    if (!disc) return;
+    uint8_t *data[3] = {0};
+    uint32_t bytes[3] = {0};
+    for (int i = 0; i < 3; i++) {
+        const int index = pe_imp_disc_find(disc, paths[i]);
+        assert(index >= 0 && !pe_imp_disc_read(disc, index, &data[i], &bytes[i], why, sizeof why));
+    }
+    static const char store[] = "pe-rdt-test/core-effects";
+    PeImpScan scan;
+    PeImpRoomLogic *bank = NULL, *palettes = NULL;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_core_bank_ps1));
+    assert(!pe_imp_add_reader(&g_re2_core_palette_ps1));
+    assert(!pe_imp_scan(store, cue, "re2", &scan) && !scan.refused);
+    assert(!pe_imp_catalog_pictures(store, "re2:effects/core-bank", &bank, why, sizeof why));
+    assert(!pe_imp_catalog_pictures(store, "re2:effects/core-palette", &palettes, why, sizeof why));
+
+    for (unsigned id = 0; id < 8; id++) {
+        PeImpRe2CoreEffect effect, stored;
+        assert(!pe_imp_re2_core_effect(data[0], bytes[0], data[1], bytes[1], data[2], bytes[2], id, 0, &effect));
+        assert(!pe_imp_re2_core_bank_effect(bank, palettes, id, 0, &stored));
+        assert(stored.sequence.frame_count == effect.sequence.frame_count);
+        assert(!memcmp(stored.palette, effect.palette, 32));
+        assert(!memcmp(stored.page, effect.page, 128));
+        PeImpRe2EffectFrame frame;
+        PeImpRe2EffectSprite sprite;
+        assert(!pe_imp_re2_effect_frame(&effect.sequence, 0, &frame) && frame.time > 0);
+        assert(!pe_imp_re2_effect_sprite(&effect.sequence, 0, &sprite));
+        assert(effect.page == data[1] || effect.page == data[1] + 128);
+        int has_colour = 0;
+        for (int i = 0; i < 32; i++) has_colour |= effect.palette[i];
+        assert(has_colour);
+    }
+    PeImpRe2CoreEffect missing;
+    assert(pe_imp_re2_core_effect(data[0], bytes[0], data[1], bytes[1], data[2], bytes[2], 8, 0, &missing) < 0);
+    free(bank);
+    free(palettes);
+    for (int i = 0; i < 3; i++) free(data[i]);
+    pe_imp_disc_close(disc);
+}
+
 int main(void) {
     test_movie_timeline();
     test_raw_movie_extents();
@@ -953,6 +1002,7 @@ int main(void) {
         if (getenv("PE_TEST_RE2_ENEMY_AUDIT")) audit_room_enemies(store);
     }
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
+    if (re2 && *re2) check_core_effects(re2);
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),
                      scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76),
                      movie("RE1", re1, "PSXUSA/ZMOVIE/OJ.STR"),

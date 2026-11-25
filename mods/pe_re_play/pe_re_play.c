@@ -135,7 +135,7 @@ static int scene_locked(void) { return s_ending || s_movie_playing || s_session.
 static int scene_move_mode(void) {
     const PeReScdRun *r = &s_session.run;
     if (r->actor_stopped[0]) return 0;
-    if (r->player_dest.moving) return r->player_dest.mode;
+    if (r->player_dest.moving) return r->player_dest.mode == PE_RE_DEST_TURN ? 0 : r->player_dest.mode;
     const PeReSceneMotion *m = &r->pl_motion[0];
     if (m->active && m->bank == PE_RE_CLIP_SUB0) return m->move == 0 ? 4 : m->move == 1 ? 5 : 0;
     return 0;

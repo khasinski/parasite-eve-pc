@@ -73,6 +73,41 @@ const PeImpReader g_re2_effects_ps1 = {
     .tags = "effects", .read = read_effects, .path_key = 1
 };
 
+static int read_core_bank(const uint8_t *pixels, uint32_t pixel_size, const uint8_t *esp, uint32_t esp_size,
+                          const char *path, PeImpSink *sink, char *why, size_t n) {
+    (void)path;
+    if (!esp || esp_size < 40 || pixel_size != 65536) return 0;
+    PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
+    pe_imp_logic_add(b, PE_IMP_RE2_CORE_SEQUENCES, 0, esp, esp_size);
+    pe_imp_logic_add(b, PE_IMP_RE2_CORE_PIXELS, 0, pixels, pixel_size);
+    PeImpRoomLogic *bank = pe_imp_logic_finish(b);
+    if (!bank) {
+        snprintf(why, n, "Could not store RE2 common effect bank");
+        return -1;
+    }
+    return pe_imp_emit(sink, PE_IMP_PICTURES, "effects/core-bank", "Common effect bank", bank);
+}
+
+const PeImpReader g_re2_core_bank_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "core-esp-bank",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/CORE01.TIM",
+    .tags = "effects", .companion = "COMMON/DATA/CORE00.ESP", .read_pair = read_core_bank
+};
+
+static int read_core_palette(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink,
+                             char *why, size_t n) {
+    (void)path;
+    return pe_imp_emit_tims(sink, "effects/core-palette", "Common effect palettes", data, size, 0, why, n);
+}
+
+const PeImpReader g_re2_core_palette_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "core-esp-clut",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/TEX.TIM",
+    .tags = "effects", .read = read_core_palette
+};
+
 /* COMMON/DATA/CORE01.TIM: the common effects' sprites, no TIM header: two 256 x 256 pages at 4 bits a
  * pixel (equal-nibble runs throughout). Their palette isn't in the file (nor plainly beside it), so
  * the pages get the grey placeholder, marked GREY, as the maps had: "effects/core". Their EFF data,

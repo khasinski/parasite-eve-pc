@@ -519,6 +519,46 @@ static void test_kendo_zombies(const char *store) {
     free(room);
 }
 
+static void test_kendo_common_effects(const PeReGame *game, unsigned player) {
+    if (player) return;                         /* this common muzzle cue is in Leon's procedure 31 */
+    PeReSession s;
+    char why[100];
+    CHECK(!pe_re_session_start(&s, s_store, game, player, why, sizeof why));
+    if (!s.game) return;
+    if (pe_re_session_enter(&s, s_store, 0, 1, 0, -16000, -14000, 0, why, sizeof why)) {
+        CHECK(0);
+        pe_re_session_end(&s);
+        return;
+    }
+    pe_re_scd_exec(s.logic, &s.run, 2, 31);
+    int seen = 0;
+    for (int tick = 0; tick < 8 && !seen; tick++) {
+        pe_re_session_tick(&s);
+        PeReEffect effects[PE_RE_EFFECT_MAX];
+        const int count = pe_re_scd_effects(&s.run, effects);
+        for (int i = 0; i < count; i++) {
+            if (effects[i].id != 1 || effects[i].attachment != 0xcb) continue;
+            CHECK(effects[i].target == 0 && effects[i].common.page && effects[i].common.palette);
+            CHECK(effects[i].duration > 0 && effects[i].x == 150 && (effects[i].y == 1300 || effects[i].y == 1800));
+            seen = 1;
+        }
+    }
+    CHECK(seen);
+    pe_re_session_end(&s);
+}
+
+static void test_cutscene_turn(void) {
+    const PeReActorDestination turn = {.mode = PE_RE_DEST_TURN, .x = 440, .z = 64};
+    double x = -16233, z = -12483;
+    int facing = 4032;
+    CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(facing == 4096 && x == -16233 && z == -12483);
+    for (int i = 0; i < 5; i++)
+        CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(facing == 4416 && x == -16233 && z == -12483);
+}
+
 static void test_kendo_player_control(const char *store) {
     static PeReSession s;
     char why[128] = "";
@@ -530,8 +570,9 @@ static void test_kendo_player_control(const char *store) {
         return;
     }
     int locked = 0, approached = 0, arrived = 0, returned = 0, cut = 0, kendo_animated = 0;
-    for (int tick = 0; tick < 1000; tick++) {
+    for (int tick = 0; tick < 2400; tick++) {
         const int moving = s.run.player_dest.moving;
+        s.key_trg = tick % 30 == 15 ? 0xFFFFFFFFu : 0; /* advance cutscene dialogue */
         pe_re_session_step(&s, store, s.x, s.z, 0, why, sizeof why);
         if (pe_re_session_tick(&s) == PE_RE_CAMERA) cut = 1;
         if (pe_re_session_controls_locked(&s)) locked = 1;
@@ -550,6 +591,42 @@ static void test_kendo_player_control(const char *store) {
         }
     }
     CHECK(locked && approached && arrived && cut && returned && kendo_animated);
+
+    /* Exercise Kendo's authored turn in procedure 30 independently of the room trigger. */
+    pe_re_scd_exec(s.logic, &s.run, 2, 30);
+    int turning = 0;
+    for (int tick = 0; tick < 120 && !turning; tick++) {
+        const int16_t *kendo = s.run.works[2];
+        const int x = kendo[PE_RE_MEMBER_POS_X], z = kendo[PE_RE_MEMBER_POS_Z];
+        pe_re_session_tick(&s);
+        const PeReActorDestination *dest = &s.run.enemy_dest[0];
+        if (dest->moving && dest->mode == PE_RE_DEST_TURN) {
+            CHECK(kendo[PE_RE_MEMBER_POS_X] == x && kendo[PE_RE_MEMBER_POS_Z] == z);
+            CHECK(dest->x == 440 && dest->z == 64);
+            turning = 1;
+        }
+    }
+    CHECK(turning);
+    char bank[PE_IMP_ID_MAX];
+    PeImpAnimation clips = {0};
+    CHECK(!pe_re_session_enemy_room_move(&s, 0, bank, sizeof bank));
+    CHECK(!strcmp(bank, "re2:roomanim/101-0-p0"));
+    CHECK(!pe_imp_catalog_animation(store, bank, &clips, why, sizeof why));
+    if (clips.moves > 12) {
+        CHECK(clips.move[11].frames == 15);
+        CHECK(clips.move[12].frames == 34);
+    } else CHECK(0);
+    pe_imp_animation_free(&clips);
+
+    unsigned death_moves = 0;
+    for (int tick = 0; tick < 120 && death_moves != 3; tick++) {
+        pe_re_session_tick(&s);
+        const PeReSceneMotion *motion = &s.run.scene[0];
+        if (!motion->active || !motion->direct || (motion->move != 11 && motion->move != 12)) continue;
+        CHECK(motion->bank == PE_RE_CLIP_ROOM);
+        death_moves |= 1u << (motion->move - 11);
+    }
+    CHECK(death_moves == 3);
     pe_re_session_end(&s);
 }
 
@@ -715,6 +792,44 @@ static int capture_music_table(void *ctx, unsigned stage, unsigned room, uint16_
     return 0;
 }
 
+static void test_part_commands(void) {
+    const uint8_t rdt[] = {
+        [8 + 17 * 4] = 100,
+        [100] = 8, 0, 10, 0, 12, 0, 49, 0,
+        1, 0, 1, 0,
+        0x2e, 3, 4,
+        0x7a, 0, 12, 64, 16, 16, 0x53, 3, 100, 0, 10, 0, 0, 0, 20, 0,
+        0x7b, 13, 0x53, 3, 200, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0,
+        1, 0,
+        0x44, 0, 4, 0x1f, 0, 0, 0, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0
+    };
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 1);
+    if (!builder) { CHECK(0); return; }
+    CHECK(!pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    PeImpRoomLogic *logic = pe_imp_logic_finish(builder);
+    if (!logic) { CHECK(0); return; }
+    static PeReScdRun run;
+    PeReFlags flags = {0};
+    pe_re_scd_run(logic, &flags, NULL, &run);
+    pe_re_scd_exec(logic, &run, 2, 3);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(run.works[6][PE_RE_MEMBER_ID] == 0x1f);
+    pe_re_scd_exec(logic, &run, 2, 2);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    const PeRePartCommand *burst = &run.enemy_parts[4][12], *fall = &run.enemy_parts[4][13];
+    CHECK(burst->action == PE_RE_PART_BURST && burst->heading == 0x353 && burst->speed == 100);
+    CHECK(burst->rgb[0] == 64 && burst->rgb[1] == 16 && burst->rgb[2] == 16);
+    CHECK(burst->drag == 10 && burst->vertical_speed == 0 && burst->gravity == 20);
+    CHECK(fall->action == PE_RE_PART_FALL && fall->heading == 0x353 && fall->speed == 200);
+    CHECK(fall->gravity == 20 && fall->spin[0] == 0 && fall->spin[1] == 0 && fall->spin[2] == 0);
+    CHECK(run.enemy_parts[0][12].action == PE_RE_PART_ATTACHED);
+    pe_re_scd_exec(logic, &run, 2, 3);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(burst->action == PE_RE_PART_ATTACHED && fall->action == PE_RE_PART_ATTACHED);
+    free(logic);
+}
+
 static void test_music_table_script(void)
 {
     const uint8_t rdt[] = {
@@ -749,6 +864,8 @@ int main(int argc, char **argv) {
     test_ground_enemy_variants();
     test_movie_script();
     test_music_table_script();
+    test_part_commands();
+    test_cutscene_turn();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);
@@ -1091,7 +1208,8 @@ int main(int argc, char **argv) {
     PeImpScan sc;
     pe_imp_registry_reset();
     CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1) && !pe_imp_add_reader(&g_re2_items_ps1) &&
-          !pe_imp_add_reader(&g_re2_door_ps1));
+          !pe_imp_add_reader(&g_re2_door_ps1) &&
+          !pe_imp_add_reader(&g_re2_core_bank_ps1) && !pe_imp_add_reader(&g_re2_core_palette_ps1));
     CHECK(!pe_imp_set_naming("re2", g_re2_naming));
     CHECK(!pe_imp_scan(s_store, re2, NULL, &sc));
     const PeReGame *g = pe_re_game_named("re2");
@@ -1102,6 +1220,7 @@ int main(int argc, char **argv) {
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
+    test_kendo_common_effects(g, scenario);
     test_mr_x(g, scenario);
     test_licker(g, scenario);
     test_licker_variants(g, scenario);

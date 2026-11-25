@@ -66,6 +66,8 @@ typedef struct {
     double x, z;
     int facing;
     int floor;                        /* 0 ground; floor n stands at y = -1800 * n */
+    PeImpRoomLogic *core_effect_bank, *core_effect_palettes;
+    uint8_t core_effect_checked;
     PeImpRoomLogic *logic;            /* the room's record (owned) */
     PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
     PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */

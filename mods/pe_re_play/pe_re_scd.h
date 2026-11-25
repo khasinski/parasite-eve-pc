@@ -50,6 +50,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_imp_rdt.h"
 
 #define PE_RE_FLAG_GROUPS 36                   /* RE2 scripts set groups 0-35 */
 #define PE_RE_FG_STATUS 1
@@ -108,7 +109,15 @@ void pe_re_flag_set(PeReFlags *f, unsigned group, unsigned bit, int on);
 
 typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
 
-enum { PE_RE_KENDO = 0x48 };
+enum { PE_RE_KENDO = 0x48, PE_RE_ACTOR_PARTS = 32 };
+typedef enum { PE_RE_PART_ATTACHED, PE_RE_PART_BURST, PE_RE_PART_FALL } PeRePartAction;
+
+typedef struct {
+    uint8_t action;
+    uint8_t rgb[3];
+    int16_t heading, speed, vertical_speed, gravity, drag;
+    int16_t spin[3];
+} PeRePartCommand;
 
 typedef struct PeReSceneActor {
     uint8_t slot, kind, move;
@@ -127,6 +136,7 @@ typedef struct PeReEffect {
     int x, y, z;
     uint16_t age, duration;
     uint8_t id, type, handle, scale, attachment, target, loop, tagged;
+    PeImpRe2CoreEffect common;                 /* borrowed from the active session bank */
 } PeReEffect;
 
 /* A scripted clip (plc_motion). For the player, the partner and people (0x40 up) the mode picks the
@@ -136,7 +146,7 @@ typedef struct PeReEffect {
 enum { PE_RE_CLIP_ROOM, PE_RE_CLIP_OWN, PE_RE_CLIP_SUB0, PE_RE_CLIP_SUB1, PE_RE_CLIP_LEGACY = 0xFF };
 typedef struct {
     uint8_t active, move, reverse, next;
-    uint16_t elapsed;                          /* clip frames played (60 Hz steps, by its speed) */
+    uint16_t elapsed;                          /* sequence frames played: one per 30 Hz script tick, by its speed */
     uint8_t reset_parts, direct, start_frame;
     uint8_t mode, bank, loop, speed, half;     /* plc_motion's mode, PE_RE_CLIP_*, loop, 2 double 0 half 1 normal */
     uint16_t ticks;                            /* frames since it started, whatever its speed */
@@ -149,6 +159,7 @@ typedef struct {
 } PeReActorDestination;
 
 /* Advance in RE2 room units, returning true on arrival. Facing is RE2 yaw. */
+enum { PE_RE_DEST_TURN = 0x15 };
 int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing);
 
 typedef struct {
@@ -198,6 +209,7 @@ typedef struct {
                                                 * Bit 0 counts: SCE2.C Plc_dest keeps Set_no as given (2-02, 4-09). */
     PeReActorDestination player_dest;
     PeReActorDestination enemy_dest[PE_RE_ENEMIES_MAX];
+    PeRePartCommand enemy_parts[PE_RE_ENEMIES_MAX][PE_RE_ACTOR_PARTS];
     uint8_t actor_stopped[PE_RE_WORKS];         /* plc_stop suspends the active scripted action */
     int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */
     int player_set;                            /* pos_set / dir_set moved the player: works[0] */
@@ -234,6 +246,7 @@ typedef struct {
     void (*lose)(void *ctx, uint16_t item, uint16_t count);   /* count 0: all of it */
     void (*give)(void *ctx, uint16_t item, uint16_t count);
     int (*set_room_bgm)(void *ctx, unsigned stage, unsigned room, uint16_t cue);
+    int (*core_effect)(void *ctx, unsigned id, unsigned palette, PeImpRe2CoreEffect *out);
 } PeReScdHost;
 
 /* Enter room `l`: start its init and main tasks and run every task until it yields. RE2 only;
