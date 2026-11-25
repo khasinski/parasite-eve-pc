@@ -10,7 +10,7 @@
 
 #include "re_play_api.h"
 
-#define PE_TRIP_FOES_MAX 6     /* the game has 7 enemy places */
+#define PE_TRIP_FOES_MAX PE_RE_BATTLE_MAX_FOES
 #define PE_TRIP_GROUP_MAX 3    /* pe_trip_approach's group, by distance (without a camera to ask) */
 
 typedef struct {

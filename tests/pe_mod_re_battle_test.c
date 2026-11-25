@@ -41,7 +41,7 @@ static void test_round_trip(void) {
 
 static void test_re2_rules(void) {
     const PeReBattleRules *rules = pe_re_battle_rules("re2");
-    CHECK(rules && rules->max_foes == 6 && rules->floor_height == 1800);
+    CHECK(rules && rules->max_foes == 7 && rules->floor_height == 1800);
     CHECK(!pe_re_battle_rules("re1") && !pe_re_battle_rules("re3") && !pe_re_battle_rules(NULL));
     PeReSession s = {0};
     for (unsigned street = 0; street < 2; ++street) {
@@ -68,10 +68,10 @@ static int in_view(const PeReEnemyPlacement *enemy) {
 }
 
 static void test_begin(void) {
-    enum { count = 13, record_size = 22 };
-    const uint8_t slots[count] = {6, 4, 3, 10, 5, 2, 7, 1, 8, 9, 11, 12, 3};
-    const uint8_t kinds[count] = {0x10, 0x10, 0x10, 0x47, 0x1f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x2d, 0x10, 0x10};
-    const uint8_t x[count] = {150, 50, 75, 98, 100, 99, 200, 240, 102, 103, 104, 105, 220};
+    enum { count = 14, record_size = 22 };
+    const uint8_t slots[count] = {6, 4, 3, 10, 5, 2, 7, 1, 8, 9, 11, 12, 3, 13};
+    const uint8_t kinds[count] = {0x10, 0x10, 0x10, 0x47, 0x1f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x2d, 0x10, 0x10, 0x10};
+    const uint8_t x[count] = {150, 50, 75, 98, 100, 99, 200, 240, 102, 103, 104, 105, 220, 250};
     uint8_t rdt[1 + count * record_size] = {0};
     PeReSession s = {.game = pe_re_game_named("re2"), .room = 4, .camera = 3, .x = 0};
     s.run.ran = 1;
@@ -96,10 +96,13 @@ static void test_begin(void) {
     const PeReEnemyPlacement lead = {.slot = 5, .kind = 0x1f, .killed_flag = 5, .x = 100};
     CHECK(pe_re_battle_begin(&battle, &s, NULL, &lead, in_view) == -1);
     CHECK(!pe_re_battle_begin(&battle, &s, rules, &lead, in_view));
-    const uint8_t expected[] = {5, 2, 3, 6, 4, 7};
-    CHECK(battle.joined == 6 && battle.initial_count == 6 && battle.camera == 3);
+    const uint8_t expected[] = {5, 2, 3, 6, 4, 7, 1};
+    CHECK(battle.joined == 7 && battle.initial_count == 7 && battle.camera == 3);
     CHECK(!memcmp(battle.initial_slots, expected, sizeof expected));
-    CHECK(battle.waiting_count == 1 && battle.waiting[0] == 1);
+    CHECK(battle.waiting_count == 1 && battle.waiting[0] == 13);
+    uint8_t targets[7];
+    CHECK(pe_re_battle_target_order(&battle, targets, 7) == 7);
+    CHECK(targets[0] == 4 && targets[6] == 1);
     CHECK(!pe_re_battle_encounter_allowed(&battle));
     CHECK(pe_re_battle_begin(&battle, &s, rules, &lead, in_view) == -1);
     CHECK(!pe_re_battle_step(&battle, &s, 300, 400, 0, in_view, NULL, 0));
@@ -108,7 +111,7 @@ static void test_begin(void) {
     CHECK(battle.foe[2].x == 4 && battle.foe[2].z == 5);
     pe_re_battle_foe_died(&battle, 2);
     pe_re_battle_foe_died(&battle, 2);
-    CHECK(battle.joined == 5 && battle.foe[2].state == PE_RE_BATTLE_FOE_DEAD);
+    CHECK(battle.joined == 6 && battle.foe[2].state == PE_RE_BATTLE_FOE_DEAD);
     pe_re_battle_end(&battle, &s, 0);
     CHECK(pe_re_battle_encounter_allowed(&battle));
     CHECK(!pe_re_battle_begin(&battle, &s, rules, &lead, NULL));

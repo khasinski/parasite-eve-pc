@@ -23,6 +23,8 @@
 #define RE_PLAY_EVENT_ROOM "re_play.room"
 #define RE_PLAY_EVENT_ENEMIES "re_play.enemies"
 
+#define PE_RE_BATTLE_MAX_FOES 7 /* Current shared roster limit. A game may choose fewer. */
+
 typedef struct PeReEnemyPlacement {
     uint8_t slot;                  /* the game's enemy slot (Em_no) */
     uint8_t kind;                  /* the game's id (RE2: 0x10-0x3F creatures; 0x40 and up are people) */

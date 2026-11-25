@@ -594,6 +594,12 @@ static int pe_room_creature(const PeRePlayApi *api) {
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    if (!s.automatic && count == PE_RE_BATTLE_MAX_FOES &&
+        api->struct_size >= offsetof(PeRePlayApi, encounter_position) + sizeof api->encounter_position &&
+        api->encounter_position && !api->encounter_position(&x, &z, &floor)) {
+        at_aya = 1;
+        s.room_x = x, s.room_z = z, s.room_pos_known = 1;
+    }
     for (int i = 0; i < count; ++i) pe_enemy_battle_set_room_slot(i, s_trip.slot[i]);
     s_battle_pack_count = 0;
     for (int i = 0; i < packs.count && i < PE_TRIP_FOES_MAX; i++, s_battle_pack_count++) {
@@ -661,7 +667,9 @@ static void pe_leave(void) {
     s.same_room = s.target == s.origin;
     s.frames = s.travel = 0;
     s.saw_enemies = 0;
-    if (s.automatic) {   /* an imported room's encounter: the battle starts here, no room of PE's needed */
+    const int full_imported_roster = s.imported_room_paused && s.room_pos_known &&
+                                     s_trip.armed && s_trip.count == PE_RE_BATTLE_MAX_FOES;
+    if (s.automatic || full_imported_roster) {   /* an imported room's encounter starts in place */
         s.same_room = 1;
         s.here = 1, s.move_lock = g_FieldMoveLock & 1;
         pe_anchor_battle(api);

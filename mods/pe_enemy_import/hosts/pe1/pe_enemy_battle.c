@@ -64,7 +64,9 @@
 #include "pe1/render_packets.h"
 
 #define MOD_ID "pe_enemy_import"
-#define PE_FOES_MAX 6
+#define PE_FOES_MAX PE_RE_BATTLE_MAX_FOES
+_Static_assert(PE_FOES_MAX <= sizeof g_BattleEnemySlots / sizeof *g_BattleEnemySlots, "Imported foes must fit native enemy slots");
+_Static_assert(PE_FOES_MAX <= BATTLE_TARGET_CAPACITY, "All imported foes must fit the native target list");
 #define PE_FORMS_MAX 5
 #define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256

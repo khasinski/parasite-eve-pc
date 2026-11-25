@@ -68,6 +68,8 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D22 | 2026-11-24 | After a battle Aya stays where it left her in the room (and in its last camera), instead of going back to where it began. | With the camera following her (D6), going back would be a jump across the room. |
 | D23 | 2026-11-24 | The reinforcement sound is an opt-in Fights setting. It plays once per frame that successfully spawns a reinforcement. The yellow marker is independent of sound. | Players can keep the visual cue without adding repeated audio to busy fights. |
 | D24 | 2026-11-24 | An escape records only deaths confirmed before native actor cleanup. Removed actors are not evidence of death. | The native escape path releases surviving actors before the room is restored. |
+| D25 | 2026-11-24 | Supersedes D11's cap. The first RE2 iteration allows seven simultaneous enemies and keeps the existing native engine capacity. | The allocator and target list each have seven enemy entries. Aya has separate battle state. |
+| D26 | 2026-11-24 | A manually started imported fight with a full seven-foe roster uses in-place entry. | The legacy PE carrier can hold its own enemies through the opening. In-place entry makes all seven slots available to the imported roster. |
 
 ## Architecture
 
@@ -93,7 +95,7 @@ they can read room state; none touch the host.
 ```c
 typedef struct PeReBattleRules {
     const char *game;                       /* "re1", "re2", "re3" */
-    int max_foes;                           /* 6 (D11); a game may lower it */
+    int max_foes;                           /* 7 (D25); a game may lower it */
     double floor_height;                    /* room units per floor (RE2: 1800) */
     int (*combatant)(const PeReSession *, const PeReEnemyPlacement *);   /* fights, not a person or scene actor */
     int (*pursues)(const PeReSession *, const PeReEnemyPlacement *);     /* closes in during battle time (D7) */
@@ -280,7 +282,7 @@ into the named room with the user's store), tests.
 4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12, D19).** Entry: G2's re-sample for late joiners.
    Build: JOIN events, queue, spawn mid-battle, trip result per joiner, target
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
-   up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
+   up in the battle; a room with more than seven eligible enemies uses the waiting list; 1-03 only takes enemies on
    Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
    The director and these headless tests are built. Adapter (953def9c6): joiners
    spawn with the battle's packs (no build mid-battle; a kind the battle didn't
@@ -343,8 +345,12 @@ A Claire B room check found nine EM1F placements in 1-03, including
 placements reported on a different floor. Room 2-05 had four EM10
 placements in this state. Room 1-1D had seven EM1F placements and is a
 candidate for the native rolling-cap test. The adapter still retains
-at most six native foe records for the duration of a fight, so the full
+at most seven native foe records for the duration of a fight, so the full
 wave exit check is open.
+The seven-foe Windows test started a manual in-place fight in Claire B
+room 1-1D, cycled through all seven targets, and recorded all seven defeats.
+On re-entry, the three placements with retail defeat flags stayed gone.
+The four placements without a defeat flag returned.
 
 Phase 6 preparation now reads the RE2 boss table for special battle rules.
 T11 checks the Alligator choice and canister, Tyrant launcher, and G
@@ -367,7 +373,7 @@ fake `in_view`; they need no disc.
 | T1 | Anchor choice: a room's extent at k fits the 16-bit space beside a given zone box; refuses when it can't. | 1 |
 | T2 | Round trip room -> PE -> room within 1 unit (I3), at k for sizes 50, 100, 200. | 1 |
 | T3 | RE2 rules: combatant and pursuer kinds match today's helpers for every RE2 kind. | 2 |
-| T4 | `begin`: lead plus in-view enemies on the floor, nearest first, cap 6; people and scene actors left out. | 2 |
+| T4 | `begin`: lead plus in-view enemies on the floor, nearest first, cap 7; people and scene actors left out. | 2 |
 | T5 | CAMERA event when Aya's position crosses a camera zone; none while she stays. | 3 |
 | T6 | JOIN: an enemy entering view joins; a full battle queues it; a death lets the next in. | 4 |
 | T7 | Floors: an enemy on another floor never joins. | 4 |

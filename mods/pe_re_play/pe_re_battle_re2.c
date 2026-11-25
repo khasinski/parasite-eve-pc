@@ -53,7 +53,7 @@ static void chase_step(PeReSession *s, PeReEnemyPlacement *foes, int count, doub
 
 const PeReBattleRules pe_re_battle_re2_rules = {
     .game = "re2",
-    .max_foes = 6,
+    .max_foes = PE_RE_BATTLE_MAX_FOES,
     .floor_height = PE_RE2_FLOOR_HEIGHT,
     .combatant = combatant,
     .pursues = pursues,
