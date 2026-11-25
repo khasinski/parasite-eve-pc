@@ -588,6 +588,16 @@ static void battle_walk(FieldActor *aya) {
     }
 }
 
+static int restore_vram_rect(RECT rect, const uint16_t *data) {
+    DrawSync(0);
+    StoreImage(&rect, s_vram_check);
+    DrawSync(0);
+    if (!memcmp(s_vram_check, data, (size_t)rect.w * rect.h * sizeof *data)) return 0;
+    LoadImage(&rect, (void *)data);
+    DrawSync(0);
+    return 1;
+}
+
 /* Native battle assets can reuse field VRAM even when imported packs respect
  * our reservations. Reclaim the cached atlas before field drawing resumes. */
 static void restore_field_texture(void) {
@@ -599,19 +609,15 @@ static void restore_field_texture(void) {
             RECT rect = palette ? texture->palette : texture->column[j];
             const uint16_t *pixels = palette ? &texture->colours[0][0] :
                 texture->words + j * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT;
-            const size_t bytes = (size_t)rect.w * rect.h * sizeof *pixels;
-            DrawSync(0);
-            StoreImage(&rect, s_vram_check);
-            DrawSync(0);
-            if (!memcmp(s_vram_check, pixels, bytes)) continue;
-            LoadImage(&rect, (void *)pixels);
-            DrawSync(0);
+            if (!restore_vram_rect(rect, pixels)) continue;
             if (s_trace_scene)
                 pe_mod_log("pe_re_play", "EM%02x restored field %s at %d,%d", kind,
                            palette ? "palette" : "texture", rect.x, rect.y);
         }
     }
 }
+
+static void restore_effect_textures(void);
 
 static void backdrop_off(int restore) {
     battle_walk_off();
@@ -631,7 +637,10 @@ static void backdrop_off(int restore) {
             DrawSync(0);
         }
     }
-    if (restore && s_show) restore_field_texture();
+    if (restore && s_show) {
+        restore_field_texture();
+        restore_effect_textures();
+    }
     free(s_backdrop.saved_pages);
     s_backdrop.saved_pages = NULL;
     s_backdrop.on = 0;
@@ -1775,12 +1784,28 @@ typedef struct {
     const uint8_t *common_palette;
     unsigned u_origin, v_origin;
     uint8_t *frame_data;
+    const uint16_t *pixels, *colours;
     unsigned width, height, v, palette, palette_count, page;
     uint8_t id;
 } EffectTexture;
 static EffectTexture s_effect_textures[EFFECT_BANK_SIZE];
 static unsigned s_effect_texture_count;
 static RenderTexturedQuad s_effect_packets[2][EFFECT_PACKET_MAX];
+
+static void restore_effect_textures(void) {
+    for (unsigned i = 0; i < s_effect_texture_count; i++) {
+        const EffectTexture *texture = &s_effect_textures[i];
+        if (!texture->width) continue;
+        const int x = s_effect_page_x[texture->page];
+        const RECT pixels = {x, EFFECT_PAGE_Y + texture->v, texture->width / 4, texture->height};
+        const RECT clut = {x, texture->palette, 16, texture->palette_count};
+        const int moved_pixels = restore_vram_rect(pixels, texture->pixels);
+        const int moved_clut = restore_vram_rect(clut, texture->colours);
+        if (s_trace_scene && (moved_pixels || moved_clut))
+            pe_mod_log("pe_re_play", "Effect %02x restored VRAM at %d,%d (pixels %d, palette %d)",
+                       texture->id, x, pixels.y, moved_pixels, moved_clut);
+    }
+}
 
 static void clear_effects(int restore) {
     for (unsigned i = 0; i < s_effect_texture_count; i++) free(s_effect_textures[i].frame_data);
@@ -1862,7 +1887,8 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         if (field_area_used(&reserved, 0) || field_area_used(&clut, 0) || !empty_texture_area(&reserved) ||
             !empty_texture_area(&clut)) continue;
         const size_t frames = texture->asset.frame_count * 8, sprites = texture->asset.sprite_count * 4;
-        texture->frame_data = malloc(frames + sprites);
+        const size_t pixel_bytes_count = (size_t)w * h * sizeof(uint16_t);
+        texture->frame_data = malloc(frames + sprites + pixel_bytes_count + palettes * 16 * sizeof(uint16_t));
         if (!texture->frame_data) return;
         memcpy(texture->frame_data, texture->asset.frames, frames);
         memcpy(texture->frame_data + frames, texture->asset.sprites, sprites);
@@ -1870,13 +1896,17 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         texture->asset.sprites = texture->frame_data + frames;
         texture->asset.tim = NULL;
         RECT pixels = {s_effect_page_x[i], EFFECT_PAGE_Y + v, w, h};
-        uint16_t colours[16 * (256 - EFFECT_CLUT_Y)];
+        uint16_t *saved_pixels = (uint16_t *)(texture->frame_data + frames + sprites);
+        uint16_t *colours = saved_pixels + w * h;
+        memcpy(saved_pixels, pixel_bytes, pixel_bytes_count);
+        texture->pixels = saved_pixels;
+        texture->colours = colours;
         for (unsigned c = 0; c < palettes * 16; c++) {
             const unsigned rgb = effect_word(colours_bytes + c * 2);
             colours[c] = effect->common.page ? rgb : rgb ? rgb | 0x8000 : 0;
         }
         DrawSync(0);
-        LoadImage(&pixels, (void *)pixel_bytes);
+        LoadImage(&pixels, saved_pixels);
         LoadImage(&clut, colours);
         DrawSync(0);
         texture->width = w * 4;
@@ -1887,6 +1917,9 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         texture->page = i;
         s_effect_pages[i].height += h;
         s_effect_pages[i].palettes += palettes;
+        if (s_trace_scene)
+            pe_mod_log("pe_re_play", "Effect %02x VRAM pixels %d,%d %dx%d palette %d,%d %dx%d",
+                       texture->id, pixels.x, pixels.y, pixels.w, pixels.h, clut.x, clut.y, clut.w, clut.h);
         return;
     }
 }
