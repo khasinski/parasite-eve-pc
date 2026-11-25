@@ -574,9 +574,63 @@ static void battle_walk(FieldActor *aya) {
     }
 }
 
+/* PE's drop shadows (an actor's flag 0x400 turns its shadow off) lie on the host room's floor, not
+ * the room in the picture: a dark patch under Aya and the enemies. Off for every actor while the
+ * battle is in front of the room; the ones this turned off get theirs back after it. */
+#define SHADOWLESS_MAX 32
+static const FieldActor *s_shadowless[SHADOWLESS_MAX];
+static int s_shadowless_n;
+
+static void shadows_off(void) {
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next) {
+        if (a->flags & 0x400) continue;
+        if (s_shadowless_n >= SHADOWLESS_MAX) return;
+        a->flags |= 0x400;
+        s_shadowless[s_shadowless_n++] = a;
+    }
+}
+
+static void shadows_back(void) {
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
+        for (int i = 0; i < s_shadowless_n; i++)
+            if (s_shadowless[i] == a) { a->flags &= ~0x400u; break; }
+    s_shadowless_n = 0;
+}
+
+/* PE turns the pad into a direction from its camera's base angles, which the host room's scripts set
+ * for the host's cameras. In battle the picture is the room's camera: up is into its picture. A held
+ * direction keeps its heading through a camera cut (as in RE); the new camera's applies once the pad
+ * is let go. The host's angles come back after the battle. */
+static struct { int saved, on; u16 digital, analog; } s_battle_angle;
+
+static void battle_angles(void) {
+    GeomScrollCoordinates *c = &g_GeomScroll.state.position;
+    const int held = (g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT)) ||
+                     abs((int)g_PadPackets[0].leftX - 128) > 48 || abs((int)g_PadPackets[0].leftY - 128) > 48;
+    if (!s_battle_angle.saved) {
+        s_battle_angle.digital = c->baseAngleDigital, s_battle_angle.analog = c->baseAngleAnalog;
+        s_battle_angle.saved = 1;
+    } else if (held && s_battle_angle.on) {
+        return;
+    }
+    if (!s_camera.distance) return;
+    const u16 yaw = (u16)((int)lround(atan2(-s_camera.right_z, s_camera.right_x) * (2048.0 / acos(-1.0))) & 4095);
+    c->baseAngleDigital = c->baseAngleAnalog = yaw;
+    s_battle_angle.on = 1;
+}
+
+static void battle_angles_back(void) {
+    if (!s_battle_angle.saved) return;
+    g_GeomScroll.state.position.baseAngleDigital = s_battle_angle.digital;
+    g_GeomScroll.state.position.baseAngleAnalog = s_battle_angle.analog;
+    s_battle_angle.saved = s_battle_angle.on = 0;
+}
+
 static void backdrop_off(int restore) {
     battle_walk_off();
+    battle_angles_back();
     if (!s_backdrop.on) return;
+    shadows_back();
     if (restore) {
         GeomScrollCoordinates *c = &g_GeomScroll.state.position;
         if (c->matrixWords) *(GteMatrix *)c->matrixWords = s_backdrop.saved_view;
@@ -678,6 +732,8 @@ static int on_camera(void *ctx, void *user) {
         if (battle && !s_backdrop.on) backdrop_on(aya);
         else if (!battle && s_backdrop.on) backdrop_off(1);
         if (s_backdrop.on) {
+            shadows_off();                             /* joiners too, as they come */
+            battle_angles();
             /* PE walks her to her battle place first: follow her until she has stood still a moment */
             if (s_backdrop.still < BACKDROP_SETTLE) {
                 const double x = aya->pos_x / 65536.0, y = aya->pos_y / 65536.0, z = aya->pos_z / 65536.0;
