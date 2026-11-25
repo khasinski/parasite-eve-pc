@@ -121,6 +121,9 @@ typedef struct PeRePlayApi {
     /* how far room enemy `slot` walks in a frame while it pursues, in room units (0: it doesn't): a
      * battle moves it at the same pace as the field does */
     double (*enemy_walk_speed)(uint8_t slot);
+    /* Optional. How many imported games have started (New Game in RE play, not Continue) since the
+     * game launched: other mods can set Aya up for a new one. */
+    unsigned (*games_started)(void);
 } PeRePlayApi;
 
 #define PE_RE_MARK_TARGET 1

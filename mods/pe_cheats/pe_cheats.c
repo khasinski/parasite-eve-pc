@@ -15,7 +15,11 @@
 
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include <stddef.h>
+
 #include "pe_mod_menu.h"
+#include "pe_services.h"
+#include "re_play_api.h"
 #include "pe1/aya.h"
 #include "pe1/battle.h"
 #include "pe1/battle_runtime.h"
@@ -34,6 +38,8 @@
 #define PE_ALL_POWERS 0xFFFFFu
 
 static int s_god, s_ammo, s_powers;   /* s_powers: Learn all ran this game */
+static int s_arsenal_on_start = 1;    /* give the test arsenal when an imported game starts */
+static unsigned s_games_seen, s_arsenal_due;
 static int s_pending_win;
 static unsigned s_powers_before;
 static const BattleAction *s_ammo_action;
@@ -110,10 +116,30 @@ static void pe_powers_restore(void) {
     pe_toast("Parasite Energy powers restored");
 }
 
+static void pe_arsenal(void);
+
+/* An imported game (RE play) started: give the test arsenal once Aya is free in the field. */
+static void pe_arsenal_on_start(void) {
+    const PeRePlayApi *api = pe_service_get(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION);
+    if (!api || api->struct_size < offsetof(PeRePlayApi, games_started) + sizeof api->games_started ||
+        !api->games_started)
+        return;
+    const unsigned started = api->games_started();
+    if (started != s_games_seen) {
+        s_games_seen = started;
+        s_arsenal_due = s_arsenal_on_start;
+    }
+    if (s_arsenal_due && pe_save_loaded() && pe_free_field()) {
+        s_arsenal_due = 0;
+        pe_arsenal();
+    }
+}
+
 static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     pe_god();
     pe_ammo();
+    pe_arsenal_on_start();
     return 0;
 }
 static int pe_on_battle(void *ctx, void *user) {
@@ -233,6 +259,9 @@ static int cheats_init(void) {
     pe_menu_register_action(0, "Learn all PE powers", "Every power a level-up can teach.", pe_powers_learn);
     pe_menu_register_action(0, "Restore PE powers", "Back to the powers learned before Learn all PE powers.",
                             pe_powers_restore);
+    pe_menu_register_toggle(0, "Test arsenal in imported games",
+                            "Give the test arsenal whenever an imported game (RE play) starts a New Game.",
+                            &s_arsenal_on_start, NULL);
     pe_menu_register_action(0, "Give test arsenal",
                             "For testing: the strongest weapon of each kind, and the DEBUGSMG equipped, whose hits kill.",
                             pe_arsenal);
