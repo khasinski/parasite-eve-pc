@@ -575,6 +575,28 @@ static int step(Vm *vm, PeReScdTask *t) {
         }
         t->pc += n;
         return CONTINUE;
+    case 0x7a:                                             /* parts_bomb */
+    case 0x7b: {                                           /* parts_down */
+        const unsigned part = ins[code == 0x7a ? 2 : 1];
+        if (!enemy_work(t->work) || part >= PE_RE_ACTOR_PARTS || !vm->run->works[t->work][0])
+            goto unsupported;
+        PeRePartCommand *cmd = &vm->run->enemy_parts[t->work - 2][part];
+        if (code == 0x7a) {
+            *cmd = (PeRePartCommand){
+                .action = PE_RE_PART_BURST, .rgb = {ins[3], ins[4], ins[5]},
+                .heading = s16(ins + 6), .speed = s16(ins + 8), .drag = s16(ins + 10),
+                .vertical_speed = s16(ins + 12), .gravity = s16(ins + 14)
+            };
+        } else {
+            *cmd = (PeRePartCommand){
+                .action = PE_RE_PART_FALL, .heading = s16(ins + 2), .speed = s16(ins + 4),
+                .vertical_speed = s16(ins + 6), .gravity = (int8_t)ins[8],
+                .spin = {s16(ins + 10), s16(ins + 12), s16(ins + 14)}
+            };
+        }
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_SCE_EM_SET: {                                  /* SCE2.C: the last successful spawn owns the slot. */
         const unsigned group = PE_RE_FG_ENEMY +
             (vm->flags->work[PE_RE_WORK_STAGE] >= 3 || pe_re_flag(vm->flags, PE_RE_FG_STATUS, 6));
@@ -596,6 +618,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             r->em_ready[slot - 2] = 0;
             r->scene[slot - 2] = (PeReSceneMotion){0};
             r->enemy_dest[slot - 2] = (PeReActorDestination){0};
+            memset(r->enemy_parts[slot - 2], 0, sizeof r->enemy_parts[slot - 2]);
             r->actor_stopped[slot] = r->arrived[slot] = 0;
             if (pe_re_scene_kind(ins[3])) {
                 w[PE_RE_MEMBER_ROUTINE0] = ins[3] == 0x2c ? 1 : 2;

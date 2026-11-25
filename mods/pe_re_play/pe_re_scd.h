@@ -109,7 +109,15 @@ void pe_re_flag_set(PeReFlags *f, unsigned group, unsigned bit, int on);
 
 typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
 
-enum { PE_RE_KENDO = 0x48 };
+enum { PE_RE_KENDO = 0x48, PE_RE_ACTOR_PARTS = 32 };
+typedef enum { PE_RE_PART_ATTACHED, PE_RE_PART_BURST, PE_RE_PART_FALL } PeRePartAction;
+
+typedef struct {
+    uint8_t action;
+    uint8_t rgb[3];
+    int16_t heading, speed, vertical_speed, gravity, drag;
+    int16_t spin[3];
+} PeRePartCommand;
 
 typedef struct PeReSceneActor {
     uint8_t slot, kind, move;
@@ -201,6 +209,7 @@ typedef struct {
                                                 * Bit 0 counts: SCE2.C Plc_dest keeps Set_no as given (2-02, 4-09). */
     PeReActorDestination player_dest;
     PeReActorDestination enemy_dest[PE_RE_ENEMIES_MAX];
+    PeRePartCommand enemy_parts[PE_RE_ENEMIES_MAX][PE_RE_ACTOR_PARTS];
     uint8_t actor_stopped[PE_RE_WORKS];         /* plc_stop suspends the active scripted action */
     int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */
     int player_set;                            /* pos_set / dir_set moved the player: works[0] */

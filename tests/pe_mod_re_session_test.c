@@ -792,6 +792,44 @@ static int capture_music_table(void *ctx, unsigned stage, unsigned room, uint16_
     return 0;
 }
 
+static void test_part_commands(void) {
+    const uint8_t rdt[] = {
+        [8 + 17 * 4] = 100,
+        [100] = 8, 0, 10, 0, 12, 0, 49, 0,
+        1, 0, 1, 0,
+        0x2e, 3, 4,
+        0x7a, 0, 12, 64, 16, 16, 0x53, 3, 100, 0, 10, 0, 0, 0, 20, 0,
+        0x7b, 13, 0x53, 3, 200, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0,
+        1, 0,
+        0x44, 0, 4, 0x1f, 0, 0, 0, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0
+    };
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 1);
+    if (!builder) { CHECK(0); return; }
+    CHECK(!pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    PeImpRoomLogic *logic = pe_imp_logic_finish(builder);
+    if (!logic) { CHECK(0); return; }
+    static PeReScdRun run;
+    PeReFlags flags = {0};
+    pe_re_scd_run(logic, &flags, NULL, &run);
+    pe_re_scd_exec(logic, &run, 2, 3);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(run.works[6][PE_RE_MEMBER_ID] == 0x1f);
+    pe_re_scd_exec(logic, &run, 2, 2);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    const PeRePartCommand *burst = &run.enemy_parts[4][12], *fall = &run.enemy_parts[4][13];
+    CHECK(burst->action == PE_RE_PART_BURST && burst->heading == 0x353 && burst->speed == 100);
+    CHECK(burst->rgb[0] == 64 && burst->rgb[1] == 16 && burst->rgb[2] == 16);
+    CHECK(burst->drag == 10 && burst->vertical_speed == 0 && burst->gravity == 20);
+    CHECK(fall->action == PE_RE_PART_FALL && fall->heading == 0x353 && fall->speed == 200);
+    CHECK(fall->gravity == 20 && fall->spin[0] == 0 && fall->spin[1] == 0 && fall->spin[2] == 0);
+    CHECK(run.enemy_parts[0][12].action == PE_RE_PART_ATTACHED);
+    pe_re_scd_exec(logic, &run, 2, 3);
+    pe_re_scd_tick(logic, &flags, NULL, &run);
+    CHECK(burst->action == PE_RE_PART_ATTACHED && fall->action == PE_RE_PART_ATTACHED);
+    free(logic);
+}
+
 static void test_music_table_script(void)
 {
     const uint8_t rdt[] = {
@@ -826,6 +864,7 @@ int main(int argc, char **argv) {
     test_ground_enemy_variants();
     test_movie_script();
     test_music_table_script();
+    test_part_commands();
     test_cutscene_turn();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
