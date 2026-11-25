@@ -146,6 +146,7 @@ typedef struct PeReEffect {
 enum { PE_RE_CLIP_ROOM, PE_RE_CLIP_OWN, PE_RE_CLIP_SUB0, PE_RE_CLIP_SUB1, PE_RE_CLIP_LEGACY = 0xFF };
 typedef struct {
     uint8_t active, move, reverse, next;
+    uint8_t routine;                           /* a walk or idle clip the actor's scenario routine plays, not a script's */
     uint16_t elapsed;                          /* sequence frames played: one per 30 Hz script tick, by its speed */
     uint8_t reset_parts, direct, start_frame;
     uint8_t mode, bank, loop, speed, half;     /* plc_motion's mode, PE_RE_CLIP_*, loop, 2 double 0 half 1 normal */
@@ -156,11 +157,16 @@ typedef struct {
     uint8_t moving, owned, mode;
     uint16_t arrival;                          /* the Room_flg bit to set on arrival, plus one (0 none) */
     int16_t x, z;
+    /* RE2's scenario walks (SPL_SCE.C Spl_sce04-09): `retail` when the actor has a row in the speed
+     * table. Phase 0 turns toward the point, phase 1 steps `speed` a tick along the facing while
+     * steering by `turn`. */
+    uint8_t retail, phase;
+    int16_t speed, turn;
 } PeReActorDestination;
 
 /* Advance in RE2 room units, returning true on arrival. Facing is RE2 yaw. */
 enum { PE_RE_DEST_TURN = 0x15 };
-int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing);
+int pe_re_actor_destination_step(PeReActorDestination *dest, double *x, double *z, int *facing);
 
 typedef struct {
     uint8_t status;                            /* 0 idle */
@@ -208,6 +214,7 @@ typedef struct {
                                                 * every frame from the next one until plc_dest / plc_ret again; 0 none.
                                                 * Bit 0 counts: SCE2.C Plc_dest keeps Set_no as given (2-02, 4-09). */
     PeReActorDestination player_dest;
+    uint8_t player_row;                        /* the player's row in RE2's walk tables (Id + 0x10); 0 unknown */
     PeReActorDestination enemy_dest[PE_RE_ENEMIES_MAX];
     PeRePartCommand enemy_parts[PE_RE_ENEMIES_MAX][PE_RE_ACTOR_PARTS];
     uint8_t actor_stopped[PE_RE_WORKS];         /* plc_stop suspends the active scripted action */

@@ -548,7 +548,7 @@ static void test_kendo_common_effects(const PeReGame *game, unsigned player) {
 }
 
 static void test_cutscene_turn(void) {
-    const PeReActorDestination turn = {.mode = PE_RE_DEST_TURN, .x = 440, .z = 64};
+    PeReActorDestination turn = {.mode = PE_RE_DEST_TURN, .x = 440, .z = 64};
     double x = -16233, z = -12483;
     int facing = 4032;
     CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
@@ -557,6 +557,23 @@ static void test_cutscene_turn(void) {
         CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
     CHECK(pe_re_actor_destination_step(&turn, &x, &z, &facing));
     CHECK(facing == 4416 && x == -16233 && z == -12483);
+
+    /* Kendo's walk (mode 4, SPL_TBL.H row 8: 0x3C a tick, turn 0x30): turn in place until within 0x15E of
+     * the point, then step 60 a tick while steering, stopping within 100 of it. */
+    PeReActorDestination walk = {.moving = 1, .mode = 4, .x = 0, .z = 0, .retail = 1, .speed = 0x3C, .turn = 0x30};
+    x = -3000, z = 0, facing = 2048 + 1024;                   /* 90 degrees off the point */
+    int ticks = 0, turned = 0;
+    while (!pe_re_actor_destination_step(&walk, &x, &z, &facing) && ++ticks < 200) {
+        if (!walk.phase) CHECK(x == -3000 && z == 0);
+        else if (!turned) turned = ticks;
+    }
+    CHECK(turned > 1 && ticks < 200 && hypot(x, z) < 100 && hypot(x, z) > 0);
+    CHECK(ticks - turned >= (3000 - 100) / 0x3C - 1);
+    /* mode 9 (Subpl_dir) turns toward the point and arrives without moving */
+    PeReActorDestination look = {.moving = 1, .mode = 9, .x = 0, .z = 3000, .retail = 1, .turn = 0x58};
+    x = 0, z = 0, facing = 0;
+    for (ticks = 0; ticks < 100 && !pe_re_actor_destination_step(&look, &x, &z, &facing); ticks++) {}
+    CHECK(ticks < 100 && x == 0 && z == 0 && ((facing - 3072) & 4095) <= 0x15E);
 }
 
 static void test_kendo_player_control(const char *store) {
@@ -581,7 +598,8 @@ static void test_kendo_player_control(const char *store) {
             CHECK(!s.run.arrived[0]);
             if (s.moved && hypot(s.x - s.run.player_dest.x, s.z - s.run.player_dest.z) > 500) approached = 1;
         } else if (moving && s.run.arrived[0]) {
-            CHECK(s.x == s.run.player_dest.x && s.z == s.run.player_dest.z);
+            /* RE2 walks stop within 100 of the point (Spl_sce_mv02); mode 9 only turns toward it */
+            CHECK(s.run.player_dest.mode == 9 || hypot(s.x - s.run.player_dest.x, s.z - s.run.player_dest.z) < 100);
             arrived = 1;
         }
         s.moved = 0;

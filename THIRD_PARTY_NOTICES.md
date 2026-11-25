@@ -370,3 +370,11 @@ If code from a consulted MIT project is ported later, its notice moves to the li
 
 The cutscene opcode audit consulted [MeganGrass/bio2-ds](https://github.com/MeganGrass/bio2-ds)
 to identify the retail part and sprite commands. The audit did not incorporate its source code.
+
+## RE2 scenario walks and Kendo's routine
+
+The scenario walk modes in `mods/pe_re_play/pe_re_scd.c` follow the behaviour of RE2's scenario
+dispatcher, as studied in [MeganGrass/bio2-ds](https://github.com/MeganGrass/bio2-ds) (`SPL_SCE.C`,
+`SCE2.C`, `EM_SUB.C`): turn toward the point, then step a per-actor speed while steering. The speed and
+turn values per actor row are the numbers in its `SPL_TBL.H`. Kendo's alternate texture (`SPL.C`
+`Spl_chenge02`) is reimplemented in `pe_re_stage.c`. No source code was incorporated.

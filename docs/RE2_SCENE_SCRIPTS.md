@@ -11,6 +11,16 @@
 
 ## Movement and animation parity
 
+### Scenario walks (implemented)
+
+`plc_dest` modes 4, 5, 7, 8 and 9 now follow RE2's scenario routine for the player and for people (Id 0x40 up). Zombies keep the shared step.
+
+- **Speeds and turns.** Each actor has a row in RE2's walk tables: Id - 0x40 for people, Id + 0x10 for the players. Mode 4 uses the walk row, 5 the run row, 7 the backward row, 8 the sidestep row and 9 the turn-only row. Kendo walks 0x3C units a tick with a 0x30 turn step; Leon walks 0x4B.
+- **Phases.** The actor first turns toward the point until it is within 0x15E of facing it. Mode 9 arrives there and does not move: in Kendo's intro, Aya turns to face Kendo instead of walking to his counter. Modes 4 and 5 then step the table speed along the facing while steering, and arrive within 100 units without snapping. Modes 7 and 8 step backward or sideways from the start.
+- **Clips.** People play their own bank's walk (move 0) while turning and walking, the run (move 1) once a mode 5 run starts, and loop the idle (move 2) after arriving. The player shows Aya's walk or run pose.
+- **Kendo.** RE2 has no separate death routine for Kendo. His only per-character step swaps parts 0–3, 5, 6, 9, 10, 12 and 13 to his third texture page and palette when his Type has bit 0x100. Room 1-01 sets that bit when it places him after the window attack, so he appears blood-soaked on re-entry. His death in the attack itself is the scripted struggle and the zombies' feeding.
+- **Verified.** In 1-01 for Leon and Claire, Aya stays in place and turns during the intro while Kendo walks to her, gestures, and walks back with his walk clip. The window attack still plays moves 11 and 12. After the attack, re-entering shows Kendo's alternate texture. The five story routes still reach their endings. Kendo's and the zombies' poses on re-entry still need a retail comparison.
+
 1. Audit each disc and scenario for actor movement and motion commands. Group uses by opcode, routine, selected work slot, actor class and bank. Cover playable actors, partners such as Ada and Sherry, scenario NPCs such as Kendo and Marvin, scripted enemies and scene objects. Record which scripts write destination operands after issuing the command and which wait for room flags, pose completion or player input.
 2. Use the RE2 actor routine as the contract for each movement mode. Decode the operands, then reproduce its turning, translation, tolerances and completion at script tick rate. Use Kendo's intro and window attack as the first traces. Preserve script writes, camera cuts and control ownership as the routines advance. Keep unrelated modes on their existing behavior until their contract is verified.
 3. Resolve the original animation sequence on the same clock. Carry per-frame root displacement through room coordinates, including rotation, reverse playback, looping and holds. Separate the RE2 world transform and completion from pose rendering. Match arrival flags and pose completion to retail before switching further room scripts onto the new routines.

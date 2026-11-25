@@ -1603,11 +1603,20 @@ static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, cons
     return 0x10000u | (sum[0] / pixels) | (sum[1] / pixels) << 5 | (sum[2] / pixels) << 10;
 }
 
+/* Kendo's routine (SPL.C Spl_mv48 -> Spl_chenge02): once his Type has bit 0x100, these parts take the
+ * texture page two on from his first and the palette row two on (his third atlas column and palette). */
+static int kendo_alternate_part(const PeReEnemyPlacement *p, unsigned part) {
+    static const uint16_t parts = 1u << 0 | 1u << 1 | 1u << 2 | 1u << 3 | 1u << 5 | 1u << 6 | 1u << 9 | 1u << 10 |
+                                  1u << 12 | 1u << 13;
+    return p->kind == PE_RE_KENDO && (p->behaviour & 0x100) && part < 16 && (parts >> part & 1);
+}
+
 static int field_face_texture(const PeImpModel *model, const PeImpFace *face, const int corners[3],
                               unsigned first_page, unsigned first_palette, const FieldTexture *texture, unsigned *clut,
-                              const RECT **area) {
-    const unsigned column = (face->page & 15u) - first_page;
-    const unsigned palette = (face->clut >> 6) - first_palette;
+                              const RECT **area, int alternate) {
+    unsigned column = (face->page & 15u) - first_page;
+    unsigned palette = (face->clut >> 6) - first_palette;
+    if (alternate && texture->columns > 2 && model->pal_rows > 2) column = 2, palette = 2;
     if (column >= texture->columns || palette >= model->pal_rows) return 0;
     for (int i = 0; i < 3; i++) {
         const unsigned u = face->uv[corners[i]][0], v = face->uv[corners[i]][1];
@@ -1739,7 +1748,8 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                         const unsigned first_page = s_field_mesh[p->kind].first_page;
                         const unsigned first_palette = s_field_mesh[p->kind].first_palette;
                         const FieldTexture *texture = s_texture_by_kind[p->kind];
-                        if (texture && field_face_texture(model, f, v, first_page, first_palette, texture, &clut, &area)) {
+                        if (texture && field_face_texture(model, f, v, first_page, first_palette, texture, &clut, &area,
+                                                          kendo_alternate_part(p, b))) {
                             const unsigned u_offset = (unsigned)(area->x % 64) * 2, v_offset = (unsigned)area->y % 256;
                             FieldTexturedTriangle *packet = &s_tex_packets[slot][i][emitted++];
                             *packet = (FieldTexturedTriangle){

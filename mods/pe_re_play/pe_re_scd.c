@@ -90,6 +90,47 @@ static int walking_mode(unsigned mode) {
     return mode == 4 || mode == 5 || mode == 7 || mode == 8 || mode == 9;
 }
 
+/* RE2's per-actor walk speeds and turn steps, as (speed, turn) per row (SPL_TBL.H Subpl_walk, Subpl_run,
+ * Subpl_back, Subpl_ato, Subpl_dir; values studied from bio2-ds). Row: Id - 0x40 for people, Id + 0x10
+ * for the players. Units: room units and 4096ths of a turn per 30 Hz tick. */
+static const uint8_t k_walk[32][2] = {
+    {0x14, 0x10}, {0x46, 0x30}, {0x14, 0x10}, {0x46, 0x30}, {0x3C, 0x30}, {0x32, 0x30}, {0x3C, 0x30}, {0x41, 0x30},
+    {0x3C, 0x30}, {0x41, 0x30}, {0x1E, 0x10}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0x32, 0x30},
+    {0x4B, 0x30}, {0x46, 0x30}, {0x4B, 0x30}, {0x46, 0x30}, {0x4B, 0x30}, {0x46, 0x30}, {0x4B, 0x30}, {0x46, 0x30},
+    {0x4B, 0x30}, {0x46, 0x30}, {0x4B, 0x30}, {0x4B, 0x30}, {0x4B, 0x30}, {0x4B, 0x30}, {0x46, 0x30}, {0x32, 0x30}};
+static const uint8_t k_run[32][2] = {
+    {0x1E, 0x1E}, {0xDC, 0x48}, {0x1E, 0x1E}, {0xDC, 0x48}, {0xBE, 0x48}, {0x78, 0x40}, {0xBE, 0x48}, {0xAA, 0x48},
+    {0xA0, 0x3C}, {0xAA, 0x48}, {0x1E, 0x1E}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0x78, 0x40},
+    {0xC8, 0x48}, {0xD2, 0x48}, {0xC8, 0x48}, {0xD2, 0x48}, {0xC8, 0x48}, {0xD2, 0x48}, {0xC8, 0x48}, {0xD2, 0x48},
+    {0xC8, 0x48}, {0xD2, 0x48}, {0xC8, 0x48}, {0xC8, 0x48}, {0xC8, 0x48}, {0xC8, 0x48}, {0xDC, 0x48}, {0x78, 0x40}};
+static const uint8_t k_back[32][2] = {
+    {0x19, 0x10}, {0x37, 0x30}, {0x19, 0x10}, {0x37, 0x30}, {0x37, 0x30}, {0x23, 0x30}, {0x37, 0x30}, {0x37, 0x30},
+    {0x37, 0x30}, {0x37, 0x30}, {0x19, 0x10}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0x23, 0x30},
+    {0x46, 0x30}, {0x41, 0x30}, {0x46, 0x30}, {0x41, 0x30}, {0x46, 0x30}, {0x41, 0x30}, {0x46, 0x30}, {0x41, 0x30},
+    {0x46, 0x30}, {0x41, 0x30}, {0x46, 0x30}, {0x46, 0x30}, {0x46, 0x30}, {0x46, 0x30}, {0x37, 0x30}, {0x23, 0x30}};
+static const uint8_t k_side[32][2] = {
+    {0x0A, 0x08}, {0x2D, 0x30}, {0x0A, 0x08}, {0x2D, 0x30}, {0x28, 0x30}, {0x1E, 0x28}, {0x28, 0x30}, {0x28, 0x28},
+    {0x28, 0x28}, {0x28, 0x28}, {0x0A, 0x08}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0x1E, 0x28},
+    {0x28, 0x30}, {0x2D, 0x30}, {0x28, 0x30}, {0x2D, 0x30}, {0x28, 0x30}, {0x2D, 0x30}, {0x28, 0x30}, {0x2D, 0x30},
+    {0x28, 0x30}, {0x2D, 0x30}, {0x28, 0x30}, {0x28, 0x30}, {0x28, 0x30}, {0x28, 0x30}, {0x2D, 0x30}, {0x1E, 0x28}};
+static const uint8_t k_turn[32] = {
+    0x20, 0x58, 0x20, 0x58, 0x58, 0x50, 0x58, 0x58, 0x58, 0x58, 0x20, 0, 0, 0, 0, 0x50,
+    0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x58, 0x50};
+
+/* Plc_dest's speed and turn for a mode (SCE2.C, SPL_SCE.C): 0 when the row or mode has none. */
+static int retail_walk(PeReActorDestination *d, int row) {
+    if (row < 0 || row >= 32) return 0;
+    const uint8_t *e = d->mode == 4 ? k_walk[row] : d->mode == 5 ? k_run[row] : d->mode == 7 ? k_back[row] :
+                       d->mode == 8 ? k_side[row] : NULL;
+    if (d->mode == 9) d->speed = 0, d->turn = k_turn[row];
+    else if (e) d->speed = (int16_t)(d->mode == 7 || d->mode == 8 ? -e[0] : e[0]), d->turn = e[1];
+    else return 0;
+    if (!d->turn) return 0;
+    d->retail = 1;
+    d->phase = d->mode == 7 || d->mode == 8;   /* Spl_sce07/08 only walk */
+    return 1;
+}
+
 /* work_copy's patch at `at`, or the empty slot it would go in (open addressing; never full) */
 static int patch_slot(const PeReScdRun *r, uint32_t at) {
     int k = (int)((at * 2654435761u) >> 23) & (PE_RE_PATCHES - 1);
@@ -115,6 +156,11 @@ static PeReSceneMotion scripted_clip(const uint8_t *ins, int by_mode) {
         .bank = by_mode ? (uint8_t)(mode >= 10 ? mode - 10 : mode) : PE_RE_CLIP_LEGACY,
         .loop = (flags & 4) != 0, .speed = (uint8_t)(flags & 8 ? 2 : flags & 0x10 ? 0 : 1)
     };
+}
+/* A clip an actor's own routine plays from its own bank (SPL_SCE.C: walk 0, run 1, idle 2), looping. */
+static PeReSceneMotion routine_clip(unsigned move) {
+    return (PeReSceneMotion){.active = 1, .direct = 1, .move = (uint8_t)move, .mode = 2, .bank = PE_RE_CLIP_SUB0,
+                             .loop = 1, .speed = 1, .routine = 1};
 }
 static void clip_step(PeReSceneMotion *m) {
     if (!m->active || !m->direct) return;
@@ -528,12 +574,18 @@ static int step(Vm *vm, PeReScdTask *t) {
         if (t->work == 0 || scenario_turn || (enemy_work(t->work) && walking_mode(ins[2]))) {
             PeReActorDestination *dest = t->work == 0 ? &r->player_dest : &r->enemy_dest[t->work - 2];
             *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = (uint16_t)(ins[3] + 1), .x = x, .z = z};
+            const int id = (uint16_t)*member(vm, t, PE_RE_MEMBER_ID);
+            /* People (0x40 up) and the player walk as RE2's scenario routine does; zombies keep the shared step. */
+            if (t->work == 0) retail_walk(dest, r->player_row ? r->player_row : -1);
+            else if (id >= 0x40) retail_walk(dest, id - 0x40);
             *member(vm, t, PE_RE_MEMBER_DEST_X) = x;
             *member(vm, t, PE_RE_MEMBER_DEST_Z) = z;
             r->arrived[t->work] = 0;
             r->actor_stopped[t->work] = 0;
             pe_re_flag_set(vm->flags, 5, ins[3], 0);
             if (t->work && r->scene[t->work - 2].direct) r->scene[t->work - 2] = (PeReSceneMotion){0};
+            if (t->work && dest->retail)            /* Spl_sce04-09 play the actor's own walk (move 0) */
+                r->scene[t->work - 2] = routine_clip(0);
             if (t->work == 0) r->pl_motion[0] = (PeReSceneMotion){0};
         } else if (t->work > 0) {
             /* Keep legacy placement for destination modes without a movement routine. */
@@ -1044,9 +1096,44 @@ static int zombie_rise(PeReScdRun *run, int slot) {
     return 1;
 }
 
+/* EM_SUB.C Goto00/Goto01: one turn step toward `direction`; a negative step turns to face away. */
+static void turn_toward(int *facing, int direction, int step) {
+    if (step < 0) {
+        step = -step;
+        direction = (direction + 2048) & 4095;
+    }
+    const int error = (step + direction - *facing) & 4095;
+    if (error < 2 * step) *facing = direction;
+    else *facing = (int16_t)(*facing + (error <= 2048 ? step : -step));
+}
+
+static int heading_to(double x, double z, double tx, double tz) {
+    return (int)lround(atan2(-(tz - z), tx - x) * (2048.0 / acos(-1.0))) & 4095;
+}
+
+/* Spl_sce04/05/07/08/09: phase 0 (Spl_sce_mv01) turns toward the point until within 0x15E of it, which
+ * is mode 9's arrival; phase 1 (Spl_sce_mv02) steers and steps the table speed along the facing
+ * (Add_speedXZ) until within 100 of the point. Neither snaps to it. */
+static int retail_step(PeReActorDestination *d, double *x, double *z, int *facing) {
+    const int direction = heading_to(*x, *z, d->x, d->z);
+    if (!d->phase) {
+        turn_toward(facing, direction, d->turn);
+        if (((direction - *facing + 0x15E) & 4095) > 2 * 0x15E) return 0;
+        if (d->mode == 9) return 1;
+        d->phase = 1;
+        return 0;
+    }
+    turn_toward(facing, direction, d->speed < 0 ? -d->turn : d->turn);
+    const double yaw = *facing * (acos(-1.0) / 2048.0);
+    *x += d->speed * cos(yaw);
+    *z -= d->speed * sin(yaw);
+    return hypot(d->x - *x, d->z - *z) < 100;
+}
+
 /* RE2 mode 0x15 uses Goto01. The operands are a heading and a turn step.
  * Translation from the native turning clip still needs a root-motion sampler. */
-int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing) {
+int pe_re_actor_destination_step(PeReActorDestination *dest, double *x, double *z, int *facing) {
+    if (dest->retail && dest->mode != PE_RE_DEST_TURN) return retail_step(dest, x, z, facing);
     if (dest->mode == PE_RE_DEST_TURN) {
         int direction = dest->x;
         int step = dest->z;
@@ -1084,9 +1171,14 @@ static void step_enemy_destinations(PeReScdRun *run) {
         if (!dest->moving || !work[0] || run->em_dead[slot] || run->actor_stopped[2 + slot]) continue;
         double x = work[PE_RE_MEMBER_POS_X], z = work[PE_RE_MEMBER_POS_Z];
         int facing = work[PE_RE_MEMBER_CDIR_Y];
+        const int phase = dest->phase;
         if (pe_re_actor_destination_step(dest, &x, &z, &facing)) {
             run->arrived[2 + slot] = dest->arrival;
             dest->moving = 0;
+            /* Routine_1 6: the actor's idle loop (Spl_sce06, move 2) until the script moves it again */
+            if (dest->retail && run->scene[slot].routine) run->scene[slot] = routine_clip(2);
+        } else if (dest->retail && dest->mode == 5 && dest->phase != phase) {
+            run->scene[slot] = routine_clip(1);  /* Spl_sce05 runs once facing the point */
         }
         work[PE_RE_MEMBER_POS_X] = (int16_t)lround(x);
         work[PE_RE_MEMBER_POS_Z] = (int16_t)lround(z);
@@ -1108,6 +1200,7 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         /* a person (0x40 up, e.g. Marvin 0x4A in 2-02) given a scripted move with Type bit 0x200 set: the bit
          * clears once the move has played (about two seconds), which the scene waits for */
         if (w[0] && w[PE_RE_MEMBER_ID] >= 0x40 && (w[PE_RE_MEMBER_TYPE] & 0x200) && motion->direct && motion->active &&
+            !motion->routine &&
             motion->ticks >= 60) {
             w[PE_RE_MEMBER_TYPE] &= ~0x200;
             *motion = (PeReSceneMotion){0};

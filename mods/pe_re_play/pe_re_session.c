@@ -462,6 +462,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     {   /* the player's fields, as the scripts read them (RE2's facing: 0 faces +x) */
         int16_t *me = s->run.works[0];
         if (s->player_id) me[PE_RE_MEMBER_ID] = s->player_id;
+        s->run.player_row = (uint8_t)((s->player_id ? s->player_id : s->player) + 0x10);   /* SPL_TBL.H rows: Id + 0x10 */
         me[0] = 1, me[PE_RE_MEMBER_POS_X] = (int16_t)lround(s->x), me[PE_RE_MEMBER_POS_Z] = (int16_t)lround(s->z);
         me[PE_RE_MEMBER_POS_Y] = (int16_t)(-1800 * s->floor), me[PE_RE_MEMBER_NFLOOR] = (int16_t)s->floor;
         if (pe_re_facing_of(s->cdir_y) != s->facing) s->cdir_y = (int16_t)((s->facing + 1024) & 4095);
