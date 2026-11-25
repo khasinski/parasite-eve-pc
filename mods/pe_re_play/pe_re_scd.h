@@ -50,6 +50,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_imp_rdt.h"
 
 #define PE_RE_FLAG_GROUPS 36                   /* RE2 scripts set groups 0-35 */
 #define PE_RE_FG_STATUS 1
@@ -127,6 +128,7 @@ typedef struct PeReEffect {
     int x, y, z;
     uint16_t age, duration;
     uint8_t id, type, handle, scale, attachment, target, loop, tagged;
+    PeImpRe2CoreEffect common;                 /* borrowed from the active session bank */
 } PeReEffect;
 
 /* A scripted clip (plc_motion). For the player, the partner and people (0x40 up) the mode picks the
@@ -235,6 +237,7 @@ typedef struct {
     void (*lose)(void *ctx, uint16_t item, uint16_t count);   /* count 0: all of it */
     void (*give)(void *ctx, uint16_t item, uint16_t count);
     int (*set_room_bgm)(void *ctx, unsigned stage, unsigned room, uint16_t cue);
+    int (*core_effect)(void *ctx, unsigned id, unsigned palette, PeImpRe2CoreEffect *out);
 } PeReScdHost;
 
 /* Enter room `l`: start its init and main tasks and run every task until it yields. RE2 only;

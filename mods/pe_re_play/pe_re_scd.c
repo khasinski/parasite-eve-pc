@@ -677,8 +677,15 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_ESPR_ON2: {
         PeReScdRun *r = vm->run;
         PeImpRe2RoomEffect asset;
-        if (ins[4] > 4 || r->effect_count == PE_RE_EFFECT_MAX ||
-            pe_imp_re2_room_effect(vm->rdt, vm->size, ins[2], &asset)) goto unsupported;
+        PeImpRe2CoreEffect common = {0};
+        const unsigned attachment = ins[4];
+        const int enemy_part = (attachment & 0xe0) == 0xc0 && ins[5] < PE_RE_ENEMIES_MAX;
+        if ((attachment > 4 && !enemy_part) || r->effect_count == PE_RE_EFFECT_MAX) goto unsupported;
+        if (pe_imp_re2_room_effect(vm->rdt, vm->size, ins[2], &asset)) {
+            if (!vm->host || !vm->host->core_effect ||
+                vm->host->core_effect(vm->host->ctx, ins[2], ins[3] >> 3, &common)) goto unsupported;
+            asset = common.sequence;
+        }
         unsigned duration = 0;
         PeImpRe2EffectFrame frame;
         for (unsigned i = 0; !pe_imp_re2_effect_frame(&asset, i, &frame) && frame.time && frame.time != 0xff; i++)
@@ -690,7 +697,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             .x = s16(ins + 8), .y = s16(ins + 10), .z = s16(ins + 12),
             .duration = duration * 2, .id = ins[2], .type = ins[3], .scale = ins[7],
             .attachment = ins[4], .target = ins[5], .handle = ins[1], .loop = loop,
-            .tagged = code == OP_ESPR_ON2
+            .tagged = code == OP_ESPR_ON2, .common = common
         };
         t->pc += n;
         return CONTINUE;
@@ -1181,7 +1188,9 @@ int pe_re_scd_effects(const PeReScdRun *run, PeReEffect out[PE_RE_EFFECT_MAX]) {
     int count = 0;
     for (int i = 0; i < run->effect_count; i++) {
         PeReEffect e = run->effects[i];
-        if (e.attachment) {
+        if ((e.attachment & 0xe0) == 0xc0) {
+            if (!run->works[2 + e.target][0] || run->em_dead[e.target]) continue;
+        } else if (e.attachment) {
             const int slot = work_slot(e.attachment, (int8_t)e.target);
             if (slot < 0 || (e.attachment == 3 && (!run->works[slot][0] || run->em_dead[e.target]))) continue;
             const int16_t *work = run->works[slot];

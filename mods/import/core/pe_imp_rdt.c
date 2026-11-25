@@ -161,6 +161,19 @@ int pe_imp_re2_core_effect(const uint8_t *esp, uint32_t esp_size, const uint8_t 
     return 0;
 }
 
+int pe_imp_re2_core_bank_effect(const PeImpRoomLogic *bank, const PeImpRoomLogic *palettes,
+                               unsigned id, unsigned palette_offset, PeImpRe2CoreEffect *out) {
+    if (!bank || !palettes) {
+        *out = (PeImpRe2CoreEffect){0};
+        return -1;
+    }
+    uint32_t esp_size = 0, pixel_size = 0, tex_size = 0;
+    const uint8_t *esp = pe_imp_logic_section(bank, PE_IMP_RE2_CORE_SEQUENCES, NULL, &esp_size);
+    const uint8_t *pixels = pe_imp_logic_section(bank, PE_IMP_RE2_CORE_PIXELS, NULL, &pixel_size);
+    const uint8_t *tex = pe_imp_picture_tim(palettes, 0, &tex_size);
+    return pe_imp_re2_core_effect(esp, esp_size, pixels, pixel_size, tex, tex_size, id, palette_offset, out);
+}
+
 int pe_imp_re2_effect_frame(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectFrame *out) {
     if (index >= effect->frame_count) return -1;
     const uint8_t *p = effect->frames + index * 8;

@@ -519,6 +519,34 @@ static void test_kendo_zombies(const char *store) {
     free(room);
 }
 
+static void test_kendo_common_effects(const PeReGame *game, unsigned player) {
+    if (player) return;                         /* this common muzzle cue is in Leon's procedure 31 */
+    PeReSession s;
+    char why[100];
+    CHECK(!pe_re_session_start(&s, s_store, game, player, why, sizeof why));
+    if (!s.game) return;
+    if (pe_re_session_enter(&s, s_store, 0, 1, 0, -16000, -14000, 0, why, sizeof why)) {
+        CHECK(0);
+        pe_re_session_end(&s);
+        return;
+    }
+    pe_re_scd_exec(s.logic, &s.run, 2, 31);
+    int seen = 0;
+    for (int tick = 0; tick < 8 && !seen; tick++) {
+        pe_re_session_tick(&s);
+        PeReEffect effects[PE_RE_EFFECT_MAX];
+        const int count = pe_re_scd_effects(&s.run, effects);
+        for (int i = 0; i < count; i++) {
+            if (effects[i].id != 1 || effects[i].attachment != 0xcb) continue;
+            CHECK(effects[i].target == 0 && effects[i].common.page && effects[i].common.palette);
+            CHECK(effects[i].duration > 0 && effects[i].x == 150 && (effects[i].y == 1300 || effects[i].y == 1800));
+            seen = 1;
+        }
+    }
+    CHECK(seen);
+    pe_re_session_end(&s);
+}
+
 static void test_cutscene_turn(void) {
     const PeReActorDestination turn = {.mode = PE_RE_DEST_TURN, .x = 440, .z = 64};
     double x = -16233, z = -12483;
@@ -1141,7 +1169,8 @@ int main(int argc, char **argv) {
     PeImpScan sc;
     pe_imp_registry_reset();
     CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1) && !pe_imp_add_reader(&g_re2_items_ps1) &&
-          !pe_imp_add_reader(&g_re2_door_ps1));
+          !pe_imp_add_reader(&g_re2_door_ps1) &&
+          !pe_imp_add_reader(&g_re2_core_bank_ps1) && !pe_imp_add_reader(&g_re2_core_palette_ps1));
     CHECK(!pe_imp_set_naming("re2", g_re2_naming));
     CHECK(!pe_imp_scan(s_store, re2, NULL, &sc));
     const PeReGame *g = pe_re_game_named("re2");
@@ -1152,6 +1181,7 @@ int main(int argc, char **argv) {
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
+    test_kendo_common_effects(g, scenario);
     test_mr_x(g, scenario);
     test_licker(g, scenario);
     test_licker_variants(g, scenario);

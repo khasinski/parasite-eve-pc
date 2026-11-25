@@ -1391,6 +1391,12 @@ typedef struct FieldBonePose {
     double r[3][3], t[3];
 } FieldBonePose;
 
+static struct {
+    double x, y, z, cs, sn;
+    unsigned bones;
+    FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
+} s_effect_pose[PE_RE_ENEMIES_MAX];
+
 static void field_pose(const PeImpModel *model, const int16_t *frame, const int16_t *first,
                        const PeReSceneActor *scene, FieldBonePose *pose) {
     for (uint32_t b = 0; b < model->bones; b++) {
@@ -1512,6 +1518,22 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                 field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data, NULL, pose);
                 animated = 1;
             }
+        }
+        if (p->slot < PE_RE_ENEMIES_MAX) {
+            if (!animated) {
+                for (unsigned bone = 0; bone < model->bones; bone++) {
+                    pose[bone] = (FieldBonePose){.r = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+                    for (int axis = 0; axis < 3; axis++) pose[bone].t[axis] = model->pos[bone][axis];
+                }
+            }
+            const unsigned actor = p->slot;
+            s_effect_pose[actor].x = world_x;
+            s_effect_pose[actor].y = world_y;
+            s_effect_pose[actor].z = world_z;
+            s_effect_pose[actor].cs = cs;
+            s_effect_pose[actor].sn = sn;
+            s_effect_pose[actor].bones = model->bones;
+            memcpy(s_effect_pose[actor].pose, pose, model->bones * sizeof pose[0]);
         }
         int emitted = 0;
         for (uint32_t b = 0; b < model->parts && b < model->bones; b++) {
@@ -1638,7 +1660,7 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
 
 /* Native actor texture pages are live while imported effects are drawn. */
 enum { EFFECT_PAGE_Y = 256, EFFECT_FIRST_ROW = 24, EFFECT_PIXEL_END = 240, EFFECT_CLUT_Y = 244,
-       EFFECT_BANK_SIZE = 8, EFFECT_PACKET_MAX = 256 };
+       EFFECT_BANK_SIZE = 24, EFFECT_PACKET_MAX = 256 };
 /* effect pages: 64-wide columns of VRAM's lower half, used where empty; the first two are free
  * under Carnegie Hall's room, the last two also under Central Park's (whose Aya fills 640-767) */
 #define EFFECT_PAGES 4
@@ -1651,6 +1673,8 @@ static struct {
 } s_effect_pages[EFFECT_PAGES];
 typedef struct {
     PeImpRe2RoomEffect asset;
+    const uint8_t *common_palette;
+    unsigned u_origin, v_origin;
     uint8_t *frame_data;
     unsigned width, height, v, palette, palette_count, page;
     uint8_t id;
@@ -1682,16 +1706,54 @@ static unsigned effect_word(const uint8_t *p) {
     return p[0] | (unsigned)p[1] << 8;
 }
 
-static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *logic) {
-    uint32_t size = 0;
-    const uint8_t *rdt = pe_imp_logic_section(logic, PE_IMP_LOGIC_RDT0, NULL, &size);
-    if (pe_imp_re2_room_effect(rdt, size, texture->id, &texture->asset)) return;
-    const uint8_t *tim = texture->asset.tim;
-    const unsigned clut_size = effect_word(tim + 8);
-    if (tim[4] != 8 || clut_size < 44 || clut_size > texture->asset.tim_size - 20) return;
-    const uint8_t *image = tim + 8 + clut_size;
-    const unsigned w = effect_word(image + 8), h = effect_word(image + 10);
-    const unsigned palettes = (clut_size - 12) / 32;
+static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *logic, const PeReEffect *effect) {
+    uint16_t cropped[64 * (EFFECT_PIXEL_END - EFFECT_FIRST_ROW)];
+    const uint8_t *colours_bytes, *pixel_bytes;
+    unsigned w, h, palettes;
+    if (effect->common.page) {
+        texture->asset = effect->common.sequence;
+        unsigned left = 256, top = 256, right = 0, bottom = 0;
+        for (unsigned i = 0; i < texture->asset.frame_count; i++) {
+            PeImpRe2EffectFrame frame;
+            if (pe_imp_re2_effect_frame(&texture->asset, i, &frame) || !frame.time || frame.time == 0xff) break;
+            for (unsigned j = 0; j < frame.sprite_count; j++) {
+                PeImpRe2EffectSprite sprite;
+                if (pe_imp_re2_effect_sprite(&texture->asset, frame.first_sprite + j, &sprite)) continue;
+                if (sprite.u < left) left = sprite.u;
+                if (sprite.v < top) top = sprite.v;
+                if (sprite.u + frame.size > right) right = sprite.u + frame.size;
+                if (sprite.v + frame.size > bottom) bottom = sprite.v + frame.size;
+            }
+        }
+        if (top >= bottom || left >= right) return;
+        left &= ~3u;
+        right = right >= 256 ? 256 : (right + 4) & ~3u;
+        bottom = bottom >= 256 ? 256 : bottom + 1;
+        w = (right - left) / 4;
+        h = bottom - top;
+        if (h > EFFECT_PIXEL_END - EFFECT_FIRST_ROW) return;
+        for (unsigned row = 0; row < h; row++) {
+            const uint8_t *source = effect->common.page + (top + row) * 256 + left / 2;
+            for (unsigned col = 0; col < w; col++) cropped[row * w + col] = effect_word(source + col * 2);
+        }
+        texture->u_origin = left;
+        texture->v_origin = top;
+        palettes = 1;
+        pixel_bytes = (const uint8_t *)cropped;
+        colours_bytes = effect->common.palette;
+    } else {
+        uint32_t size = 0;
+        const uint8_t *rdt = pe_imp_logic_section(logic, PE_IMP_LOGIC_RDT0, NULL, &size);
+        if (pe_imp_re2_room_effect(rdt, size, texture->id, &texture->asset)) return;
+        const uint8_t *tim = texture->asset.tim;
+        const unsigned clut_size = effect_word(tim + 8);
+        if (tim[4] != 8 || clut_size < 44 || clut_size > texture->asset.tim_size - 20) return;
+        const uint8_t *image = tim + 8 + clut_size;
+        w = effect_word(image + 8), h = effect_word(image + 10);
+        palettes = (clut_size - 12) / 32;
+        pixel_bytes = image + 12;
+        colours_bytes = tim + 20;
+    }
     if (w > 64) return;
     for (unsigned i = 0; i < EFFECT_PAGES; i++) {
         const unsigned v = EFFECT_FIRST_ROW + s_effect_pages[i].height, p = s_effect_pages[i].palettes;
@@ -1710,11 +1772,11 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         RECT pixels = {s_effect_page_x[i], EFFECT_PAGE_Y + v, w, h};
         uint16_t colours[16 * (256 - EFFECT_CLUT_Y)];
         for (unsigned c = 0; c < palettes * 16; c++) {
-            const unsigned rgb = effect_word(tim + 20 + c * 2);
-            colours[c] = rgb ? rgb | 0x8000 : 0;
+            const unsigned rgb = effect_word(colours_bytes + c * 2);
+            colours[c] = effect->common.page ? rgb : rgb ? rgb | 0x8000 : 0;
         }
         DrawSync(0);
-        LoadImage(&pixels, (void *)(image + 12));
+        LoadImage(&pixels, (void *)pixel_bytes);
         LoadImage(&clut, colours);
         DrawSync(0);
         texture->width = w * 4;
@@ -1729,9 +1791,10 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
     }
 }
 
-static const EffectTexture *effect_texture(unsigned id) {
+static const EffectTexture *effect_texture(const PeReEffect *effect) {
     for (unsigned i = 0; i < s_effect_texture_count; i++)
-        if (s_effect_textures[i].id == id) return &s_effect_textures[i];
+        if (s_effect_textures[i].id == effect->id && s_effect_textures[i].common_palette == effect->common.palette)
+            return &s_effect_textures[i];
     return NULL;
 }
 
@@ -1741,10 +1804,10 @@ void pe_re_stage_set_effects(const PeImpRoomLogic *logic, const PeReEffect *effe
         s_effect_room = logic;
     }
     for (int i = 0; i < count; i++) {
-        if (effect_texture(effects[i].id) || s_effect_texture_count == EFFECT_BANK_SIZE) continue;
+        if (effect_texture(&effects[i]) || s_effect_texture_count == EFFECT_BANK_SIZE) continue;
         EffectTexture *texture = &s_effect_textures[s_effect_texture_count++];
-        *texture = (EffectTexture){.id = effects[i].id};
-        load_effect_texture(texture, logic);
+        *texture = (EffectTexture){.id = effects[i].id, .common_palette = effects[i].common.palette};
+        load_effect_texture(texture, logic, &effects[i]);
         if (!texture->width) pe_mod_log("pe_re_play", "Cannot upload room effect 0x%02x", texture->id);
     }
     memcpy(s_effects, effects, (size_t)count * sizeof *effects);
@@ -1755,10 +1818,23 @@ static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
     unsigned emitted = 0;
     for (int i = 0; i < s_effect_count; i++) {
         const PeReEffect *e = &s_effects[i];
-        const EffectTexture *texture = effect_texture(e->id);
+        const EffectTexture *texture = effect_texture(e);
         if (!texture || !texture->width) continue;
         double screen[3];
-        if (!project_field_point(e->x, e->y, e->z, screen)) continue;
+        double x = e->x, y = e->y, z = e->z;
+        if ((e->attachment & 0xe0) == 0xc0) {
+            const unsigned actor = e->target, part = e->attachment & 31;
+            if (actor >= PE_RE_ENEMIES_MAX || part >= s_effect_pose[actor].bones) continue;
+            const FieldBonePose *joint = &s_effect_pose[actor].pose[part];
+            double local[3];
+            for (int row = 0; row < 3; row++)
+                local[row] = joint->t[row] + joint->r[row][0] * x + joint->r[row][1] * y + joint->r[row][2] * z;
+            const double cs = s_effect_pose[actor].cs, sn = s_effect_pose[actor].sn;
+            x = s_effect_pose[actor].x + cs * local[0] + sn * local[2];
+            y = s_effect_pose[actor].y + local[1];
+            z = s_effect_pose[actor].z - sn * local[0] + cs * local[2];
+        }
+        if (!project_field_point(x, y, z, screen)) continue;
         const unsigned phase = e->loop ? (e->age + i * 6) % e->duration : e->age;
         unsigned time = phase / 2;
         PeImpRe2EffectFrame frame;
@@ -1774,6 +1850,9 @@ static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
         for (unsigned n = 0; n < frame.sprite_count && emitted < EFFECT_PACKET_MAX; n++) {
             PeImpRe2EffectSprite sprite;
             if (pe_imp_re2_effect_sprite(&texture->asset, frame.first_sprite + n, &sprite)) continue;
+            if (sprite.u < texture->u_origin || sprite.v < texture->v_origin) continue;
+            sprite.u -= texture->u_origin;
+            sprite.v -= texture->v_origin;
             if (sprite.u >= texture->width || sprite.v >= texture->height) continue;
             unsigned w = frame.size, h = frame.size;
             if (sprite.u + w >= texture->width) w = texture->width - 1 - sprite.u;
@@ -1891,11 +1970,12 @@ static int on_background(void *ctx, void *user) {
     for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
-    if (!s_hold) draw_effects(ordering, b->slot, shade);
+    memset(s_effect_pose, 0, sizeof s_effect_pose);
     if ((s_placement_meshes || s_scene_count) && !s_hold) {
         prepare_field_texture();
         draw_placement_meshes(ordering, b->slot, shade);
     }
+    if (!s_hold) draw_effects(ordering, b->slot, shade);
     if ((s_placement_markers || s_placement_meshes) && !s_hold) draw_placement_markers(ordering, b->slot, shade);
     if (s_foreground)
         for (size_t i = 0; i < s_mask_count; i++) {
