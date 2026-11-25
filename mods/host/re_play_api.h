@@ -96,6 +96,9 @@ typedef struct PeRePlayApi {
     /* Optional. Whether a placed enemy is in the current camera's picture (an encounter takes in
      * every enemy the player can see); -1 when the host can't tell. */
     int (*in_view)(const PeReEnemyPlacement *enemy);
+    /* Optional. The room's bounds in room units, from its colliders (a battle fought off the host
+     * room's map has to fit them: docs/RE_PLAY_BATTLES.md, D14). 0, or -1 while no room is up. */
+    int (*room_extent)(double *x0, double *z0, double *x1, double *z1);
 } PeRePlayApi;
 
 #endif

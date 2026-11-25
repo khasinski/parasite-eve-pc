@@ -116,6 +116,7 @@ set(pe_debug_sources
 
 set(pe_host_sources
     host/pe_trip_result.c
+    host/pe_battle_space.c  # where an imported room's battle is fought (docs/RE_PLAY_BATTLES.md)
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
@@ -499,6 +500,7 @@ if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
     pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
     pe_feature_test(encounter ${PROJECT_SOURCE_DIR}/tests/pe_encounter_test.c host/pe_encounter.c)   # random-encounter spots
+    pe_feature_test(battle-space ${PROJECT_SOURCE_DIR}/tests/pe_battle_space_test.c host/pe_battle_space.c)   # T1, T2
 endif()
 if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
     # Imported enemy packs: loading, refusals, posing; with PE_TEST_ENEMY_PACK also a real pack.

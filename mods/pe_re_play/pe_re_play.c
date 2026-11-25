@@ -193,11 +193,28 @@ static int api_in_view(const PeReEnemyPlacement *e) {
     return host->in_view(e->x, e->y, e->z);
 }
 
+static int api_room_extent(double *x0, double *z0, double *x1, double *z1) {
+    const ReHost *host = re_host();
+    const PeRe2RoomCollision *c = s_playing && host->room_collision ? host->room_collision() : NULL;
+    if (!c || !c->count) return -1;
+    *x0 = *z0 = 1e9, *x1 = *z1 = -1e9;
+    for (unsigned i = 0; i < c->count; i++) {
+        const PeRe2Collider *e = &c->entries[i];
+        const double a = e->x0 < e->x1 ? e->x0 : e->x1, b = e->x0 < e->x1 ? e->x1 : e->x0;
+        const double p = e->z0 < e->z1 ? e->z0 : e->z1, q = e->z0 < e->z1 ? e->z1 : e->z0;
+        if (a < *x0) *x0 = a;
+        if (b > *x1) *x1 = b;
+        if (p < *z0) *z0 = p;
+        if (q > *z1) *z1 = q;
+    }
+    return 0;
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
     NULL, /* field movement is driven by the room, independently of encounter selection */
-    api_battle_result, api_units_per_pe_unit, api_in_view
+    api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent
 };
 
 static void report_enemies(void) {

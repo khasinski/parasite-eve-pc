@@ -11,6 +11,7 @@
  *      variables the trip changed go back as they were and Aya returns to where she stood.
  * Losing is the game's own Game Over, as in any fight; the picker forgets the trip then.
  * Rewards (EXP, items, BP) won in a picked fight are kept. */
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -27,6 +28,8 @@
 #include "pe_mod_menu.h"
 #include "pe_services.h"
 #include "pe_trip_result.h"
+#include "pe_battle_space.h"
+#include "pe1/collision_database.h"
 #include "re_play_api.h"
 #include "re_encounter_rooms.h"
 #include "pe1/asset_table.h"
@@ -143,6 +146,10 @@ static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
     int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview, automatic;
     int here, move_lock;     /* started in place; the field's movement lock bit 1 before it */
+    int anchored;            /* Aya's native position moved off the host room's map (D14) */
+    unsigned host_token;     /* the host room when the battle started: it must not change (I5) */
+    int room_pos_known;      /* her room position at the encounter (RE play can't say once paused) */
+    double room_x, room_z;
     unsigned origin, target;
     int x, z, yaw;
     uintptr_t roll_next;   /* the forced roll's PeHookScriptRandom.next */
@@ -268,8 +275,14 @@ static const PeRePlayApi *pe_imported_room_api(void) {
            api->resume_after_battle ? api : NULL;
 }
 
+static void pe_unanchor_battle(void);
+
 static void pe_end_trip(void) {
     pe_enemy_battle_disarm();
+    /* a trip that ends without going home (a failed start): Aya back from off the map, unless the
+     * game has gone to its title or a Game Over */
+    if (s.anchored && pe_save_loaded() && (unsigned)g_SceneDispatchToken != PE_TOKEN_TITLE) pe_unanchor_battle();
+    s.anchored = 0;
     if (s.imported_room_paused) {
         const PeRePlayApi *api = pe_imported_room_api();
         if (api) api->resume_after_battle();
@@ -279,8 +292,65 @@ static void pe_end_trip(void) {
 }
 
 /* Fight over (or never started): put the script variables back and go home. */
+/* The host room's floor, from its collision triangles, in host units (pe_battle_space.h). */
+static int pe_host_extent(PeBattleBox *b) {
+    const CollisionDatabase *db = g_CollisionDb;
+    if (!db || !db->triangleCount || !db->vertices.pointer || !db->triangles.pointer) return -1;
+    const int sloped = g_CollisionPlaneTable != 0;            /* as Entity_FindFloor reads them */
+    b->x0 = b->z0 = 1e9, b->x1 = b->z1 = -1e9;
+    for (unsigned t = 0; t < db->triangleCount; t++) {
+        const u16 *v = sloped ? db->triangles.xyz[t].layout.links.vertices : db->triangles.xz[t].layout.links.vertices;
+        for (int i = 0; i < 3; i++) {
+            const double x = (s16)(sloped ? db->vertices.xyz[v[i]].x : db->vertices.xz[v[i]].x);
+            const double z = (s16)(sloped ? db->vertices.xyz[v[i]].z : db->vertices.xz[v[i]].z);
+            if (x < b->x0) b->x0 = x;
+            if (x > b->x1) b->x1 = x;
+            if (z < b->z0) b->z0 = z;
+            if (z > b->z1) b->z1 = z;
+        }
+    }
+    return b->x0 <= b->x1 ? 0 : -1;
+}
+
+/* D14: fight off the host room's map, where its scripts (exits, rolls, events) can't see Aya. The
+ * imported room, mapped around her, goes beside the host room's floor; she goes back afterwards
+ * (pe_go_home). Without the facts to place it, she fights where she stands. */
+static void pe_anchor_battle(const PeRePlayApi *api) {
+    PeBattleBox host, room;
+    double x, z, k;
+    PeBattleSpace space;
+    s.anchored = 0;
+    s.host_token = (unsigned)g_SceneDispatchToken;
+    if (!api || api->struct_size < offsetof(PeRePlayApi, room_extent) + sizeof api->room_extent ||
+        !api->room_extent || !api->units_per_pe_unit || !api->encounter_position) return;
+    x = s.room_x, z = s.room_z;
+    if (!s.room_pos_known || pe_host_extent(&host) || api->room_extent(&room.x0, &room.z0, &room.x1, &room.z1) ||
+        (k = api->units_per_pe_unit()) <= 0 ||
+        pe_battle_space_choose(&host, &room, x, z, k, &space)) {
+        pe_mod_log(MOD_ID, "battle: no room off the host room's map for it; fought in place");
+        return;
+    }
+    g_PlayerEntity->pos_x = g_PlayerEntity->base_x = (int)lround(space.anchor_x * 65536.0);
+    g_PlayerEntity->pos_z = g_PlayerEntity->base_z = (int)lround(space.anchor_z * 65536.0);
+    g_PlayerEntity->collision_face = g_PlayerEntity->collision_face_mirror = NULL;
+    s.anchored = 1;
+    pe_mod_log(MOD_ID, "battle: fought off the host room at %d,%d (host floor %d..%d, %d..%d)",
+               (int)space.anchor_x, (int)space.anchor_z, (int)host.x0, (int)host.x1, (int)host.z0, (int)host.z1);
+}
+
+/* Aya back where she stood, and the invariants a battle off the map keeps (I1, I5, I6). */
+static void pe_unanchor_battle(void) {
+    if (!s.anchored) return;
+    s.anchored = 0;
+    if ((unsigned)g_SceneDispatchToken != s.host_token)
+        pe_mod_log(MOD_ID, "battle: INVARIANT I5 broken: the host room changed (%08X -> %08X)", s.host_token,
+                   (unsigned)g_SceneDispatchToken);
+    pe_place(s.x, s.z, s.yaw);
+}
+
 static void pe_go_home(void) {
     memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars);
+    pe_unanchor_battle();
     /* A room battle's script locks Aya's field movement around it and unlocks it after; a battle
      * started in place has no room script, and the lock stayed on until the next battle */
     if (s.here) g_FieldMoveLock = (g_FieldMoveLock & ~1) | s.move_lock, s.here = 0;
@@ -390,6 +460,7 @@ static int pe_room_creature(const PeRePlayApi *api) {
         room.enemies = close;
         if (!room.count) return 0;
         at_aya = 1;
+        s.room_x = x, s.room_z = z, s.room_pos_known = 1;
     }
     pe_enemy_battle_begin_roster();
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
@@ -459,6 +530,7 @@ static void pe_leave(void) {
     if (s.automatic) {   /* an imported room's encounter: the battle starts here, no room of PE's needed */
         s.same_room = 1;
         s.here = 1, s.move_lock = g_FieldMoveLock & 1;
+        pe_anchor_battle(api);
         if (pe_enemy_battle_start_here(PE_HERE_MODE)) {
             pe_finish("the battle couldn't start here");
             pe_end_trip();
@@ -667,6 +739,7 @@ static int pe_ready_fight(void) {
 
 static void pe_begin_fight(int f, int preview, int automatic) {
     s.fight = f;
+    s.room_pos_known = 0;
     s.live_enemies = 0;
     s.preview = preview;
     s.automatic = automatic;

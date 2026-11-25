@@ -13,8 +13,8 @@ How to use it:
 - Keep the module boundaries in "Architecture": a game or a host must be
   addable without editing the shared battle code.
 
-Status (2026-11-24): phase 0 built for RE2. Spikes S1-S4 and S6-S9 done; S5
-is a decision. Phases 1-6 not started.
+Status (2026-11-24): phases 0 and 1 built for RE2. Spikes done; S5 deferred
+(D16). Phase 2 taken by Codex; phases 3-6 not started.
 
 ## The battle we want
 
@@ -249,7 +249,8 @@ into the named room with the user's store), tests.
 
 0. **Battles in place (RE2).** Built: D1-D5 (c383bf512, a7e42b88f, 1f1b56ae6,
    9d0db2f64, bdb868a05).
-1. **Off-map anchor (D14).** Entry: none (S5 deferred, D16).
+1. **Off-map anchor (D14).** Done 2026-11-24 (commit below the phase list).
+   Entry: none (S5 deferred, D16).
    Build: anchor choice from the room's extent; native move at start, back at
    end; I1, I5, I6 logged. Exit: 1-00, run the length of the street in a
    battle; the PE room never changes; the battle ends normally.
@@ -279,6 +280,18 @@ into the named room with the user's store), tests.
 
 RE1 and RE3: once their rooms are playable, fill in their rules tables and run
 phases 3-6's exit checks in one room of each.
+
+Phase 1 as built: `mods/host/pe_battle_space.{h,c}` (shared, no engine: anchor choice and
+the two-way mapping; tests T1, T2 in `tests/pe_battle_space_test.c`, ctest
+`mod-battle-space`). The trip (`pe_enemy_import.c`: `pe_anchor_battle`,
+`pe_unanchor_battle`) measures the host room's floor from `g_CollisionDb`, takes the
+imported room's bounds from RE play's new `room_extent` (API, appended) and Aya's room
+position from the encounter (RE play can't report it once paused), moves her native
+position to the anchor at battle start, puts her back on every way a trip ends, and logs
+I5 if the host room changed. Exit check: from PE's title into Leon A's street, the host
+floor was x 1930..7326, z -3354..3821 and the battle was fought at -2086,1711; walking the
+route that had changed rooms (map 66 -> 67) left the room unchanged; both zombies shot
+dead, the battle ended, Aya back at her exact field position.
 
 ## Tests
 
