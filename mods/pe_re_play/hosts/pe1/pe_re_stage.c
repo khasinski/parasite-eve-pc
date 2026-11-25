@@ -588,6 +588,31 @@ static void battle_walk(FieldActor *aya) {
     }
 }
 
+/* Native battle assets can reuse field VRAM even when imported packs respect
+ * our reservations. Reclaim the cached atlas before field drawing resumes. */
+static void restore_field_texture(void) {
+    for (unsigned kind = 0; kind < sizeof s_texture_by_kind / sizeof *s_texture_by_kind; kind++) {
+        FieldTexture *texture = s_texture_by_kind[kind];
+        if (!texture) continue;
+        for (unsigned j = 0; j <= texture->columns; j++) {
+            const int palette = j == texture->columns;
+            RECT rect = palette ? texture->palette : texture->column[j];
+            const uint16_t *pixels = palette ? &texture->colours[0][0] :
+                texture->words + j * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT;
+            const size_t bytes = (size_t)rect.w * rect.h * sizeof *pixels;
+            DrawSync(0);
+            StoreImage(&rect, s_vram_check);
+            DrawSync(0);
+            if (!memcmp(s_vram_check, pixels, bytes)) continue;
+            LoadImage(&rect, (void *)pixels);
+            DrawSync(0);
+            if (getenv("PE_TEST_RE_SCENE"))
+                pe_mod_log("pe_re_play", "EM%02x restored field %s at %d,%d", kind,
+                           palette ? "palette" : "texture", rect.x, rect.y);
+        }
+    }
+}
+
 static void backdrop_off(int restore) {
     battle_walk_off();
     if (!s_backdrop.on) return;
@@ -606,6 +631,7 @@ static void backdrop_off(int restore) {
             DrawSync(0);
         }
     }
+    if (restore && s_show) restore_field_texture();
     free(s_backdrop.saved_pages);
     s_backdrop.saved_pages = NULL;
     s_backdrop.on = 0;
