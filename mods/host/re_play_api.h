@@ -99,6 +99,9 @@ typedef struct PeRePlayApi {
     /* Optional. The room's bounds in room units, from its colliders (a battle fought off the host
      * room's map has to fit them: docs/RE_PLAY_BATTLES.md, D14). 0, or -1 while no room is up. */
     int (*room_extent)(double *x0, double *z0, double *x1, double *z1);
+    /* Optional. The VRAM the room's drawing uses now, as (x, y, w, h) rectangles into `out` (at most
+     * `max`): a battle's own textures keep out of it (G2). Returns how many, 0 when there's none. */
+    int (*vram_reserved)(int *out, int max);
 } PeRePlayApi;
 
 #endif

@@ -531,10 +531,24 @@ static int on_player_scene_render(void *ctx, void *user) {
  * step, taken into the room by the backdrop's mapping, slides along the room's collision as her
  * field walk does. Otherwise the PE room's own floor bounded her battle, a different shape. */
 static struct { int on, own_flag; double x, z; } s_battle_walk;
+static const PeImpRoomLogic *s_logic;   /* the shown room's logic: its camera zones, for a battle's camera */
 
 static void battle_walk_off(void) {
     if (s_battle_walk.on && g_PlayerEntity && !s_battle_walk.own_flag) g_PlayerEntity->flags &= ~0x80u;
+    /* she stays where the battle left her in the room (it may have taken her into another camera) */
+    if (s_battle_walk.on) s_walk.x = s_battle_walk.x, s_walk.z = s_battle_walk.z;
     s_battle_walk.on = 0;
+}
+
+/* The battle's camera follows her across the room's camera zones, as her field walk does
+ * (docs/RE_PLAY_BATTLES.md, D6; the director takes this decision over in phase 4's hookup). */
+static void battle_follow(void) {
+    if (!s_logic) return;
+    const double x = s_battle_walk.on ? s_battle_walk.x : s_walk.x, z = s_battle_walk.on ? s_battle_walk.z : s_walk.z;
+    const int camera = pe_re_camera_at(s_logic, s_view, s_walk.floor, x, z);
+    if (camera == s_view) return;
+    const int from = s_view;
+    if (!pe_re_stage_battle_camera(camera)) pe_mod_log(NULL, "re play: battle camera %d -> %d", from, camera);
 }
 
 static void battle_walk(FieldActor *aya) {
@@ -566,10 +580,13 @@ static void backdrop_off(int restore) {
         if (c->matrixWords) *(GteMatrix *)c->matrixWords = s_backdrop.saved_view;
         if (c->projectionDistance) *c->projectionDistance = s_backdrop.saved_distance;
         c->lightTint = s_backdrop.saved_light, c->meshTintLevel = s_backdrop.saved_tint_level;
-        if (s_backdrop.saved_pages) {
+        /* the room stays up through a battle: its current camera's picture (the battle may have
+         * changed camera); else what the battle covered */
+        const uint16_t *pages = s_show && s_picture ? s_picture : s_backdrop.saved_pages;
+        if (pages) {
             RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
             DrawSync(0);
-            LoadImage(&r, s_backdrop.saved_pages);
+            LoadImage(&r, (void *)pages);
             DrawSync(0);
         }
     }
@@ -666,6 +683,7 @@ static int on_camera(void *ctx, void *user) {
                 s_backdrop.still = moved ? 0 : s_backdrop.still + 1;
             } else if (s_walk.collision.count) {
                 battle_walk((FieldActor *)aya);
+                battle_follow();
             }
             backdrop_camera(camera);
             return 1;
@@ -784,8 +802,31 @@ static void pe_re_scale(void) {
 
 static void clear_effects(int restore);
 
+
+/* The decoded picture into VRAM, kept for a battle backdrop, with its foreground masks. Takes `pix`. */
+static void install_picture(const uint8_t *rgb, uint16_t *pix, const PeImpImageSet *set, const PeImpRoomView *view) {
+    for (int i = 0; i < PIC_W * PIC_H; i++) {
+        unsigned r = rgb[i * 3] >> 3, g = rgb[i * 3 + 1] >> 3, b = rgb[i * 3 + 2] >> 3;
+        uint16_t v = (uint16_t)(r | g << 5 | b << 10);
+        pix[i] = v ? v : 0x8000;                    /* 0 would be see-through: keep black opaque */
+    }
+    RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+    DrawSync(0);
+    if (!s_original_picture && (s_original_picture = malloc(PIC_W * PIC_H * sizeof *s_original_picture))) {
+        StoreImage(&r, s_original_picture);
+        DrawSync(0);
+    }
+    LoadImage(&r, pix);
+    DrawSync(0);                                     /* retires packets for the previous view */
+    free(s_picture);
+    s_picture = pix;                                 /* kept for a battle backdrop */
+    free_masks();
+    build_masks(set, view, &s_masks, &s_mask_count);
+}
+
 int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camera, int floor, int place, double x,
                      double z, int facing, char *why, size_t n) {
+    s_logic = logic;
     if (strcmp(room_id, s_walk.room_id)) clear_effects(1);
     PeImpImageSet *set = NULL;
     pe_re_scale();
@@ -831,28 +872,51 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
                 }
             }
             snprintf(s_walk.room_id, sizeof s_walk.room_id, "%s", room_id);
-            for (int i = 0; i < PIC_W * PIC_H; i++) {
-                unsigned r = rgb[i * 3] >> 3, g = rgb[i * 3 + 1] >> 3, b = rgb[i * 3 + 2] >> 3;
-                uint16_t v = (uint16_t)(r | g << 5 | b << 10);
-                pix[i] = v ? v : 0x8000;                    /* 0 would be see-through: keep black opaque */
-            }
-            RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
-            DrawSync(0);
-            if (!s_original_picture && (s_original_picture = malloc(PIC_W * PIC_H * sizeof *s_original_picture))) {
-                StoreImage(&r, s_original_picture);
-                DrawSync(0);
-            }
-            LoadImage(&r, pix);
-            DrawSync(0);                                     /* retires packets for the previous view */
-            free(s_picture);
-            s_picture = pix, pix = NULL;                     /* kept for a battle backdrop */
-            free_masks();
-            build_masks(set, &view, &s_masks, &s_mask_count);
+            install_picture(rgb, pix, set, &view);
+            pix = NULL;
             s_walk.active = 1;
             s_show = 1;
             rc = 0;
         }
     }
+    free(rgb);
+    free(pix);
+    free(set);
+    return rc;
+}
+
+/* G3: another camera of the shown room in battle: its picture, foreground masks and view. Aya, the
+ * collision and the backdrop's saved pages are left as they are. 0, or -1 (logged). */
+int pe_re_stage_battle_camera(int camera) {
+    char why[160] = "";
+    PeImpImageSet *set = NULL;
+    PeImpRoomView view;
+    uint32_t size = 0;
+    int rc = -1;
+    if (!s_backdrop.on || !s_show || camera == s_view) return -1;
+    if (pe_imp_catalog_imageset(s_store, s_walk.room_id, &set, why, sizeof why)) {
+        pe_mod_log(NULL, "re play: battle camera %d: %s", camera, why);
+        return -1;
+    }
+    const uint8_t *frame = pe_imp_imageset_frame(set, (uint32_t)camera, &size);
+    uint8_t *rgb = malloc(PIC_W * PIC_H * 3);
+    uint16_t *pix = malloc(PIC_W * PIC_H * 2);
+    if (frame && rgb && pix && set->width == PIC_W && set->height == PIC_H &&
+        !pe_imp_room_view(set, (uint32_t)camera, &view) && view.game == PE_IMP_RE2 &&
+        !pe_imp_mdec_decode(frame, size, PIC_W, PIC_H, rgb, why, sizeof why)) {
+        const int old_view = s_view;
+        s_view = camera;
+        prepare_camera(&view);
+        if (s_camera.distance) {
+            install_picture(rgb, pix, set, &view);
+            pix = NULL;
+            rc = 0;
+        } else {
+            s_view = old_view;                        /* no projection: keep the one we have */
+            snprintf(why, sizeof why, "camera %d has no projection", camera);
+        }
+    }
+    if (rc) pe_mod_log(NULL, "re play: battle camera %d: %s", camera, why[0] ? why : "not drawable");
     free(rgb);
     free(pix);
     free(set);
@@ -1723,6 +1787,15 @@ static int on_background(void *ctx, void *user) {
         for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = 128;
         link_quad(&((RenderNativeTag *)b->ordering)[ROOM_BACKGROUND_OT], &quads[0]);
         link_quad(&((RenderNativeTag *)b->ordering)[ROOM_BACKGROUND_OT], &quads[1]);
+        /* D8: the room's effects and its foreground in front of the battle, as in the field (the
+         * enemy packs keep out of their VRAM: pe_re_stage_vram_reserved) */
+        draw_effects((RenderNativeTag *)b->ordering, b->slot, 128);
+        if (s_foreground)
+            for (size_t i = 0; i < s_mask_count; i++) {
+                RenderTexturedQuad *m = &s_masks[i].quad[b->slot];
+                m->color.bytes.r = m->color.bytes.g = m->color.bytes.b = 128;
+                link_quad(&((RenderNativeTag *)b->ordering)[s_masks[i].depth], m);
+            }
         return 1;
     }
     if (!s_show && !s_movie.asset) return 0;
@@ -1943,4 +2016,25 @@ void pe_re_stage_shutdown(void) {
     s_backdrop.armed = 0;
     free(s_picture);
     s_picture = NULL;
+}
+
+/* G2: the VRAM the room's drawing uses now, so a battle's enemy packs keep out of it: the picture,
+ * the effect pages in use and their palettes, the field meshes' texture and palettes. Returns how
+ * many rectangles (x, y, w, h) went to `out`, at most `max`. */
+int pe_re_stage_vram_reserved(int *out, int max) {
+    int n = 0;
+#define RESERVE(X, Y, W, H) do { if (n < max) { out[n * 4] = (X), out[n * 4 + 1] = (Y), out[n * 4 + 2] = (W), out[n * 4 + 3] = (H); n++; } } while (0)
+    if (!s_show) return 0;
+    RESERVE(VRAM_X, VRAM_Y, PIC_W, PIC_H);
+    for (int i = 0; i < EFFECT_PAGES; i++)
+        if (s_effect_pages[i].height) {
+            RESERVE(s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_FIRST_ROW, 64, (int)s_effect_pages[i].height);
+            RESERVE(s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y, 16, (int)s_effect_pages[i].palettes);
+        }
+    if (s_texture_kind >= 0) {
+        RESERVE(FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT);
+        RESERVE(FIELD_CLUT_X, FIELD_CLUT_Y, 256, (int)s_texture_palette_rows);
+    }
+#undef RESERVE
+    return n;
 }

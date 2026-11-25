@@ -32,6 +32,7 @@
 #include <SDL3/SDL.h>
 
 #include "pe_enemy_battle.h"
+#include "re_play_api.h"
 #include "../../pe_enemy_build.h"
 #include "../../pe_enemy_pack.h"
 #include "pe_imp_enemy.h"
@@ -840,7 +841,22 @@ static int pe_overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, in
     return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
 }
 
+/* What an imported room's drawing uses (its picture, effect pages, mesh texture: G2), asked for each
+ * time a pack is placed: the packs keep out of it, or its fires turned to noise in battle. */
+#define PE_ROOM_RECTS_MAX 16
+static int s_room_rects[PE_ROOM_RECTS_MAX * 4], s_room_rect_count;
+
+static void pe_room_vram(void) {
+    const PeRePlayApi *api = pe_service_get(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION);
+    s_room_rect_count = api && api->struct_size >= offsetof(PeRePlayApi, vram_reserved) + sizeof api->vram_reserved &&
+                        api->vram_reserved ? api->vram_reserved(s_room_rects, PE_ROOM_RECTS_MAX) : 0;
+}
+
 static int pe_vram_reserved(int x, int y, int w, int h) {
+    for (int i = 0; i < s_room_rect_count; i++) {
+        const int *r = &s_room_rects[i * 4];
+        if (pe_overlap(x, y, w, h, r[0], r[1], r[2], r[3])) return 1;
+    }
     for (int i = 0; i < s_resource_count; i++) {
         const PeBattlePack *p = &s_resources[i];
         if (!p->uploaded) continue;
@@ -855,6 +871,7 @@ static int pe_place(PeBattlePack *resource) {
     const int tw = pack->tex_w / 2, th = pack->tex_h, rows = pack->palettes;
     RECT all = {0, 0, 1024, 512};
     long long best, cost;
+    pe_room_vram();
     for (int i = 0; i < 2; ++i) {
         pe_mark_rect(&g_RenderDrawEnvArray[i].clip);
         pe_mark_rect(&g_RenderDispEnvArray[i].disp);

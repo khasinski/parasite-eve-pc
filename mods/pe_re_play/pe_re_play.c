@@ -210,11 +210,18 @@ static int api_room_extent(double *x0, double *z0, double *x1, double *z1) {
     return 0;
 }
 
+static int api_vram_reserved(int *out, int max) {
+    const ReHost *host = re_host();
+    if (!s_playing || host->struct_size < offsetof(ReHost, vram_reserved) + sizeof host->vram_reserved ||
+        !host->vram_reserved) return 0;
+    return host->vram_reserved(out, max);
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
     NULL, /* field movement is driven by the room, independently of encounter selection */
-    api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent
+    api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved
 };
 
 static void report_enemies(void) {

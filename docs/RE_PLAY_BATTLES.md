@@ -13,8 +13,9 @@ How to use it:
 - Keep the module boundaries in "Architecture": a game or a host must be
   addable without editing the shared battle code.
 
-Status (2026-11-24): phases 0 and 1 built for RE2. Spikes done; S5 deferred
-(D16). Phase 2 taken by Codex; phases 3-6 not started.
+Status (2026-11-24): phases 0, 1 and 3 built for RE2 on `feat/re-play`; phase 2
+built by Codex on `feat/re-battle-director` (to merge). Spikes done; S5 deferred
+(D16). Phases 4-6 not started (Codex: their director side).
 
 ## The battle we want
 
@@ -59,6 +60,7 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D16 | 2026-11-24 | S5 deferred: battle distances keep following RE play's scale (Aya's size setting) for now. The mapping takes k from one place so it can become a fixed battle scale or scaled weapon ranges once play-testing shows which feels right. | The user wants to tune it from harness and real play. |
 | D17 | 2026-11-24 | In a battle started in place, the imported enemies join on its first frame (no opening wait). | They vanished for about 11 frames as a battle began (the wait meant for room battles' own enemies), then came back: a visible blink. |
 | D18 | 2026-11-24 | The grace period after an escape covers only that battle's survivors (other enemies can still start a fight); it ends after a time or once Aya is a distance from them, whichever is first; the survivors keep pursuing (D7) but can't start a battle meanwhile; each further escape from the same enemies halves their grace. Seconds, distance and the halving are F1 settings (Fights) to tune in play, starting at 3 seconds, 4,000 room units, halving on. Escape stays PE's own roll. Accepted by the user. | A grace is needed so the same fight doesn't re-trigger by accident; scoping it to the survivors and shrinking it on repeats keeps escaping from becoming a way to walk through a room. |
+| D21 | 2026-11-24 | After a battle Aya stays where it left her in the room (and in its last camera), instead of going back to where it began. | With the camera following her (D6), going back would be a jump across the room. |
 | D19 | 2026-11-24 | A joining enemy continues from where it is, in its own walk toward Aya, facing her: no pop-in or entrance anim. It joins with an empty attack timer (it can't hit on arrival), enters the target order as usual (D10), and a short cue marks it (a sound and a brief marker over it). Enemies the original game brings in with their own entrance (a Licker from the ceiling, crows) use it when the room's script has one, a per-game rule. Accepted by the user. | RE: zombies shamble into view, already pursuing (D7). PE: reinforcements are visible and fair. |
 
 ## Architecture
@@ -241,6 +243,7 @@ Settle each before the phase that needs it.
 | G2 | The enemy pack loader and RE play share VRAM without knowing it: the loader overwrote the effect pages. | Phase 3 entry: RE play publishes the VRAM it uses (`ReHost` -> `vram_reserved(rects)`: picture, effect pages, mesh texture, palettes); `pe_vram_reserved` refuses those. A late joiner re-samples before placing. |
 | G3 | The stage doesn't keep the room logic, and `pe_re_stage_show` isn't meant for battle use. | Phase 3: `battle_camera(camera)` in the stage: keeps the logic from the last show, swaps picture, masks, effects and view, leaves the backdrop's saved pages alone. |
 | G4 | Positional sound at the off-map anchor is unchecked. | Phase 1 exit: listen in a play-test (the harness has no audio). |
+| G5 | Since D17 the imported enemies join on the battle's first frame, so the pack loader places their textures with no battle frames sampled ("0 frames looked at"): it can't see what the battle itself reads, and may overwrite it. Seen once at 640,0 with no visible harm. | Phase 4: reserve PE's own battle VRAM explicitly (HUD, Aya, effects; a known map) instead of sampling, and re-check for late joiners. |
 
 ## Phases
 
@@ -261,7 +264,8 @@ into the named room with the user's store), tests.
    adapter calls the director but behaviour is unchanged. Exit: the five story
    routes finish; battles start with the same enemies as before.
    Tests: T3, T4, the route tests.
-3. **Camera follows, masks and effects (D6, D8).** Entry: G2 and G3 built.
+3. **Camera follows, masks and effects (D6, D8).** Done 2026-11-24 (commit in the log).
+   Entry: G2 and G3 built.
    Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
    effects in battle. Exit: 1-00, a battle from camera 0 into camera 1; the
    picture, foreground and fires change with her; aiming still works. Tests: T5.
@@ -292,6 +296,19 @@ I5 if the host room changed. Exit check: from PE's title into Leon A's street, t
 floor was x 1930..7326, z -3354..3821 and the battle was fought at -2086,1711; walking the
 route that had changed rooms (map 66 -> 67) left the room unchanged; both zombies shot
 dead, the battle ended, Aya back at her exact field position.
+
+Phase 3 as built (G2, G3, D6, D8, D21), `mods/pe_re_play/hosts/pe1/pe_re_stage.c`: the stage
+keeps the shown room's logic; `pe_re_stage_battle_camera` swaps picture, masks and view in
+battle without touching Aya, the collision or the backdrop's saved pages (the picture code
+is shared with `pe_re_stage_show` as `install_picture`); `battle_follow` asks
+`pe_re_camera_at` each battle frame at her battle position; masks and effects draw in front
+of the battle; at the battle's end the current camera's picture goes back and Aya keeps her
+battle position. G2: `pe_re_stage_vram_reserved` (ReHost and API `vram_reserved`, appended)
+lists the picture, effect pages and mesh texture, and `pe_place` keeps out of them. Exit
+check (from PE's title into Leon A's street, user's store): camera 0 -> 1 mid-battle; the
+picture, foreground and fires follow; the zombie's texture went to 640,0, not the effect
+pages, and the fires draw clean; both zombies shot dead; after the battle Aya stands in
+camera 1 where it ended and walks on. Not yet seen: Aya passing behind a foreground object.
 
 ## Tests
 

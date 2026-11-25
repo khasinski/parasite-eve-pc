@@ -106,6 +106,9 @@ typedef struct ReHost {
     int (*write_report)(const char *text, const void *progress, size_t size, char *where, size_t n);
     /* Optional. Whether a room point (x, z, standing on `y`) is in the current camera's picture. */
     int (*in_view)(double x, double y, double z);
+    /* Optional. The VRAM the room's drawing uses now, as (x, y, w, h) rectangles into `out` (at most
+     * `max`): a battle's own textures keep out of it (docs/RE_PLAY_BATTLES.md, G2). Returns how many. */
+    int (*vram_reserved)(int *out, int max);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

@@ -46,6 +46,10 @@ void pe_re_stage_fade(int shade, int curtain, int hold);
 void pe_re_stage_set_size(int percent);
 void pe_re_stage_collision_id(unsigned slot, unsigned id);   /* a script's wall switch (Sca_id_set) */
 double pe_re_stage_scale(void);
+/* In battle (the backdrop on): show another camera of the room. 0, or -1. */
+int pe_re_stage_battle_camera(int camera);
+/* The VRAM the room's drawing uses: (x, y, w, h) rectangles into out, at most max; returns how many. */
+int pe_re_stage_vram_reserved(int *out, int max);
 int pe_re_stage_in_view(double x, double y, double z);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned last_frame, int silent);
