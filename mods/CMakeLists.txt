@@ -429,6 +429,11 @@ if(BUILD_TESTING)
     # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
     pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_sources})
     target_include_directories(test-mod-fit PRIVATE import/core)
+    pe_feature_test(re-battle ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_battle_test.c
+        pe_re_play/pe_re_battle.c pe_re_play/pe_re_battle_re2.c
+        pe_re_play/pe_re_session.c pe_re_play/pe_re_scd.c pe_re_play/pe_re_rules.c pe_re_play/pe_re_zone.c
+        $<TARGET_OBJECTS:pe-import-core>)
+    target_include_directories(test-mod-re-battle PRIVATE host import/core pe_re_play)
     # The play session (pe_re_play): zones, cameras and doors on a made-up room; with PE_TEST_RE2_DISC,
     # RE2's rooms walked door by door from the street.
     pe_feature_test(re-session ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_session_test.c
