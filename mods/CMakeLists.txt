@@ -3,7 +3,7 @@
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
 # pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_ammo_types pe_phone
     pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
     list(PREPEND pe_default_mods pe_assets)
@@ -174,7 +174,8 @@ foreach(mod IN LISTS pe_enabled_mods)
             pe_re_play/hosts/pe1/pe_re_play_mod.c
             pe_re_play/hosts/pe1/re_host_pe1.c
             pe_re_play/hosts/pe1/pe_re_stage.c
-            pe_re_play/hosts/pe1/pe_re_box.c)
+            pe_re_play/hosts/pe1/pe_re_box.c
+            pe_re_play/hosts/pe1/pe_re_ammo.c)
     elseif(mod STREQUAL "pe_enemy_import")
         file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_enemy_import/*.c)
         list(APPEND pe_mod_sources ${mod_files}

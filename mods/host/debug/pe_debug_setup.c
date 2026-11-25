@@ -93,12 +93,40 @@ invalid:
 }
 
 
+/* item ID: a base item's kind and stats (hex id 1..FF), and the pools' rounds (records 0..8). */
+static void pe_ctl_item(const char *args) {
+    unsigned id;
+    char extra, detail[160];
+    const ItemDataRecord *r;
+    if (sscanf(args, "%x %c", &id, &extra) != 1 || !(r = pe_base_item(id))) {
+        pe_debug_reply("err %s %s", "item", "item ID (hex base item id 1..FF)"); return;
+    }
+    snprintf(detail, sizeof detail, "id=%X kind=%u stats=%u,%u,%u ammo=%u", id, (unsigned)r->kind,
+             (unsigned)r->baseStats[0], (unsigned)r->baseStats[1], (unsigned)r->baseStats[2], (unsigned)r->ammo);
+    pe_debug_reply("ok %s %s", "item", detail);
+}
+
+/* pools: the rounds in each of the nine ammo pool records, and the equipped weapon's loaded rounds. */
+static void pe_ctl_pools(const char *args) {
+    char detail[160];
+    const ItemDataRecord *gun = pe_equipped(0);
+    int at = 0;
+    (void)args;
+    for (int i = 0; i < 9; ++i)
+        at += snprintf(detail + at, sizeof detail - (size_t)at, "%s%u", i ? "," : "", (unsigned)g_KeyItemRecords[i].ammo);
+    snprintf(detail + at, sizeof detail - (size_t)at, " gun=%X kind=%u loaded=%u", gun ? gun->itemId : 0,
+             gun ? (unsigned)gun->kind : 0, gun ? (unsigned)gun->ammo : 0);
+    pe_debug_reply("ok %s %s", "pools", detail);
+}
+
 static const PeDebugCommand s_commands[] = {
     {"bag", PE_DEBUG_EXACT, pe_ctl_bag},
     {"fill-bag", PE_DEBUG_ARGS, pe_ctl_fill_bag},
     {"give", PE_DEBUG_ARGS, pe_ctl_give},
     {"equip", PE_DEBUG_ARGS, pe_ctl_equip},
     {"set-stat", PE_DEBUG_ARGS, pe_ctl_stat},
+    {"item", PE_DEBUG_ARGS, pe_ctl_item},
+    {"pools", PE_DEBUG_EXACT, pe_ctl_pools},
 };
 
 const PeDebugModule pe_debug_setup_module = {
