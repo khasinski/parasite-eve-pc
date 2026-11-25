@@ -12,6 +12,7 @@
  *                   is equipped, every hit it lands kills.
  */
 #include <stdio.h>
+#include <string.h>
 
 #include "pe_game.h"
 #include "pe_mod_host.h"
@@ -20,6 +21,7 @@
 #include "pe_mod_menu.h"
 #include "pe_services.h"
 #include "re_play_api.h"
+#include "ammo_types_api.h"
 #include "pe1/aya.h"
 #include "pe1/battle.h"
 #include "pe1/battle_runtime.h"
@@ -44,7 +46,7 @@ static int s_pending_win;
 static unsigned s_powers_before;
 static const BattleAction *s_ammo_action;
 static const ItemDataRecord *s_ammo_gun;
-static unsigned s_ammo_loaded, s_ammo_held, s_ammo_pool[3];
+static unsigned s_ammo_loaded, s_ammo_held, s_ammo_pool[9];   /* all nine pool records (ammo types use 3-8) */
 
 static void pe_god(void) {
     Combatant *aya = pe_aya_core();
@@ -59,6 +61,17 @@ static void pe_ammo(void) {
     Combatant *aya = pe_aya_core();
     ItemDataRecord *gun = pe_equipped(0);
     if (!s_ammo || !pe_game_loaded()) return;
+    {   /* the ammo types in force changed (pools merged or split): start counting again */
+        static const char *scheme;
+        const PeAmmoTypesApi *types = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
+        const char *now = types && types->active ? types->active() : NULL;
+        if (now != scheme) {
+            scheme = now;
+            s_ammo_loaded = s_ammo_held = 0;
+            memset(s_ammo_pool, 0, sizeof s_ammo_pool);
+            for (int k = 0; k < 9; ++k) s_ammo_pool[k] = g_KeyItemRecords[k].ammo;
+        }
+    }
     if (pe_in_battle() && aya && aya->action) {
         BattleAction *a = aya->action;
         const unsigned loaded = a->attackWord & 0x3FFu;
@@ -69,7 +82,7 @@ static void pe_ammo(void) {
         if (gun != s_ammo_gun || gun->ammo > s_ammo_held) { s_ammo_gun = gun; s_ammo_held = gun->ammo; }
         if (gun->ammo < s_ammo_held) gun->ammo = (u16)s_ammo_held;
     }
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < 9; ++k) {
         const unsigned v = g_KeyItemRecords[k].ammo;
         if (v > s_ammo_pool[k]) s_ammo_pool[k] = v;
         if (v < s_ammo_pool[k]) g_KeyItemRecords[k].ammo = (u16)s_ammo_pool[k];
@@ -154,7 +167,8 @@ static int pe_on_new_game(void *ctx, void *user) {
     s_powers = 0;
     s_pending_win = 0;
     s_ammo_action = NULL; s_ammo_gun = NULL;
-    s_ammo_loaded = s_ammo_held = s_ammo_pool[0] = s_ammo_pool[1] = s_ammo_pool[2] = 0;
+    s_ammo_loaded = s_ammo_held = 0;
+    memset(s_ammo_pool, 0, sizeof s_ammo_pool);
     return 0;
 }
 
@@ -211,6 +225,10 @@ static void pe_arsenal(void) {
         if (capacity) gun->ammo = (u16)(capacity < 1000 ? capacity : 999);
         pe_equip_slot(slot);
     }
+    {   /* rounds for every ammo type in force (or Parasite Eve's pools) */
+        const PeAmmoTypesApi *ammo = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
+        if (ammo && ammo->fill) ammo->fill(60);
+    }
     snprintf(msg, sizeof msg, "Test arsenal: %d added%s%s", added, full ? ", bag full for some" : "",
              slot >= 0 ? "; DEBUGSMG equipped" : "");
     pe_toast(msg);
@@ -235,7 +253,8 @@ static void pe_ask_win(void) {
 }
 static void pe_ammo_changed(void) {
     s_ammo_action = NULL; s_ammo_gun = NULL;
-    s_ammo_loaded = s_ammo_held = s_ammo_pool[0] = s_ammo_pool[1] = s_ammo_pool[2] = 0;
+    s_ammo_loaded = s_ammo_held = 0;
+    memset(s_ammo_pool, 0, sizeof s_ammo_pool);
 }
 /* Fresh counts when the row changes (the toggle's per-frame callback sees the flip). */
 static void pe_ammo_tick(void) {

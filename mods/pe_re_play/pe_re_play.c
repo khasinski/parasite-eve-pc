@@ -299,6 +299,7 @@ static double api_enemy_walk_speed(uint8_t slot) {
 
 static unsigned s_games_started;
 static unsigned api_games_started(void) { return s_games_started; }
+static const char *api_playing_game(void) { return s_playing && s_session.game ? s_session.game->game : NULL; }
 
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
@@ -307,7 +308,7 @@ static const PeRePlayApi s_api = {
     api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved,
     api_battle_begin, api_battle_step, api_battle_foe_moved, api_battle_foe_died, api_battle_end,
     api_battle_target_order, api_battle_encounter_allowed_for, api_battle_settings, api_battle_point,
-    api_battle_mark, api_enemy_walk_speed, api_games_started
+    api_battle_mark, api_enemy_walk_speed, api_games_started, api_playing_game
 };
 
 static void report_enemies(void) {

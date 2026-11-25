@@ -124,6 +124,9 @@ typedef struct PeRePlayApi {
     /* Optional. How many imported games have started (New Game in RE play, not Continue) since the
      * game launched: other mods can set Aya up for a new one. */
     unsigned (*games_started)(void);
+    /* Optional. The id of the imported game being played ("re2"), battles and scenes included, or
+     * NULL when none is. */
+    const char *(*playing_game)(void);
 } PeRePlayApi;
 
 #define PE_RE_MARK_TARGET 1

@@ -2349,6 +2349,7 @@ double pe_re_stage_scale(void) { return s_scale; }
 
 void pe_re_stage_init(const char *mod_id, const char *store) {
     s_trace_scene = SDL_getenv("PE_TEST_RE_SCENE") != NULL;
+    pe_re_ammo_register();                     /* RE2's ammo types, when "ammo_types" is up */
     s_store = store, s_scale = 3;
     memset(s_mask_groups, 0xff, sizeof s_mask_groups);
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
