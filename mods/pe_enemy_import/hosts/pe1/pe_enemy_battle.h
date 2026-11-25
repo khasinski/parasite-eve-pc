@@ -27,7 +27,7 @@ void pe_enemy_battle_set_room_slot(int i, int slot);
  * at x, z (16.16 field units). The foe's index, or -1 (no battle, no place, no VRAM). */
 int pe_enemy_battle_join(const char *pack, int room_slot, int x, int z);
 typedef struct { int room_slot; double x, z; int alive; } PeEnemyBattleFoe;
-/* The battle's foes that stand for room enemies (summons left out): slot, field position, alive. */
+/* Foes tied to room placements. alive: 1 live, 0 confirmed dead, -1 released during cleanup. */
 int pe_enemy_battle_foe_slots(PeEnemyBattleFoe *out, int max);
 /* D10: the targets in this order of room slots (on screen first, nearest first), others after. */
 void pe_enemy_battle_order_targets(const uint8_t *order, int n);

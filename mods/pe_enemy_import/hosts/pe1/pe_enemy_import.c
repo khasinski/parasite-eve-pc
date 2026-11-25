@@ -36,6 +36,7 @@
 #include "pe1/battle_runtime.h"
 #include "pe1/field_actor.h"
 #include "pe1/field_collision.h"
+#include "pe1/menu_sound.h"
 #include "pe1/game_state.h"
 #include "pe1/game_timers.h"
 #include "pe1/player_entity.h"
@@ -138,6 +139,7 @@ static int s_re2_encounters = 1;
 /* D18: after an escape, its survivors can't start a fight for this long or until Aya is this far
  * from them, halved on each further escape from the same ones. Tuned in play (F1 > Fights). */
 static int s_grace_seconds = 3, s_grace_distance = 4000, s_grace_halve = 1;
+static int s_join_sound;
 enum { PE_MANUAL_FIGHT, PE_PROXIMITY_FIGHT, PE_SCRIPTED_FIGHT };
 static struct {
     int latched, floor, won, slot, retry, effect;
@@ -495,10 +497,10 @@ static void pe_direct_battle(const PeRePlayApi *api) {
     for (int i = 0; i < nf; i++) {
         const unsigned slot = (unsigned)foes[i].room_slot;
         if (slot >= 32) continue;
-        if (foes[i].alive) {
+        if (foes[i].alive > 0) {
             double rx, rz;
             if (!api->battle_point(1, foes[i].x, foes[i].z, &rx, &rz)) api->battle_foe_moved((uint8_t)slot, rx, rz);
-        } else if (!(s.dead_slots & (1u << slot))) {
+        } else if (foes[i].alive == 0 && !(s.dead_slots & (1u << slot))) {
             s.dead_slots |= 1u << slot;
             api->battle_foe_died((uint8_t)slot);
         }
@@ -506,6 +508,7 @@ static void pe_direct_battle(const PeRePlayApi *api) {
     const int time_runs = g_BattleModeState == 0 && !(g_GameStateFlags & (4 | 0x100));
     PeReEnemyPlacement joins[PE_TRIP_FOES_MAX];
     const int nj = api->battle_step(ax, az, time_runs, joins, PE_TRIP_FOES_MAX);
+    int joined = 0;
     for (int i = 0; i < nj; i++) {
         char pack[64];
         double hx, hz;
@@ -516,7 +519,9 @@ static void pe_direct_battle(const PeRePlayApi *api) {
         if (s_trip.count < PE_TRIP_FOES_MAX) s_trip.slot[s_trip.count++] = joins[i].slot;
         s_cue[s_cue_next].slot = joins[i].slot, s_cue[s_cue_next].frames = PE_CUE_FRAMES;   /* D19 */
         s_cue_next = (s_cue_next + 1) % PE_CUES;
+        joined = 1;
     }
+    if (joined && s_join_sound) Menu_PlayConfirmSound();
     /* D10: on screen first, nearest first; the chosen one's arrow while it is off the picture */
     uint8_t order[PE_TRIP_FOES_MAX];
     if (api->battle_target_order)
@@ -530,11 +535,26 @@ static void pe_direct_battle(const PeRePlayApi *api) {
         if (s_cue[c].frames > 0) {
             s_cue[c].frames--;
             for (int i = 0; i < nf && !shown; i++)
-                if (foes[i].room_slot == s_cue[c].slot && foes[i].alive)
+                if (foes[i].room_slot == s_cue[c].slot && foes[i].alive > 0)
                     api->battle_mark(1 + c, PE_RE_MARK_CUE, foes[i].x, foes[i].z), shown = 1;
         }
         if (!shown) api->battle_mark(1 + c, 0, 0, 0);
     }
+}
+
+static int pe_available_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z,
+                                 int floor, PeReEnemyPlacement *close) {
+    if (!pe_director(api) || !api->battle_encounter_allowed_for)
+        return pe_trip_select_approach(api, room, x, z, floor, close);
+    PeReEnemyPlacement eligible[16];
+    PeReRoomEvent available = *room;
+    available.enemies = eligible;
+    available.count = 0;
+    for (int i = 0; i < room->count && available.count < (int)(sizeof eligible / sizeof *eligible); ++i) {
+        if (api->battle_encounter_allowed_for(room->enemies[i].slot))
+            eligible[available.count++] = room->enemies[i];
+    }
+    return pe_trip_select_approach(api, &available, x, z, floor, close);
 }
 
 static int pe_room_creature(const PeRePlayApi *api) {
@@ -550,7 +570,7 @@ static int pe_room_creature(const PeRePlayApi *api) {
         const PeReEnemyPlacement *all = room.enemies;
         const int all_count = room.count;
         room.count = s.automatic == PE_SCRIPTED_FIGHT ? pe_trip_select_boss(api, &room, close) :
-                     pe_trip_select_approach(api, &room, x, z, floor, close);
+                     pe_available_approach(api, &room, x, z, floor, close);
         room.enemies = close;
         if (!room.count) return 0;
         /* an approach's battle: RE play's director picks who is in it (the one that reached her and
@@ -723,12 +743,21 @@ static void pe_step(void) {
             const PeRePlayApi *api = pe_imported_room_api();
             PeEnemyBattleFoe foes[PE_TRIP_FOES_MAX];
             const int nf = pe_enemy_battle_foe_slots(foes, PE_TRIP_FOES_MAX);
-            for (int i = 0; i < nf; i++)
-                if (!foes[i].alive && (unsigned)foes[i].room_slot < 32) s.dead_slots |= 1u << foes[i].room_slot;
-            unsigned mask = 0;
+            for (int i = 0; i < nf; i++) {
+                const unsigned slot = (unsigned)foes[i].room_slot;
+                if (slot >= 32) continue;
+                if (!s.live_enemies || foes[i].alive == 0) s.dead_slots |= 1u << slot;
+                if (api && api->battle_foe_died && (s.dead_slots & (1u << slot)))
+                    api->battle_foe_died((uint8_t)slot);
+            }
+            unsigned mask = 0, survivors = 0;
             int beaten = 0;
-            for (int t = 0; t < s_trip.count; t++)
-                if (s.dead_slots & (1u << s_trip.slot[t])) mask |= 1u << t, beaten++;
+            for (int t = 0; t < s_trip.count; t++) {
+                const unsigned slot = 1u << s_trip.slot[t];
+                if (s.dead_slots & slot) mask |= 1u << t, beaten++;
+                else survivors |= slot;
+            }
+            if (s.live_enemies) pe_mod_log(MOD_ID, "battle: escape survivor slots 0x%04x", survivors);
             pe_trip_defeated(&s_trip, mask);
             if (api && api->battle_end) api->battle_end(s.live_enemies > 0);
             pe_mod_log(MOD_ID, "battle: end %s, %d of %d in it beaten", s.live_enemies ? "escaped" : "won",
@@ -792,9 +821,7 @@ static void pe_check_approach(void) {
     }
     if (!scripted && api->struct_size >= sizeof *api && api->advance_enemies)
         api->advance_enemies(x, z, floor);
-    if (!scripted && !pe_trip_select_approach(api, &room, x, z, floor, close)) return;
-    if (!scripted && pe_director(api) && api->battle_encounter_allowed_for &&
-        !api->battle_encounter_allowed_for(close[0].slot)) return;   /* that one escaped her moments ago (D18) */
+    if (!scripted && !pe_available_approach(api, &room, x, z, floor, close)) return;
     const int effect = scripted && api->struct_size >= offsetof(PeRePlayApi, defeated_by_canister) && api->prepare_boss ?
         api->prepare_boss(close[0].slot) : PE_RE_BOSS_STANDARD;
     if (effect == PE_RE_BOSS_WAIT) return;
@@ -1098,6 +1125,8 @@ static int enemy_import_init(void) {
                             &s_rpd_encounters, NULL);
     pe_menu_register_toggle(0, "RE2 other encounters", "Enable encounters in the rest of RE2, including supported story fights.",
                             &s_re2_encounters, NULL);
+    pe_menu_register_toggle(0, "Reinforcement sound",
+                            "Play a sound when a new enemy joins an imported battle.", &s_join_sound, NULL);
     pe_menu_register_int(0, "Escape grace (seconds)",
                          "After an escape, the enemies left can't start a fight again for this long.",
                          &s_grace_seconds, 0, 30, 1);

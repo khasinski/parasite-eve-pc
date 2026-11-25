@@ -265,6 +265,40 @@ static void test_pursuit_and_grace(void) {
     free(s.logic);
 }
 
+static void test_boss_rules(void) {
+    const PeReBattleRules *rules = pe_re_battle_rules("re2");
+    PeReSession s;
+    battle_room(&s);
+    PeReBossFight fight;
+    CHECK(!rules->boss(&s, &fight));
+    s.stage = 6;
+    s.room = 2;
+    s.run.works[2][PE_RE_MEMBER_ID] = 0x2b;
+    s.run.works[2][PE_RE_MEMBER_SCE_FREE0] = 3;
+    CHECK(rules->boss(&s, &fight) && fight.lead.slot == 0 &&
+          fight.effect == PE_RE_BOSS_LAUNCHER && !fight.needs_choice);
+    s.stage = 3;
+    s.room = 0x0a;
+    s.run.works[2][PE_RE_MEMBER_ID] = 0x23;
+    s.run.works[2][PE_RE_MEMBER_SCE_FREE0] = 1;
+    CHECK(rules->boss(&s, &fight) && fight.needs_choice);
+    s.run.alligator_chosen = 1;
+    CHECK(rules->boss(&s, &fight) && fight.effect == PE_RE_BOSS_STANDARD && !fight.needs_choice);
+    pe_re_flag_set(&s.progress.flags, 5, 0, 1);
+    CHECK(rules->boss(&s, &fight) && fight.effect == PE_RE_BOSS_CANISTER && !fight.needs_choice);
+    s.stage = 2;
+    s.room = 3;
+    fight.lead = (PeReEnemyPlacement){.kind = 0x28, .slot = 0};
+    PeReEnemyPlacement embryo = {.kind = 0x27, .slot = 1, .killed_flag = 0xff};
+    CHECK(rules->joins_boss(&s, &fight, &embryo));
+    embryo.floor = 1;
+    CHECK(!rules->joins_boss(&s, &fight, &embryo));
+    embryo.floor = 0;
+    embryo.slot = 2;
+    CHECK(!rules->joins_boss(&s, &fight, &embryo));
+    free(s.logic);
+}
+
 int main(void) {
     test_anchor();
     test_round_trip();
@@ -272,6 +306,7 @@ int main(void) {
     test_begin();
     test_join_and_target();
     test_pursuit_and_grace();
-    puts("RE battle T1-T4 and T6-T10 passed");
+    test_boss_rules();
+    puts("RE battle T1-T4 and T6-T11 passed");
     return 0;
 }

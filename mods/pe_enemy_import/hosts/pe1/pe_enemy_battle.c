@@ -1585,8 +1585,9 @@ int pe_enemy_battle_foe_slots(PeEnemyBattleFoe *out, int max) {
         if (f->room_slot < 0 || !f->actor) continue;
         const EnemyCombatant *core = pe_core(f);
         out[n].room_slot = f->room_slot;
-        out[n].x = f->actor->pos_x / 65536.0, out[n].z = f->actor->pos_z / 65536.0;
-        out[n].alive = !f->dead && core && core->hpAlive > 0;
+        out[n].x = core ? f->actor->pos_x / 65536.0 : 0;
+        out[n].z = core ? f->actor->pos_z / 65536.0 : 0;
+        out[n].alive = f->dead ? 0 : core ? core->hpAlive > 0 : -1;
         n++;
     }
     return n;

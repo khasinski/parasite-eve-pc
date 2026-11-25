@@ -14,9 +14,9 @@ How to use it:
   addable without editing the shared battle code.
 
 Status (2026-11-24): phases 0-5 built for RE2 (phase 2 and the director side of
-4 and 5 by Codex; the PE1 adapter hookup 953def9c6). Open from 4-5: the joining
-cue's sound (D19), an escape checked in play (the harness can't drive PE's escape
-command), and phase 4's wave and floor exits in 2-05 and 1-03. Next: phase 6.
+4 and 5 by Codex; the PE1 adapter hookup 953def9c6). The optional joining
+sound is built, and native Escape was checked in 1-00. The wave and floor
+exit checks and the rest of phase 6 are open.
 Spikes done; S5 deferred (D16).
 
 ## The battle we want
@@ -66,6 +66,8 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D20 | 2026-11-24 | The detached phase 2 director keeps the lead first and ranks the other visible foes by distance from the lead, with room placement order breaking ties. Its join order is explicit and phases 3-6 retain their runtime integration work. The T1-T2 anchor geometry uses host-supplied bounds and clearance. | Preserves the current visible roster and makes it possible to test the director while the phase 1 adapter is developed independently. |
 | D21 | 2026-11-24 | The director queues newly visible foes nearest Aya first, breaking ties by slot. Queued foes keep their place but can join only while visible on the battle floor. The adapter supplies visibility for the current camera and steps grace at 60 updates per second, including outside combat. Escape history is tracked per room slot until that foe dies or Aya leaves the room. Each repeat halves both grace limits when enabled. | Makes join and target order deterministic and keeps survivor grace independent of other enemies. |
 | D22 | 2026-11-24 | After a battle Aya stays where it left her in the room (and in its last camera), instead of going back to where it began. | With the camera following her (D6), going back would be a jump across the room. |
+| D23 | 2026-11-24 | The reinforcement sound is an opt-in Fights setting. It plays once per frame that successfully spawns a reinforcement. The yellow marker is independent of sound. | Players can keep the visual cue without adding repeated audio to busy fights. |
+| D24 | 2026-11-24 | An escape records only deaths confirmed before native actor cleanup. Removed actors are not evidence of death. | The native escape path releases surviving actors before the room is restored. |
 
 ## Architecture
 
@@ -331,6 +333,29 @@ check (from PE's title into Leon A's street, user's store): camera 0 -> 1 mid-ba
 picture, foreground and fires follow; the zombie's texture went to 640,0, not the effect
 pages, and the fires draw clean; both zombies shot dead; after the battle Aya stands in
 camera 1 where it ended and walks on. Not yet seen: Aya passing behind a foreground object.
+
+Windows follow-up. The Fights menu has a **Reinforcement sound** toggle,
+off by default. The edge arrow uses the room's field visibility test
+and points toward the enemy's head. The arrow position still needs a
+capture with a live off-screen target.
+
+A Claire B room check found nine EM1F placements in 1-03, including
+placements reported on a different floor. Room 2-05 had four EM10
+placements in this state. Room 1-1D had seven EM1F placements and is a
+candidate for the native rolling-cap test. The adapter still retains
+at most six native foe records for the duration of a fight, so the full
+wave exit check is open.
+
+Phase 6 preparation now reads the RE2 boss table for special battle rules.
+T11 checks the Alligator choice and canister, Tyrant launcher, and G
+embryo eligibility. The Leon Windows canister route won and preserved
+the result after re-entering 4-0A. Live boss roster integration remains open.
+
+Native Escape in 1-00 preserved all six zombies. With default grace, the
+first 120 vblanks after return produced no encounter. With longer grace,
+a zombie outside the escaped roster was still able to start a fight.
+The street regression also re-entered combat, won, and saved with three
+zombies remaining.
 
 ## Tests
 

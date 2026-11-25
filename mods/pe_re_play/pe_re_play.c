@@ -386,11 +386,11 @@ static int s_typing, s_typed;
 static int s_pick, s_pick_at;
 
 static int prepare_boss(uint8_t slot) {
-    if (pe_re_session_final_tyrant(&s_session, slot)) return PE_RE_BOSS_LAUNCHER;
-    if (!pe_re_session_alligator(&s_session, slot)) return PE_RE_BOSS_STANDARD;
-    if (pe_re_scd_running(&s_session.run, 10)) return PE_RE_BOSS_WAIT;
-    if (pe_re_session_canister_ready(&s_session)) return PE_RE_BOSS_CANISTER;
-    if (s_session.run.alligator_chosen) return PE_RE_BOSS_STANDARD;
+    const PeReBattleRules *rules = pe_re_battle_rules(s_session.game ? s_session.game->game : NULL);
+    PeReBossFight fight;
+    if (!rules || !rules->boss || !rules->boss(&s_session, &fight) || fight.lead.slot != slot)
+        return PE_RE_BOSS_STANDARD;
+    if (!fight.needs_choice) return fight.effect;
     static const char *const choices[] = {"Fight directly", "Release the gas canister"};
     if (!re_host()->choose("The Alligator is coming.", choices, 2, 0)) return PE_RE_BOSS_STANDARD;
     s_pick = PICK_ALLIGATOR;
@@ -447,6 +447,8 @@ static void resume_after_battle(void) {
     if (!s_battle_paused) return;
     s_battle_paused = 0;
     if (re_host()->release_backdrop) re_host()->release_backdrop();
+    snprintf(s_status, sizeof s_status, "Room %x-%02X, camera %d.", (unsigned)s_session.stage + 1,
+             (unsigned)s_session.room, s_session.camera);
     s_cross_held = s_square_held = 1;
     s_session.key = s_session.key_trg = 0;
 }

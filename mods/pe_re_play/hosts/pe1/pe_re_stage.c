@@ -1787,9 +1787,13 @@ static void draw_marks(RenderNativeTag *ordering, int slot) {
     if (!s_camera.distance) return;
     for (int i = 0; i < PE_RE_STAGE_MARKS; i++) {
         if (!s_marks[i].kind) continue;
-        const double point[3] = {s_backdrop.room[0] + (s_marks[i].x - s_backdrop.anchor[0]) * k,
-                                 s_backdrop.room[1] - 1800.0,
-                                 s_backdrop.room[2] + (s_marks[i].z - s_backdrop.anchor[2]) * k};
+        const int cue = s_marks[i].kind == PE_RE_MARK_CUE;
+        const double x = s_backdrop.room[0] + (s_marks[i].x - s_backdrop.anchor[0]) * k;
+        const double y = s_backdrop.room[1];
+        const double z = s_backdrop.room[2] + (s_marks[i].z - s_backdrop.anchor[2]) * k;
+        if (!cue && pe_re_stage_in_view(x, y, z)) continue;
+        /* Use head height for the arrow's bearing, above the battle HUD. */
+        const double point[3] = {x, y - (cue ? 1800.0 : 3000.0), z};
         double view[3] = {0};
         for (int row = 0; row < 3; row++)
             for (int col = 0; col < 3; col++)
@@ -1797,9 +1801,8 @@ static void draw_marks(RenderNativeTag *ordering, int slot) {
         double dx = view[0], dy = view[1];
         if (view[2] > 1) dx = s_camera.distance * view[0] / view[2], dy = s_camera.distance * view[1] / view[2];
         const int on = view[2] > 1 && fabs(dx) < cx - 4 && fabs(dy) < cy - 4;
-        if (s_marks[i].kind == PE_RE_MARK_TARGET && on) continue;
         double ex, ey, ux, uy;                          /* where, and which way the arrow points */
-        if (on) {
+        if (cue && on) {
             ex = cx + dx, ey = cy + dy - 8, ux = 0, uy = 1;
         } else {
             const double len = sqrt(dx * dx + dy * dy);
@@ -1809,7 +1812,6 @@ static void draw_marks(RenderNativeTag *ordering, int slot) {
             const double t = tx < ty ? tx : ty;
             ex = cx + ux * t, ey = cy + uy * t;
         }
-        const int cue = s_marks[i].kind == PE_RE_MARK_CUE;
         RenderColorTrianglePacket *p = &s_mark_packets[slot][i];
         *p = (RenderColorTrianglePacket){
             .color.bytes = {cue ? 255 : 250, cue ? 210 : 60, cue ? 40 : 60, 0x20},

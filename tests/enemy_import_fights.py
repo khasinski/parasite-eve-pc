@@ -174,13 +174,13 @@ def wait_battle(game, limit=4000):
     raise Failed(f'no battle and no answer from the picker by vblank {game.vblank}')
 
 
-def wait_home(game, limit=4000):
+def wait_home(game, limit=4000, *, after=200):
     """Cross through the results (still the battle until then) until the picker is back to Ready."""
     end = game.vblank + limit
     while game.vblank < end:
         if not game.battle()['active'] and game.picker()['Status'] == 'Ready':
             return
-        game.press(CROSS, 200)
+        game.press(CROSS, after)
     raise Failed(f'the picker never came back by vblank {game.vblank}: {game.picker()}')
 
 
@@ -508,20 +508,38 @@ def part_street(exe, disc, work, re2_disc):
         check(initial == 6, f'opening street: expected six living zombies, got {initial}')
         game.adv(90)
         check(game.picker()['Status'] == 'Ready', 'opening street: an encounter started while standing at the entrance')
-        count = approach()
-        escape(game)
-        wait_home(game)
-        game.adv(120)
-        check(game.picker()['Last fight'] == 'RE2 opening street: ran away', game.picker())
-        check(game.picker()['Status'] == 'Ready' and placement_count() == initial,
-              'opening street: an escape removed a survivor or immediately restarted the fight')
+        approach()
+        escape(game, poll_return=True)
+        # Avoid using up grace while waiting for the results screen to close.
+        log_path = game.config / 'pe_mods.log'
+        for _ in range(50):
+            log = log_path.read_text(encoding='utf-8', errors='replace')
+            survivors = re.search(r'battle: escape survivor slots 0x([0-9a-f]+)', log)
+            if survivors:
+                break
+            game.press(CROSS, 12)
+        check(survivors and int(survivors[1], 16), 'opening street: no escape survivors recorded')
+        game.adv(100)
+        log = log_path.read_text(encoding='utf-8', errors='replace')
+        check('battle: end escaped, 0 of' in log, 'opening street: escape marked a survivor dead')
+        new_leads = re.findall(r'room 1-00: encounter with enemy slot (\d+)', log[survivors.end():])
+        check(all(not (int(survivors[1], 16) & (1 << int(slot))) for slot in new_leads),
+              f'opening street: protected survivor immediately restarted the fight: {new_leads}')
 
-        game.adv(48, 32)  # Left, far enough to leave the encounter radius before returning.
-        check(approach() == count, 'opening street: the escaped group did not return')
+        if game.picker()['Status'] == 'Ready':
+            check(placement_count() == initial, 'opening street: an escape removed a survivor')
+            game.adv(48, 32)
+            approach()
+        else:
+            check(wait_battle(game) is not None, 'opening street: the new encounter did not start')
+        game.ask('ini-set Fights/RE2 street encounters 0')
         win_when_ready(game)
-        wait_home(game)
-        game.adv(120)
+        wait_home(game, after=12)
         check(game.picker()['Last fight'] == 'RE2 opening street: won', game.picker())
+        log = log_path.read_text(encoding='utf-8', errors='replace')
+        wins = re.findall(r'battle: end won, (\d+) of (\d+) in it beaten', log)
+        check(wins and int(wins[-1][0]) > 0, 'opening street: no recorded victory')
+        count = int(wins[-1][0])
         check(placement_count() == initial - count, 'opening street: wrong zombies cleared after victory')
         game.ask('save-block 1')
         check((game.ctl / 'block.bin').stat().st_size > 0, 'opening street: could not build the native save')
@@ -575,7 +593,7 @@ def part_rpd(exe, disc, work, re2_disc):
         game.quit()
 
 
-def escape(game, limit=12000):
+def escape(game, limit=12000, *, poll_return=False):
     """Battle menu, Down three times (Escape from Battle), Cross; again until it works.
     Only with Aya's time bar full: before that the menu holds just Use Item and Change Weapon, so
     the Downs land on Change Weapon and the Cross opens the weapon screen instead."""
@@ -590,7 +608,16 @@ def escape(game, limit=12000):
         game.press(TRIANGLE, 60)
         for _ in range(3):
             game.press(DOWN, 50)
-        game.press(CROSS, 400)
+        game.press(CROSS, 12 if poll_return else 400)
+        if poll_return:
+            settle_until = min(end, game.vblank + 400)
+            while game.vblank < settle_until:
+                state = game.battle()
+                if not state['active']:
+                    return
+                if state['mode'] == 0:
+                    break
+                game.adv(10)
     try:
         game.raw(f'capture {game.work / "escape-failed"}')
     except Exception:
