@@ -264,7 +264,7 @@ into the named room with the user's store), tests.
    adapter calls the director but behaviour is unchanged. Exit: the five story
    routes finish; battles start with the same enemies as before.
    Tests: T3, T4, the route tests.
-3. **Camera follows, masks and effects (D6, D8).** Done 2026-11-24 (commit in the log).
+3. **Camera follows, masks and effects (D6, D8).** Done 2026-11-24 (57fcf6aab).
    Entry: G2 and G3 built.
    Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
    effects in battle. Exit: 1-00, a battle from camera 0 into camera 1; the
