@@ -520,10 +520,12 @@ static int step(Vm *vm, PeReScdTask *t) {
         vm->run->actor_stopped[t->work] ^= 1;
         t->pc += n;
         return CONTINUE;
-    case OP_PLC_DEST: {                                    /* walk to (x, z); ins[3]: the arrival flag */
+    case OP_PLC_DEST: {                                    /* actor routine, arrival flag, and two mode-specific operands */
         PeReScdRun *r = vm->run;
         const int16_t x = s16(ins + 4), z = s16(ins + 6);
-        if (t->work == 0 || (enemy_work(t->work) && walking_mode(ins[2]))) {
+        const int scenario_turn = ins[2] == PE_RE_DEST_TURN && enemy_work(t->work) &&
+            (uint16_t)*member(vm, t, PE_RE_MEMBER_ID) >= 0x40;
+        if (t->work == 0 || scenario_turn || (enemy_work(t->work) && walking_mode(ins[2]))) {
             PeReActorDestination *dest = t->work == 0 ? &r->player_dest : &r->enemy_dest[t->work - 2];
             *dest = (PeReActorDestination){.moving = 1, .owned = 1, .mode = ins[2], .arrival = (uint16_t)(ins[3] + 1), .x = x, .z = z};
             *member(vm, t, PE_RE_MEMBER_DEST_X) = x;
@@ -1012,8 +1014,22 @@ static int zombie_rise(PeReScdRun *run, int slot) {
     return 1;
 }
 
-/* Script-owned paths follow authored destinations in room coordinates. */
+/* RE2 mode 0x15 uses Goto01. The operands are a heading and a turn step.
+ * Translation from the native turning clip still needs a root-motion sampler. */
 int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing) {
+    if (dest->mode == PE_RE_DEST_TURN) {
+        int direction = dest->x;
+        int step = dest->z;
+        if (((direction - *facing + 128) & 4095) < 256) return 1;
+        if (step < 0) {
+            step = -step;
+            direction = (direction + 2048) & 4095;
+        }
+        const int error = (step + direction - *facing) & 4095;
+        if (error < 2 * step) *facing = direction;
+        else *facing = (int16_t)(*facing + (error <= 2048 ? step : -step));
+        return 0;
+    }
     const double dx = dest->x - *x, dz = dest->z - *z;
     const double distance = hypot(dx, dz);
     const double speed = dest->mode == 5 ? 135 : dest->mode == 8 ? 38 : 80;

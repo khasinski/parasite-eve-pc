@@ -59,7 +59,7 @@ enum { PE_RE_PAL = 1 };
 #define FIELD_MESH_TRIANGLES 1024
 #define FIELD_TEX_X 320
 #define FIELD_TEX_Y 64
-#define FIELD_TEX_WORDS 64
+#define FIELD_TEX_WORDS 128
 #define FIELD_TEX_HEIGHT 128
 #define FIELD_CLUT_ROWS 16
 #define FIELD_TEXTURE_SLOTS 11
@@ -148,7 +148,7 @@ typedef struct {
 static FieldTexture s_field_textures[FIELD_TEXTURE_SLOTS];
 static FieldTexture *s_texture_by_kind[FIELD_MESH_KINDS];
 static uint8_t s_texture_failed[FIELD_MESH_KINDS];
-static uint16_t s_vram_check[64 * 256];
+static uint16_t s_vram_check[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
 
 static struct {
     PeImpModel model;
@@ -1247,7 +1247,7 @@ static void prepare_field_texture(void) {
         const PeImpModel *model = &s_field_mesh[kind].model;
         if (s_texture_by_kind[kind] || s_texture_failed[kind] || !model->parts) continue;
         s_texture_failed[kind] = 1;
-        if (model->h > FIELD_TEX_HEIGHT * 2 || !model->pal_rows || model->pal_rows > FIELD_CLUT_ROWS) {
+        if (model->w > FIELD_TEX_WORDS * 4 || model->h > FIELD_TEX_HEIGHT * 2 || !model->pal_rows || model->pal_rows > FIELD_CLUT_ROWS) {
             pe_mod_log("pe_re_play", "EM%02x texture exceeds the field atlas dimensions", kind);
             continue;
         }
@@ -1259,13 +1259,20 @@ static void prepare_field_texture(void) {
         for (int slot = 0; slot < FIELD_TEXTURE_SLOTS; slot++) {
             FieldTexture *texture = &s_field_textures[slot];
             if (texture->texture.w) continue;
-            RECT rect = {FIELD_TEX_X + slot * FIELD_TEX_WORDS, FIELD_TEX_Y, FIELD_TEX_WORDS, (model->h + 1) / 2};
-            if (!empty_texture_area(&rect)) continue;
-            const unsigned width = model->w < 4 * FIELD_TEX_WORDS ? model->w : 4 * FIELD_TEX_WORDS;
+            RECT rect = {0, FIELD_TEX_Y, (model->w + 3) / 4, (model->h + 1) / 2};
+            for (rect.x = FIELD_TEX_X; rect.x + rect.w <= 1024; rect.x += 64) {
+                int occupied = 0;
+                for (int j = 0; j < FIELD_TEXTURE_SLOTS; j++) {
+                    const RECT used = s_field_textures[j].texture;
+                    occupied |= used.w && rect.x < used.x + used.w && rect.x + rect.w > used.x;
+                }
+                if (!occupied && empty_texture_area(&rect)) break;
+            }
+            if (rect.x + rect.w > 1024) break;
             memset(texture->words, 0, sizeof texture->words);
             for (unsigned y = 0; y < model->h; y += 2)
-                for (unsigned x = 0; x < width; x += 2)
-                    texture->words[(y / 2) * FIELD_TEX_WORDS + x / 4] |=
+                for (unsigned x = 0; x < model->w; x += 2)
+                    texture->words[(y / 2) * rect.w + x / 4] |=
                         (uint16_t)model->image[y * model->w + x] << (8 * ((x / 2) & 1));
             memcpy(texture->colours, model->pal, model->pal_rows * sizeof texture->colours[0]);
             LoadImage(&rect, texture->words);
@@ -1353,17 +1360,19 @@ static void clear_actor_banks(void) {
 
 static const PeImpAnimation *field_actor_moves(const PeReSceneActor *scene, const PeImpModel *model,
                                                const PeImpAnimation *stock) {
-    if (!scene->direct || !scene->bank[0] || scene->slot >= PE_RE_ENEMIES_MAX ||
-        (!scene->room_clip && scene->move < stock->moves) || !field_rig_supported(model)) return stock;
+    if (!scene->direct || (!scene->room_clip && scene->move < stock->moves)) return stock;
+    if (!scene->bank[0] || scene->slot >= PE_RE_ENEMIES_MAX || !field_rig_supported(model)) return scene->room_clip ? NULL : stock;
     const unsigned slot = scene->slot;
     if (strcmp(s_actor_bank[slot].asset, scene->bank)) {
         char why[160];
         pe_imp_animation_free(&s_actor_bank[slot].moves);
         snprintf(s_actor_bank[slot].asset, sizeof s_actor_bank[slot].asset, "%s", scene->bank);
-        pe_imp_catalog_animation(s_store, scene->bank, &s_actor_bank[slot].moves, why, sizeof why);
+        if (pe_imp_catalog_animation(s_store, scene->bank, &s_actor_bank[slot].moves, why, sizeof why))
+            pe_mod_log("pe_re_play", "Scene actor %u EM%02x could not load %s: %s", slot, scene->kind, scene->bank, why);
     }
     const PeImpAnimation *room = &s_actor_bank[slot].moves;
-    return room->bones == model->bones && scene->move < room->moves ? room : stock;
+    if (room->bones == model->bones && scene->move < room->moves) return room;
+    return scene->room_clip ? NULL : stock;
 }
 
 static int on_import_published(void *ctx, void *user) {
@@ -1433,7 +1442,7 @@ static int field_face_texture(const PeImpModel *model, const PeImpFace *face, co
                               unsigned first_page, unsigned first_palette, const FieldTexture *texture, unsigned *clut, unsigned *u_offset) {
     const unsigned column = (face->page & 15u) - first_page;
     const unsigned palette = (face->clut >> 6) - first_palette;
-    if (column >= 2 || palette >= model->pal_rows) return 0;
+    if (column >= 4 || palette >= model->pal_rows) return 0;
     for (int i = 0; i < 3; i++) {
         const unsigned u = face->uv[corners[i]][0], v = face->uv[corners[i]][1];
         if (u >= 128 || column * 128 + u >= model->w || v >= model->h)
@@ -1454,7 +1463,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
         if (!scene && pe_re_scene_kind(p->kind)) continue;
         const PeImpModel *model = &s_field_mesh[p->kind].model;
         const double world_x = scene ? scene->x : p->x;
-        const double world_y = scene && !scene->field_pose ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
+        double world_y = scene && !scene->field_pose ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
         const double world_z = scene ? scene->z : p->z;
         /* Imported meshes and Cdir_y already share RE2's +X forward axis.
          * Only Aya's native PE model needs pe_re_facing_of's quarter-turn. */
@@ -1465,7 +1474,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
         if (scene) moves = field_actor_moves(scene, model, moves);
         int animated = 0;
         if (scene && !scene->destination_pose) {
-            if (scene->move < moves->moves) {
+            if (moves && scene->move < moves->moves) {
                 const PeImpMove *move = &moves->move[scene->move];
                 if (move->frames) {
                     const unsigned step = scene->direct ? scene->start_frame + scene->frame * moves->fps / 60u : scene->frame;
@@ -1473,12 +1482,13 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                     unsigned frame = (scene->field_pose && !scene->direct) || (scene->direct && scene->loop) ?
                         step % move->frames : step < move->frames ? step : move->frames - 1;
                     if (scene->reverse) frame = move->frames - 1 - frame;
+                    if (scene->room_clip) world_y = scene->y;
                     field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data,
-                               scene->field_pose ? NULL : scene, pose);
+                               scene->field_pose && !scene->room_clip ? NULL : scene, pose);
                     animated = 1;
                 }
             }
-        } else if ((s_placement_idle || scene) && moves->moves) {
+        } else if ((s_placement_idle || scene) && moves && moves->moves) {
             const unsigned type = p->behaviour & 0x3f;
             const int zombie = p->kind >= 0x10 && p->kind < 0x20;
             const PeReZombieMode mode = zombie ? pe_re_zombie_mode(type, 0) : PE_RE_ZOMBIE_UNSUPPORTED;

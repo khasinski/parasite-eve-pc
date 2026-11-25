@@ -149,6 +149,7 @@ typedef struct {
 } PeReActorDestination;
 
 /* Advance in RE2 room units, returning true on arrival. Facing is RE2 yaw. */
+enum { PE_RE_DEST_TURN = 0x15 };
 int pe_re_actor_destination_step(const PeReActorDestination *dest, double *x, double *z, int *facing);
 
 typedef struct {

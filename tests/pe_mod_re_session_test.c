@@ -519,6 +519,18 @@ static void test_kendo_zombies(const char *store) {
     free(room);
 }
 
+static void test_cutscene_turn(void) {
+    const PeReActorDestination turn = {.mode = PE_RE_DEST_TURN, .x = 440, .z = 64};
+    double x = -16233, z = -12483;
+    int facing = 4032;
+    CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(facing == 4096 && x == -16233 && z == -12483);
+    for (int i = 0; i < 5; i++)
+        CHECK(!pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(pe_re_actor_destination_step(&turn, &x, &z, &facing));
+    CHECK(facing == 4416 && x == -16233 && z == -12483);
+}
+
 static void test_kendo_player_control(const char *store) {
     static PeReSession s;
     char why[128] = "";
@@ -530,8 +542,9 @@ static void test_kendo_player_control(const char *store) {
         return;
     }
     int locked = 0, approached = 0, arrived = 0, returned = 0, cut = 0, kendo_animated = 0;
-    for (int tick = 0; tick < 1000; tick++) {
+    for (int tick = 0; tick < 2400; tick++) {
         const int moving = s.run.player_dest.moving;
+        s.key_trg = tick % 30 == 15 ? 0xFFFFFFFFu : 0; /* advance cutscene dialogue */
         pe_re_session_step(&s, store, s.x, s.z, 0, why, sizeof why);
         if (pe_re_session_tick(&s) == PE_RE_CAMERA) cut = 1;
         if (pe_re_session_controls_locked(&s)) locked = 1;
@@ -550,6 +563,42 @@ static void test_kendo_player_control(const char *store) {
         }
     }
     CHECK(locked && approached && arrived && cut && returned && kendo_animated);
+
+    /* Exercise Kendo's authored turn in procedure 30 independently of the room trigger. */
+    pe_re_scd_exec(s.logic, &s.run, 2, 30);
+    int turning = 0;
+    for (int tick = 0; tick < 120 && !turning; tick++) {
+        const int16_t *kendo = s.run.works[2];
+        const int x = kendo[PE_RE_MEMBER_POS_X], z = kendo[PE_RE_MEMBER_POS_Z];
+        pe_re_session_tick(&s);
+        const PeReActorDestination *dest = &s.run.enemy_dest[0];
+        if (dest->moving && dest->mode == PE_RE_DEST_TURN) {
+            CHECK(kendo[PE_RE_MEMBER_POS_X] == x && kendo[PE_RE_MEMBER_POS_Z] == z);
+            CHECK(dest->x == 440 && dest->z == 64);
+            turning = 1;
+        }
+    }
+    CHECK(turning);
+    char bank[PE_IMP_ID_MAX];
+    PeImpAnimation clips = {0};
+    CHECK(!pe_re_session_enemy_room_move(&s, 0, bank, sizeof bank));
+    CHECK(!strcmp(bank, "re2:roomanim/101-0-p0"));
+    CHECK(!pe_imp_catalog_animation(store, bank, &clips, why, sizeof why));
+    if (clips.moves > 12) {
+        CHECK(clips.move[11].frames == 15);
+        CHECK(clips.move[12].frames == 34);
+    } else CHECK(0);
+    pe_imp_animation_free(&clips);
+
+    unsigned death_moves = 0;
+    for (int tick = 0; tick < 120 && death_moves != 3; tick++) {
+        pe_re_session_tick(&s);
+        const PeReSceneMotion *motion = &s.run.scene[0];
+        if (!motion->active || !motion->direct || (motion->move != 11 && motion->move != 12)) continue;
+        CHECK(motion->bank == PE_RE_CLIP_ROOM);
+        death_moves |= 1u << (motion->move - 11);
+    }
+    CHECK(death_moves == 3);
     pe_re_session_end(&s);
 }
 
@@ -749,6 +798,7 @@ int main(int argc, char **argv) {
     test_ground_enemy_variants();
     test_movie_script();
     test_music_table_script();
+    test_cutscene_turn();
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);

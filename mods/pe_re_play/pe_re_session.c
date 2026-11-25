@@ -428,11 +428,14 @@ static void re2_partner(PeReSession *s) {
 static void step_player_destination(PeReSession *s) {
     PeReScdRun *r = &s->run;
     if (!r->player_dest.moving || r->actor_stopped[0]) return;
-    int facing = (s->facing + 1024) & 4095;
+    int facing = s->cdir_y;
+    r->player_dest.x = r->works[0][PE_RE_MEMBER_DEST_X];
+    r->player_dest.z = r->works[0][PE_RE_MEMBER_DEST_Z];
     if (pe_re_actor_destination_step(&r->player_dest, &s->x, &s->z, &facing)) {
         r->player_dest.moving = 0;
         r->arrived[0] = r->player_dest.arrival;
     }
+    s->cdir_y = (int16_t)facing;
     s->facing = pe_re_facing_of(facing);
     s->moved = 1;
 }
