@@ -80,6 +80,9 @@ void pe_imp_re2_slide_on(const PeRe2RoomCollision *room, unsigned floor, double 
  * Sca_get_high, Sca_get_low; read for behaviour). Heights are smooth: the game's 450-unit steps
  * aren't modelled. */
 int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double *y);
+/* Walk across a ramp or staircase while keeping collision on a passable floor. */
+void pe_imp_re2_walk(const PeRe2RoomCollision *room, int *floor, double *x, double *y,
+                     double *z, double dx, double dz, double radius);
 int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out);
 int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius);
 void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,

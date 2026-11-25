@@ -332,15 +332,11 @@ static int on_move(void *ctx, void *user) {
             if (s_walk.ghost) {
                 s_walk.x += dx, s_walk.z += dz;
                 s_walk.ghost = blocked_here(s_walk.x, s_walk.z);
+                if (!pe_imp_re2_ground(&s_walk.collision, s_walk.x, s_walk.z, &s_walk.y))
+                    s_walk.y = -(double)s_walk.floor * PE_RE2_FLOOR_HEIGHT;
             } else {
-                pe_imp_re2_slide_on(&s_walk.collision, (unsigned)s_walk.floor, &s_walk.x, &s_walk.z, dx, dz, AYA_ROOM_RADIUS);
-            }
-            double ground;                             /* on a slope or stairs: their height, maybe a new floor */
-            if (pe_imp_re2_ground(&s_walk.collision, s_walk.x, s_walk.z, &ground)) {
-                s_walk.y = ground;
-                s_walk.floor = pe_re_floor_of((int)lround(ground));
-            } else {
-                s_walk.y = -(double)s_walk.floor * PE_RE2_FLOOR_HEIGHT;
+                pe_imp_re2_walk(&s_walk.collision, &s_walk.floor, &s_walk.x, &s_walk.y,
+                                &s_walk.z, dx, dz, AYA_ROOM_RADIUS);
             }
         }
     }

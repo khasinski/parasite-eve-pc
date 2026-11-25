@@ -373,7 +373,8 @@ void pe_imp_re2_slide_on(const PeRe2RoomCollision *room, unsigned floor, double 
     slide(room, floor > 31 ? 31 : (int)floor, x, z, dx, dz, radius);
 }
 
-int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double *y) {
+static int ground_span(const PeRe2RoomCollision *room, double x, double z, double *y,
+                       int *low, int *high) {
     for (unsigned i = 0; i < room->count; i++) {
         const PeRe2Collider *c = &room->entries[i];
         if ((c->shape != 11 && c->shape != 12) || x < c->x0 || x > c->x1 || z < c->z0 || z > c->z1) continue;
@@ -395,9 +396,55 @@ int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double
         default: t = d ? (c->z1 - z) / d : 0; break;
         }
         *y = bottom + (top - bottom) * fmin(1, fmax(0, t));
+        *low = (int)lround(-bottom / PE_RE2_FLOOR_HEIGHT);
+        *high = (int)lround(-top / PE_RE2_FLOOR_HEIGHT);
+        if (*low < 0) *low = 0;
         return 1;
     }
     return 0;
+}
+
+int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double *y) {
+    int low, high;
+    return ground_span(room, x, z, y, &low, &high);
+}
+
+static void walk_step(const PeRe2RoomCollision *room, int *floor, double *x, double *y,
+                      double *z, double dx, double dz, double radius) {
+    int low, high;
+    double here, ahead;
+    /* The floor under the visual height can still have a wall across the
+     * staircase. Switch early when moving toward the other landing, or
+     * recover a pose previously saved on the blocked side of that switch. */
+    if (ground_span(room, *x, *z, &here, &low, &high)) {
+        const int stuck = blocked(room, *floor, *x, *z, radius);
+        const int on_stairs = pe_imp_re2_ground(room, *x + dx, *z + dz, &ahead);
+        const int other = *floor == high ? low : high;
+        if (other != *floor && !blocked(room, other, *x, *z, radius) &&
+            (stuck || (on_stairs && (other > *floor ? ahead < here : ahead > here) &&
+                       blocked(room, *floor, *x + dx, *z + dz, radius) &&
+                       !blocked(room, other, *x + dx, *z + dz, radius))))
+            *floor = other;
+    }
+    pe_imp_re2_slide_on(room, (unsigned)*floor, x, z, dx, dz, radius);
+    if (ground_span(room, *x, *z, y, &low, &high)) {
+        int sampled = (int)lround(-*y / PE_RE2_FLOOR_HEIGHT);
+        if (sampled < 0) sampled = 0;
+        if (sampled != *floor && !blocked(room, sampled, *x, *z, radius)) *floor = sampled;
+    } else {
+        *y = -(double)*floor * PE_RE2_FLOOR_HEIGHT;
+    }
+}
+
+void pe_imp_re2_walk(const PeRe2RoomCollision *room, int *floor, double *x, double *y,
+                     double *z, double dx, double dz, double radius) {
+    const double distance = hypot(dx, dz);
+    if (!isfinite(distance) || distance > 64000 || radius < 1) return;
+    /* Sample the floor along the sweep too. A fast step can otherwise skip
+     * the short passable strip at the end of a stair entirely. */
+    const unsigned steps = (unsigned)fmax(1, ceil(distance / (radius * .25)));
+    for (unsigned i = 0; i < steps; i++)
+        walk_step(room, floor, x, y, z, dx / steps, dz / steps, radius);
 }
 
 int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *view) {

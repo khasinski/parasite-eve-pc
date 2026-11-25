@@ -1170,6 +1170,28 @@ int main(int argc, char **argv) {
     CHECK(!pe_imp_re2_blocked_on(&ramps, 0, 500, 250, 50));           /* ramps never block */
     CHECK(pe_imp_re2_blocked_on(&ramps, 1, -450, 250, 50) && !pe_imp_re2_blocked_on(&ramps, 0, -450, 250, 50));
 
+    /* RPD main hall 2-00: the upper landing's wall exists on floor 0
+     * and reaches within Aya's collision radius of the stair midpoint. */
+    static const PeRe2RoomCollision rpd_stair = {.count = 2, .entries = {
+        {-15614, -22780, -11384, -21700, 12, 0x907c, 3, 0xde0c, 6},
+        {-17014, -32000, -9814, -22110, 0, 0x900c, 1, 0xfe80, 24},
+    }};
+    double stair_x = -13500, stair_y = -1800, stair_z = -23000;
+    int stair_floor = 1;
+    for (int i = 0; i < 16; i++)
+        pe_imp_re2_walk(&rpd_stair, &stair_floor, &stair_x, &stair_y, &stair_z, 0, 100, 280);
+    CHECK(stair_z == -21400 && stair_floor == 0 && stair_y == 0);
+    for (int i = 0; i < 16; i++)
+        pe_imp_re2_walk(&rpd_stair, &stair_floor, &stair_x, &stair_y, &stair_z, 0, -100, 280);
+    CHECK(stair_z == -23000 && stair_floor == 1 && stair_y == -1800);
+    stair_z = -22220, stair_floor = 0;
+    for (int i = 0; i < 8; i++)
+        pe_imp_re2_walk(&rpd_stair, &stair_floor, &stair_x, &stair_y, &stair_z, 0, 100, 280);
+    CHECK(stair_z == -21420 && stair_floor == 0 && stair_y == 0);
+    stair_z = -23000, stair_floor = 1;
+    pe_imp_re2_walk(&rpd_stair, &stair_floor, &stair_x, &stair_y, &stair_z, 0, 1600, 280);
+    CHECK(fabs(stair_z + 21400) < 0.01 && stair_floor == 0 && stair_y == 0);
+
     /* Field chase uses the encounter snapshot and the same floor-filtered walls as walking. */
     PeReSession chase = {.game = pe_re_game_named("re2"), .stage = 1};
     PeReEnemyPlacement foes[] = {
