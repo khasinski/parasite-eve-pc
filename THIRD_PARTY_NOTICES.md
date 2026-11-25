@@ -365,3 +365,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 - The reevengi notes (Patrice Mandin) on Resident Evil room files.
 
 If code from a consulted MIT project is ported later, its notice moves to the list above.
+
+## RE2 part effect behavior reference
+
+The cutscene opcode audit consulted [MeganGrass/bio2-ds](https://github.com/MeganGrass/bio2-ds)
+to identify the retail part and sprite commands. The audit did not incorporate its source code.
