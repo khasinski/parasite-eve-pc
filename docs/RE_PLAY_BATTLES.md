@@ -60,6 +60,7 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D18 | 2026-11-24 | The grace period after an escape covers only that battle's survivors (other enemies can still start a fight); it ends after a time or once Aya is a distance from them, whichever is first; the survivors keep pursuing (D7) but can't start a battle meanwhile; each further escape from the same enemies halves their grace. Seconds, distance and the halving are F1 settings (Fights) to tune in play, starting at 3 seconds, 4,000 room units, halving on. Escape stays PE's own roll. Accepted by the user. | A grace is needed so the same fight doesn't re-trigger by accident; scoping it to the survivors and shrinking it on repeats keeps escaping from becoming a way to walk through a room. |
 | D19 | 2026-11-24 | A joining enemy continues from where it is, in its own walk toward Aya, facing her: no pop-in or entrance anim. It joins with an empty attack timer (it can't hit on arrival), enters the target order as usual (D10), and a short cue marks it (a sound and a brief marker over it). Enemies the original game brings in with their own entrance (a Licker from the ceiling, crows) use it when the room's script has one, a per-game rule. Accepted by the user. | RE: zombies shamble into view, already pursuing (D7). PE: reinforcements are visible and fair. |
 | D20 | 2026-11-24 | The detached phase 2 director keeps the lead first and ranks the other visible foes by distance from the lead, with room placement order breaking ties. Its join order is explicit and phases 3-6 retain their runtime integration work. The T1-T2 anchor geometry uses host-supplied bounds and clearance. | Preserves the current visible roster and makes it possible to test the director while the phase 1 adapter is developed independently. |
+| D21 | 2026-11-24 | The director queues newly visible foes nearest Aya first, breaking ties by slot. Queued foes keep their place but can join only while visible on the battle floor. The adapter supplies visibility for the current camera and steps grace at 60 updates per second, including outside combat. Escape history is tracked per room slot until that foe dies or Aya leaves the room. Each repeat halves both grace limits when enabled. | Makes join and target order deterministic and keeps survivor grace independent of other enemies. |
 
 ## Architecture
 
@@ -272,10 +273,15 @@ into the named room with the user's store), tests.
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
    up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
    Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
+   The director and these headless tests are built. Live spawning and
+   target UI are adapter integration work.
 5. **Pursuit, escape, write-back, grace (D7, D13, D18).** Build: `chase_step` in
    battle time, `pe_re_battle_end`, the survivors' grace and its F1 settings. Exit: a zombie off screen walks into
    view and joins; after Escape the survivors stand where the battle left them
    and no battle starts during the grace period. Tests: T9, T10.
+   The director and these headless tests are built. After each field frame,
+   the adapter steps survivor grace and checks the lead with
+   `pe_re_battle_encounter_allowed_for` before starting a fight.
 6. **Bosses and story fights (D9).** Build: `boss`, `joins_boss` for RE2.
    Exit: G's embryos join the G fight; the canister and launcher finishes still
    work; the five story routes finish. Tests: T11, the route tests.

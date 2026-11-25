@@ -99,6 +99,7 @@ static void test_begin(void) {
     const uint8_t expected[] = {5, 2, 3, 6, 4, 7};
     CHECK(battle.joined == 6 && battle.initial_count == 6 && battle.camera == 3);
     CHECK(!memcmp(battle.initial_slots, expected, sizeof expected));
+    CHECK(battle.waiting_count == 1 && battle.waiting[0] == 1);
     CHECK(!pe_re_battle_encounter_allowed(&battle));
     CHECK(pe_re_battle_begin(&battle, &s, rules, &lead, in_view) == -1);
     CHECK(!pe_re_battle_step(&battle, &s, 300, 400, 0, in_view, NULL, 0));
@@ -115,11 +116,162 @@ static void test_begin(void) {
     free(s.logic);
 }
 
+static unsigned view_mask;
+
+static int view(const PeReEnemyPlacement *enemy) {
+    return (view_mask & (1u << enemy->slot)) != 0;
+}
+
+static void battle_room(PeReSession *s) {
+    enum { count = 5, record_size = 22 };
+    uint8_t rdt[1 + count * record_size] = {0};
+    *s = (PeReSession){.game = pe_re_game_named("re2"), .room = 4};
+    s->run.ran = 1;
+    s->run.nenemy = count;
+    for (unsigned slot = 0; slot < count; ++slot) {
+        const unsigned at = 1 + slot * record_size;
+        s->run.enemy[slot] = at;
+        rdt[at + 2] = (uint8_t)slot;
+        rdt[at + 3] = 0x10;
+        rdt[at + 9] = (uint8_t)slot;
+        int16_t *work = s->run.works[2 + slot];
+        work[0] = 1;
+        work[PE_RE_MEMBER_ID] = 0x10;
+        work[PE_RE_MEMBER_POS_X] = (int16_t)(10 + slot * 100);
+        work[PE_RE_MEMBER_NFLOOR] = slot == 3 ? 1 : 0;
+    }
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 1, 0, 4);
+    CHECK(builder && !pe_imp_logic_add(builder, PE_IMP_LOGIC_RDT0, 1, rdt, sizeof rdt));
+    s->logic = pe_imp_logic_finish(builder);
+    CHECK(s->logic);
+}
+
+static PeReEnemyPlacement lead_at(uint8_t slot, int16_t x) {
+    return (PeReEnemyPlacement){.slot = slot, .kind = 0x10, .killed_flag = slot, .x = x};
+}
+
+static void test_join_and_target(void) {
+    PeReSession s;
+    battle_room(&s);
+    PeReBattleRules rules = *pe_re_battle_rules("re2");
+    rules.max_foes = 2;
+    PeReBattle battle = {0};
+    const PeReEnemyPlacement lead = lead_at(0, 10);
+    PeReBattleEvent ev[2];
+    uint8_t slots[2];
+
+    view_mask = 1u << 0 | 1u << 3; /* other floor excluded even if shown */
+    CHECK(!pe_re_battle_begin(&battle, &s, &rules, &lead, view));
+    CHECK(battle.joined == 1);
+    view_mask |= 1u << 1 | 1u << 2;
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 1, view, NULL, 0));
+    CHECK(battle.joined == 1 && battle.waiting_count == 2);
+    CHECK(pe_re_battle_step(&battle, &s, 0, 0, 1, view, ev, 2) == 1);
+    CHECK(ev[0].kind == PE_RE_BATTLE_EV_JOIN && ev[0].slot == 1);
+    CHECK(battle.joined == 2 && battle.waiting_count == 1 && battle.waiting[0] == 2);
+    CHECK(battle.foe[3].state == PE_RE_BATTLE_FOE_NONE);
+
+    view_mask |= 1u << 4;
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, ev, 2));
+    CHECK(battle.waiting_count == 2 && battle.waiting[1] == 4);
+    pe_re_battle_foe_died(&battle, 0);
+    CHECK(pe_re_battle_step(&battle, &s, 0, 0, 1, view, ev, 2) == 1);
+    CHECK(ev[0].kind == PE_RE_BATTLE_EV_JOIN && ev[0].slot == 2);
+
+    pe_re_battle_foe_moved(&battle, 2, 10, 0);
+    view_mask &= ~(1u << 2);
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, ev, 2));
+    CHECK(pe_re_battle_target_order(&battle, slots, 2) == 2 && slots[0] == 1 && slots[1] == 2);
+    view_mask |= 1u << 2;
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, ev, 2));
+    CHECK(pe_re_battle_target_order(&battle, slots, 1) == 1 && slots[0] == 2);
+    view_mask &= ~((1u << 1) | (1u << 2));
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, ev, 2));
+    CHECK(pe_re_battle_target_order(&battle, slots, 2) == 2 && slots[0] == 2 && slots[1] == 1);
+
+    pe_re_battle_foe_died(&battle, 1);
+    pe_re_battle_foe_died(&battle, 2);
+    CHECK(pe_re_battle_step(&battle, &s, 0, 0, 1, view, ev, 2) == 1);
+    CHECK(ev[0].kind == PE_RE_BATTLE_EV_JOIN && ev[0].slot == 4);
+    pe_re_battle_foe_died(&battle, 4);
+    CHECK(pe_re_battle_step(&battle, &s, 0, 0, 1, view, ev, 2) == 1);
+    CHECK(ev[0].kind == PE_RE_BATTLE_EV_END);
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 1, view, ev, 2));
+    free(s.logic);
+}
+
+static int chase_calls;
+
+static void test_chase(PeReSession *s, PeReEnemyPlacement *enemies, int count, double x, double z, int floor) {
+    CHECK(x == 0 && z == 0 && floor == 0);
+    ++chase_calls;
+    for (int i = 0; i < count; ++i) {
+        CHECK(enemies[i].slot != 0 && enemies[i].slot != 3);
+        enemies[i].x -= 20;
+        s->run.works[2 + enemies[i].slot][PE_RE_MEMBER_POS_X] = enemies[i].x;
+    }
+}
+
+static void test_pursuit_and_grace(void) {
+    PeReSession s;
+    battle_room(&s);
+    PeReBattleRules rules = *pe_re_battle_rules("re2");
+    rules.chase_step = test_chase;
+    PeReBattle battle;
+    pe_re_battle_init(&battle);
+    CHECK(battle.settings.seconds == 3 && battle.settings.distance == 4000 && battle.settings.halve_on_repeat);
+    battle.settings = (PeReBattleSettings){.seconds = 0.1, .distance = 1000, .halve_on_repeat = 1};
+    PeReEnemyPlacement lead = lead_at(0, 10);
+    const PeReEnemyPlacement other = lead_at(1, 110);
+    view_mask = 1;
+    CHECK(!pe_re_battle_begin(&battle, &s, &rules, &lead, view));
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, NULL, 0));
+    CHECK(!chase_calls && s.run.works[3][PE_RE_MEMBER_POS_X] == 110);
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 1, view, NULL, 0));
+    CHECK(chase_calls == 1 && s.run.works[3][PE_RE_MEMBER_POS_X] == 90);
+    pe_re_battle_foe_moved(&battle, 0, 55.6, -25);
+    pe_re_battle_end(&battle, &s, 1);
+    CHECK(s.run.works[2][PE_RE_MEMBER_POS_X] == 56 && s.run.works[2][PE_RE_MEMBER_POS_Z] == -25);
+    CHECK(s.run.works[3][PE_RE_MEMBER_POS_X] == 90);
+    CHECK(battle.phase == PE_RE_BATTLE_GRACE && battle.grace_frames == 6);
+    CHECK(!pe_re_battle_encounter_allowed_for(&battle, &s, 0));
+    CHECK(pe_re_battle_encounter_allowed_for(&battle, &s, 1));
+    CHECK(pe_re_battle_begin(&battle, &s, &rules, &lead, view) == -1);
+    CHECK(!pe_re_battle_begin(&battle, &s, &rules, &other, NULL));
+    pe_re_battle_foe_died(&battle, 1);
+    pe_re_battle_end(&battle, &s, 0);
+    CHECK(battle.phase == PE_RE_BATTLE_GRACE);
+    for (int frame = 0; frame < 5; ++frame)
+        CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 1, view, NULL, 0));
+    CHECK(!pe_re_battle_encounter_allowed_for(&battle, &s, 0));
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 1, view, NULL, 0));
+    CHECK(pe_re_battle_encounter_allowed_for(&battle, &s, 0) && chase_calls == 1);
+
+    lead.x = 56;
+    CHECK(!pe_re_battle_begin(&battle, &s, &rules, &lead, NULL));
+    pe_re_battle_end(&battle, &s, 1);
+    CHECK(battle.grace_frames == 3 && battle.grace[0].distance == 500);
+    CHECK(!pe_re_battle_step(&battle, &s, 556, 0, 0, view, NULL, 0));
+    CHECK(pe_re_battle_encounter_allowed_for(&battle, &s, 0));
+
+    battle.settings.halve_on_repeat = 0;
+    CHECK(!pe_re_battle_begin(&battle, &s, &rules, &lead, NULL));
+    pe_re_battle_end(&battle, &s, 1);
+    CHECK(battle.grace_frames == 6 && battle.grace[0].distance == 1000);
+    s.room++;
+    CHECK(pe_re_battle_encounter_allowed_for(&battle, &s, 0));
+    CHECK(!pe_re_battle_step(&battle, &s, 0, 0, 0, view, NULL, 0));
+    CHECK(battle.phase == PE_RE_BATTLE_IDLE && !battle.grace[0].escapes);
+    free(s.logic);
+}
+
 int main(void) {
     test_anchor();
     test_round_trip();
     test_re2_rules();
     test_begin();
-    puts("RE battle T1-T4 passed");
+    test_join_and_target();
+    test_pursuit_and_grace();
+    puts("RE battle T1-T4 and T6-T10 passed");
     return 0;
 }
