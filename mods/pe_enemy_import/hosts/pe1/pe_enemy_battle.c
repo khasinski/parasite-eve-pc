@@ -856,7 +856,7 @@ static int pe_overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, in
 
 /* What an imported room's drawing uses (its picture, effect pages, mesh texture: G2), asked for each
  * time a pack is placed: the packs keep out of it, or its fires turned to noise in battle. */
-#define PE_ROOM_RECTS_MAX 32
+#define PE_ROOM_RECTS_MAX 64
 static int s_room_rects[PE_ROOM_RECTS_MAX * 4], s_room_rect_count;
 
 static void pe_room_vram(void) {

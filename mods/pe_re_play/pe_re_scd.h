@@ -138,7 +138,7 @@ typedef struct PeReEffect {
 enum { PE_RE_CLIP_ROOM, PE_RE_CLIP_OWN, PE_RE_CLIP_SUB0, PE_RE_CLIP_SUB1, PE_RE_CLIP_LEGACY = 0xFF };
 typedef struct {
     uint8_t active, move, reverse, next;
-    uint16_t elapsed;                          /* clip frames played (60 Hz steps, by its speed) */
+    uint16_t elapsed;                          /* sequence frames played: one per 30 Hz script tick, by its speed */
     uint8_t reset_parts, direct, start_frame;
     uint8_t mode, bank, loop, speed, half;     /* plc_motion's mode, PE_RE_CLIP_*, loop, 2 double 0 half 1 normal */
     uint16_t ticks;                            /* frames since it started, whatever its speed */

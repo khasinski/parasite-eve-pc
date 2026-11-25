@@ -59,6 +59,9 @@ enum { PE_RE_PAL = 1 };
 #define FIELD_MESH_TRIANGLES 1024
 #define FIELD_TEX_X 320
 #define FIELD_TEX_Y 64
+/* One 128-pixel column of an RE2 atlas (one native texture page), halved to 64 8-bit texels = 32 words. */
+#define FIELD_TEX_COLUMNS 4
+#define FIELD_TEX_COLUMN_WORDS 32
 #define FIELD_TEX_WORDS 128
 #define FIELD_TEX_HEIGHT 128
 #define FIELD_CLUT_ROWS 16
@@ -139,13 +142,24 @@ PE1_STATIC_ASSERT(PE1_OFFSETOF(FieldTexturedTriangle, pad) == sizeof(RenderNativ
                   field_textured_triangle_layout);
 static FieldTexturedTriangle s_tex_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
 enum { FIELD_MESH_KINDS = 256 };
+static int s_trace_scene;                      /* PE_TEST_RE_SCENE: log effect starts and scripted clip frames */
+/* Each atlas column is placed on its own wherever VRAM is free: a three-column Kendo atlas rarely
+ * finds 96 contiguous free words beside the room's other actors. */
 typedef struct {
-    RECT texture, palette;
-    uint16_t words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
+    RECT column[FIELD_TEX_COLUMNS], palette;
+    unsigned columns;
+    uint16_t words[FIELD_TEX_COLUMNS * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT];
     uint16_t colours[FIELD_CLUT_ROWS][256];
 } FieldTexture;
 
 static FieldTexture s_field_textures[FIELD_TEXTURE_SLOTS];
+/* Native actor texture pages are live while imported effects are drawn. */
+enum { EFFECT_PAGE_Y = 256, EFFECT_FIRST_ROW = 24, EFFECT_PIXEL_END = 240, EFFECT_CLUT_Y = 244,
+       EFFECT_BANK_SIZE = 24, EFFECT_PACKET_MAX = 256 };
+/* effect pages: 64-wide columns of VRAM's lower half, used where empty; the first two are free
+ * under Carnegie Hall's room, the last two also under Central Park's (whose Aya fills 640-767) */
+#define EFFECT_PAGES 4
+static const int s_effect_page_x[EFFECT_PAGES] = {640, 704, 832, 896};
 static FieldTexture *s_texture_by_kind[FIELD_MESH_KINDS];
 static uint8_t s_texture_failed[FIELD_MESH_KINDS];
 static uint16_t s_vram_check[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
@@ -1121,10 +1135,13 @@ static void free_field_mesh(unsigned kind) {
 static void clear_field_texture(void) {
     for (int i = 0; i < FIELD_TEXTURE_SLOTS; i++) {
         FieldTexture *texture = &s_field_textures[i];
-        if (!texture->texture.w) continue;
-        const RECT areas[] = {texture->texture, texture->palette};
-        const uint16_t *pixels[] = {texture->words, &texture->colours[0][0]};
-        for (int j = 0; j < 2; j++) {
+        if (!texture->columns) continue;
+        RECT areas[FIELD_TEX_COLUMNS + 1];
+        const uint16_t *pixels[FIELD_TEX_COLUMNS + 1];
+        for (unsigned j = 0; j < texture->columns; j++)
+            areas[j] = texture->column[j], pixels[j] = texture->words + j * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT;
+        areas[texture->columns] = texture->palette, pixels[texture->columns] = &texture->colours[0][0];
+        for (unsigned j = 0; j <= texture->columns; j++) {
             RECT rect = areas[j];
             const size_t bytes = (size_t)rect.w * rect.h * sizeof(uint16_t);
             DrawSync(0);
@@ -1136,7 +1153,7 @@ static void clear_field_texture(void) {
             LoadImage(&rect, s_vram_check);
             DrawSync(0);
         }
-        texture->texture.w = 0;
+        texture->columns = 0;
     }
     memset(s_texture_by_kind, 0, sizeof s_texture_by_kind);
     memset(s_texture_failed, 0, sizeof s_texture_failed);
@@ -1217,6 +1234,50 @@ static int show_placement_mesh(const PeReEnemyPlacement *p) {
             ((p->kind >= 0x10 && p->kind < 0x20) || pe_re2_proximity_enemy(p, 0))));
 }
 
+static int rects_overlap(const RECT *a, int x, int y, int w, int h) {
+    return a->x < x + w && x < a->x + a->w && a->y < y + h && y < a->y + a->h;
+}
+
+/* Areas this renderer owns, which may hold zero words that read as empty VRAM. With effects, also the
+ * effect bank's columns, which fill in as the room's effects start. */
+static int field_area_used(const RECT *r, int effects) {
+    if (rects_overlap(r, VRAM_X, VRAM_Y, PIC_W, PIC_H)) return 1;
+    for (int j = 0; j < FIELD_TEXTURE_SLOTS; j++) {
+        const FieldTexture *t = &s_field_textures[j];
+        if (!t->columns) continue;
+        if (rects_overlap(r, t->palette.x, t->palette.y, t->palette.w, t->palette.h)) return 1;
+        for (unsigned c = 0; c < t->columns; c++)
+            if (rects_overlap(r, t->column[c].x, t->column[c].y, t->column[c].w, t->column[c].h)) return 1;
+    }
+    if (effects)
+        for (int i = 0; i < EFFECT_PAGES; i++)
+            if (rects_overlap(r, s_effect_page_x[i], EFFECT_PAGE_Y, 64, 256)) return 1;
+    return 0;
+}
+
+/* A column's texels address one texture page, so its rows stay inside one 256-row band. The first
+ * pass keeps clear of the effect bank's columns. */
+static int field_column_rect(RECT *rect, const uint16_t *vram) {
+    for (int pass = 0; pass < 2; pass++)
+        for (int step = 0; step < 512; step += 16) {
+            const int y = (FIELD_TEX_Y + step) % 512;
+            if (y % 256 + rect->h > 256) continue;
+            for (int x = FIELD_TEX_X; x + rect->w <= 1024; x += 16) {
+                rect->x = (short)x, rect->y = (short)y;
+                if (field_area_used(rect, !pass)) continue;
+                int empty = 1;
+                for (int row = 0; row < rect->h && empty; row++)
+                    for (int col = 0; col < rect->w; col++)
+                        if (vram[(y + row) * 1024 + x + col]) {
+                            empty = 0;
+                            break;
+                        }
+                if (empty) return 1;
+            }
+        }
+    return 0;
+}
+
 static int field_palette_rect(RECT *palette) {
     static const int rows[] = {496, 475, 480, 488, 504};
     for (unsigned i = 0; i < sizeof rows / sizeof *rows; i++) {
@@ -1226,14 +1287,7 @@ static int field_palette_rect(RECT *palette) {
             /* Leave the effect palette columns (640 and up) at y=500 to the effect bank. */
             if (palette->y + palette->h > 500 && x + palette->w > 640) continue;
             palette->x = x;
-            int occupied = 0;
-            for (int j = 0; j < FIELD_TEXTURE_SLOTS; j++) {
-                if (!s_field_textures[j].texture.w) continue;
-                const RECT used = s_field_textures[j].palette;
-                occupied |= x < used.x + used.w && x + palette->w > used.x &&
-                            palette->y < used.y + used.h && palette->y + palette->h > used.y;
-            }
-            if (!occupied && empty_texture_area(palette)) return 1;
+            if (!field_area_used(palette, 0) && empty_texture_area(palette)) return 1;
         }
     }
     return 0;
@@ -1256,35 +1310,49 @@ static void prepare_field_texture(void) {
             pe_mod_log("pe_re_play", "No field palette space for EM%02x", kind);
             continue;
         }
-        for (int slot = 0; slot < FIELD_TEXTURE_SLOTS; slot++) {
-            FieldTexture *texture = &s_field_textures[slot];
-            if (texture->texture.w) continue;
-            RECT rect = {0, FIELD_TEX_Y, (model->w + 3) / 4, (model->h + 1) / 2};
-            for (rect.x = FIELD_TEX_X; rect.x + rect.w <= 1024; rect.x += 64) {
-                int occupied = 0;
-                for (int j = 0; j < FIELD_TEXTURE_SLOTS; j++) {
-                    const RECT used = s_field_textures[j].texture;
-                    occupied |= used.w && rect.x < used.x + used.w && rect.x + rect.w > used.x;
-                }
-                if (!occupied && empty_texture_area(&rect)) break;
-            }
-            if (rect.x + rect.w > 1024) break;
-            memset(texture->words, 0, sizeof texture->words);
-            for (unsigned y = 0; y < model->h; y += 2)
-                for (unsigned x = 0; x < model->w; x += 2)
-                    texture->words[(y / 2) * rect.w + x / 4] |=
-                        (uint16_t)model->image[y * model->w + x] << (8 * ((x / 2) & 1));
-            memcpy(texture->colours, model->pal, model->pal_rows * sizeof texture->colours[0]);
-            LoadImage(&rect, texture->words);
-            LoadImage(&palette, &texture->colours[0][0]);
+        FieldTexture *texture = NULL;
+        for (int slot = 0; slot < FIELD_TEXTURE_SLOTS && !texture; slot++)
+            if (!s_field_textures[slot].columns) texture = &s_field_textures[slot];
+        static uint16_t vram[1024 * 512];
+        RECT all = {0, 0, 1024, 512};
+        const unsigned columns = (model->w + 127) / 128;
+        if (texture && columns <= FIELD_TEX_COLUMNS) {
             DrawSync(0);
-            texture->texture = rect;
+            StoreImage(&all, vram);
+            DrawSync(0);
+            memset(texture->words, 0, sizeof texture->words);
             texture->palette = palette;
-            s_texture_by_kind[kind] = texture;
-            s_texture_failed[kind] = 0;
-            break;
+            for (unsigned c = 0; c < columns; c++) {
+                const unsigned width = model->w - c * 128 < 128 ? model->w - c * 128 : 128;
+                RECT rect = {0, 0, (short)((width + 3) / 4), (short)((model->h + 1) / 2)};
+                if (!field_column_rect(&rect, vram)) break;
+                uint16_t *words = texture->words + c * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT;
+                for (unsigned y = 0; y < model->h; y += 2)
+                    for (unsigned x = 0; x < width; x += 2)
+                        words[(y / 2) * rect.w + x / 4] |=
+                            (uint16_t)model->image[y * model->w + c * 128 + x] << (8 * ((x / 2) & 1));
+                texture->column[c] = rect;
+                texture->columns = c + 1;     /* the next column keeps clear of this one */
+            }
+            if (texture->columns == columns) {
+                for (unsigned c = 0; c < columns; c++)
+                    LoadImage(&texture->column[c], texture->words + c * FIELD_TEX_COLUMN_WORDS * FIELD_TEX_HEIGHT);
+                memcpy(texture->colours, model->pal, model->pal_rows * sizeof texture->colours[0]);
+                LoadImage(&palette, &texture->colours[0][0]);
+                DrawSync(0);
+                s_texture_by_kind[kind] = texture;
+                s_texture_failed[kind] = 0;
+                char where[96] = "";
+                for (unsigned c = 0, w = 0; c < columns && w < sizeof where; c++)
+                    w += (unsigned)snprintf(where + w, sizeof where - w, " %d,%d", texture->column[c].x, texture->column[c].y);
+                pe_mod_log("pe_re_play", "EM%02x texture columns at%s, palette %d,%d", kind, where, palette.x, palette.y);
+            } else {
+                texture->columns = 0;
+            }
         }
-        if (s_texture_failed[kind]) pe_mod_log("pe_re_play", "No field texture page for EM%02x", kind);
+        if (s_texture_failed[kind])
+            pe_mod_log("pe_re_play", "No field texture page for EM%02x (%ux%u atlas)", kind, (unsigned)model->w,
+                       (unsigned)model->h);
     }
 }
 static int field_rig_supported(const PeImpModel *model) {
@@ -1445,16 +1513,17 @@ static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, cons
 }
 
 static int field_face_texture(const PeImpModel *model, const PeImpFace *face, const int corners[3],
-                              unsigned first_page, unsigned first_palette, const FieldTexture *texture, unsigned *clut, unsigned *u_offset) {
+                              unsigned first_page, unsigned first_palette, const FieldTexture *texture, unsigned *clut,
+                              const RECT **area) {
     const unsigned column = (face->page & 15u) - first_page;
     const unsigned palette = (face->clut >> 6) - first_palette;
-    if (column >= 4 || palette >= model->pal_rows) return 0;
+    if (column >= texture->columns || palette >= model->pal_rows) return 0;
     for (int i = 0; i < 3; i++) {
         const unsigned u = face->uv[corners[i]][0], v = face->uv[corners[i]][1];
         if (u >= 128 || column * 128 + u >= model->w || v >= model->h)
             return 0;
     }
-    *u_offset = column * 64;
+    *area = &texture->column[column];
     *clut = (texture->palette.y + palette) << 6 | (texture->palette.x / 16);
     return 1;
 }
@@ -1483,11 +1552,20 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             if (moves && scene->move < moves->moves) {
                 const PeImpMove *move = &moves->move[scene->move];
                 if (move->frames) {
-                    const unsigned step = scene->direct ? scene->start_frame + scene->frame * moves->fps / 60u : scene->frame;
+                    /* the scripts tick at 30 Hz, one sequence frame a tick at normal speed (two when doubled) */
+                    const unsigned step = scene->direct ? scene->start_frame + scene->frame : scene->frame;
                     /* a direct clip holds its last frame unless the script asked it to loop (Sce_flg 0x04) */
                     unsigned frame = (scene->field_pose && !scene->direct) || (scene->direct && scene->loop) ?
                         step % move->frames : step < move->frames ? step : move->frames - 1;
                     if (scene->reverse) frame = move->frames - 1 - frame;
+                    static uint16_t traced[PE_RE_ENEMIES_MAX];
+                    const uint16_t key = (uint16_t)(scene->move << 8 | (frame & 0xff));
+                    if (s_trace_scene && scene->direct && slot == 0 && p->slot < PE_RE_ENEMIES_MAX && traced[p->slot] != key) {
+                        traced[p->slot] = key;
+                        pe_mod_log("pe_re_play", "clip: EM%02x slot %u move %u frame %u of %u%s%s", p->kind, p->slot,
+                                   scene->move, frame, (unsigned)move->frames, scene->loop ? ", loops" : "",
+                                   scene->reverse ? ", reversed" : "");
+                    }
                     if (scene->room_clip) world_y = scene->y;
                     field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data,
                                scene->field_pose && !scene->room_clip ? NULL : scene, pose);
@@ -1565,21 +1643,23 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                             (a[1] < 0 && d[1] < 0 && c[1] < 0) || (a[1] >= FIELD_H && d[1] >= FIELD_H && c[1] >= FIELD_H)) continue;
                         const int depth = (int)((a[2] + d[2] + c[2]) / 3);
                         const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : depth;
-                        unsigned clut, u_offset;
+                        unsigned clut;
+                        const RECT *area;
                         const unsigned first_page = s_field_mesh[p->kind].first_page;
                         const unsigned first_palette = s_field_mesh[p->kind].first_palette;
                         const FieldTexture *texture = s_texture_by_kind[p->kind];
-                        if (texture && field_face_texture(model, f, v, first_page, first_palette, texture, &clut, &u_offset)) {
+                        if (texture && field_face_texture(model, f, v, first_page, first_palette, texture, &clut, &area)) {
+                            const unsigned u_offset = (unsigned)(area->x % 64) * 2, v_offset = (unsigned)area->y % 256;
                             FieldTexturedTriangle *packet = &s_tex_packets[slot][i][emitted++];
                             *packet = (FieldTexturedTriangle){
                                 .color.bytes = {shade, shade, shade, 0x24},
                                 .x0 = (uint16_t)(int)lround(a[0]), .y0 = (uint16_t)(int)lround(a[1]),
                                 .x1 = (uint16_t)(int)lround(d[0]), .y1 = (uint16_t)(int)lround(d[1]),
                                 .x2 = (uint16_t)(int)lround(c[0]), .y2 = (uint16_t)(int)lround(c[1]),
-                                .u0 = u_offset + f->uv[v[0]][0] / 2, .v0 = FIELD_TEX_Y + f->uv[v[0]][1] / 2, .clut = clut,
-                                .u1 = u_offset + f->uv[v[1]][0] / 2, .v1 = FIELD_TEX_Y + f->uv[v[1]][1] / 2,
-                                .page = 0x80u | (texture->texture.x / 64),
-                                .u2 = u_offset + f->uv[v[2]][0] / 2, .v2 = FIELD_TEX_Y + f->uv[v[2]][1] / 2
+                                .u0 = u_offset + f->uv[v[0]][0] / 2, .v0 = v_offset + f->uv[v[0]][1] / 2, .clut = clut,
+                                .u1 = u_offset + f->uv[v[1]][0] / 2, .v1 = v_offset + f->uv[v[1]][1] / 2,
+                                .page = 0x80u | (area->x / 64) | (area->y / 256) << 4,
+                                .u2 = u_offset + f->uv[v[2]][0] / 2, .v2 = v_offset + f->uv[v[2]][1] / 2
                             };
                             packet->tag.length = 7;
                             packet->tag.address = ordering[bucket].address;
@@ -1658,13 +1738,6 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
     }
 }
 
-/* Native actor texture pages are live while imported effects are drawn. */
-enum { EFFECT_PAGE_Y = 256, EFFECT_FIRST_ROW = 24, EFFECT_PIXEL_END = 240, EFFECT_CLUT_Y = 244,
-       EFFECT_BANK_SIZE = 24, EFFECT_PACKET_MAX = 256 };
-/* effect pages: 64-wide columns of VRAM's lower half, used where empty; the first two are free
- * under Carnegie Hall's room, the last two also under Central Park's (whose Aya fills 640-767) */
-#define EFFECT_PAGES 4
-static const int s_effect_page_x[EFFECT_PAGES] = {640, 704, 832, 896};
 static const PeImpRoomLogic *s_effect_room;
 static PeReEffect s_effects[PE_RE_EFFECT_MAX];
 static int s_effect_count;
@@ -1760,7 +1833,8 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         if (v + h > EFFECT_PIXEL_END || p + palettes > 256 - EFFECT_CLUT_Y) continue;
         RECT reserved = {s_effect_page_x[i], EFFECT_PAGE_Y + v, 64, h};
         RECT clut = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y + p, 16, palettes};
-        if (!empty_texture_area(&reserved) || !empty_texture_area(&clut)) continue;
+        if (field_area_used(&reserved, 0) || field_area_used(&clut, 0) || !empty_texture_area(&reserved) ||
+            !empty_texture_area(&clut)) continue;
         const size_t frames = texture->asset.frame_count * 8, sprites = texture->asset.sprite_count * 4;
         texture->frame_data = malloc(frames + sprites);
         if (!texture->frame_data) return;
@@ -1834,7 +1908,12 @@ static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
             y = s_effect_pose[actor].y + local[1];
             z = s_effect_pose[actor].z - sn * local[0] + cs * local[2];
         }
-        if (!project_field_point(x, y, z, screen)) continue;
+        const int projected = project_field_point(x, y, z, screen);
+        if (s_trace_scene && e->age <= 1 && slot == 0)
+            pe_mod_log("pe_re_play", "effect 0x%02x type 0x%02x %s, attachment 0x%02x target %u at %.0f,%.0f,%.0f: %s %.0f,%.0f",
+                       e->id, e->type, e->common.page ? "common" : "room", e->attachment, e->target, x, y, z,
+                       projected ? "screen" : "not projected", projected ? screen[0] : 0.0, projected ? screen[1] : 0.0);
+        if (!projected) continue;
         const unsigned phase = e->loop ? (e->age + i * 6) % e->duration : e->age;
         unsigned time = phase / 2;
         PeImpRe2EffectFrame frame;
@@ -2144,6 +2223,7 @@ void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent
 double pe_re_stage_scale(void) { return s_scale; }
 
 void pe_re_stage_init(const char *mod_id, const char *store) {
+    s_trace_scene = SDL_getenv("PE_TEST_RE_SCENE") != NULL;
     s_store = store, s_scale = 3;
     memset(s_mask_groups, 0xff, sizeof s_mask_groups);
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
@@ -2188,8 +2268,9 @@ int pe_re_stage_vram_reserved(int *out, int max) {
         }
     for (int i = 0; i < FIELD_TEXTURE_SLOTS; i++) {
         const FieldTexture *texture = &s_field_textures[i];
-        if (!texture->texture.w) continue;
-        RESERVE(texture->texture.x, texture->texture.y, texture->texture.w, texture->texture.h);
+        if (!texture->columns) continue;
+        for (unsigned c = 0; c < texture->columns; c++)
+            RESERVE(texture->column[c].x, texture->column[c].y, texture->column[c].w, texture->column[c].h);
         RESERVE(texture->palette.x, texture->palette.y, texture->palette.w, texture->palette.h);
     }
 #undef RESERVE
