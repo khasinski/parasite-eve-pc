@@ -1,4 +1,5 @@
 #include "../../pe_re_rules.h"
+#include "pe_re_stage.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe1/aya.h"
@@ -15,7 +16,12 @@ typedef struct {
     unsigned base;
 } ReWeapon;
 
-static const ReWeapon weapons[] = {{"re2", 0x07, 0x15, ITEM_M870}};
+static const ReWeapon weapons[] = {
+    {"re2", 0x05, 0x16, ITEM_SAR},
+    {"re2", 0x07, 0x15, ITEM_M870},
+    {"re2", 0x09, 0x18, ITEM_M203_5},
+    {"re2", 0x0F, 0x1B, ITEM_MP5K},
+};
 static PeReProgress *progress;
 static const char *game_id;
 static int mounted[PE_RE_OWNED_WEAPONS]; /* native inventory value, 0 when unmounted */
@@ -53,6 +59,16 @@ static int mount(unsigned i, const ReWeapon *rule, unsigned loaded) {
     return mounted[i] = 0x100 + (int)(record - g_InventoryRuntime.equipment);
 }
 
+static void remove_mounted(unsigned i) {
+    const int value = mounted[i];
+    if (!value) return;
+    for (int j = 0; j < 50; j++) if (g_AyaInventoryItems[j] == value) g_AyaInventoryItems[j] = 0;
+    for (int j = 0; j < 100; j++) if (g_InventoryRuntime.storage[j] == value) g_InventoryRuntime.storage[j] = 0;
+    for (int j = 0; j < 82; j++) if (g_InventoryRuntime.specialStorage[j] == value) g_InventoryRuntime.specialStorage[j] = 0;
+    memset(&g_InventoryRuntime.equipment[value - 0x100], 0, sizeof(ItemDataRecord));
+    mounted[i] = 0;
+}
+
 static void sync(void) {
     if (!progress) return;
     const int value = selected();
@@ -69,15 +85,7 @@ static void sync(void) {
 static void unmount(void) {
     sync();
     const int restore_native = progress->equipped_weapon != 0;
-    for (unsigned i = 0; i < PE_RE_OWNED_WEAPONS; i++) {
-        const int value = mounted[i];
-        if (!value) continue;
-        for (int j = 0; j < 50; j++) if (g_AyaInventoryItems[j] == value) g_AyaInventoryItems[j] = 0;
-        for (int j = 0; j < 100; j++) if (g_InventoryRuntime.storage[j] == value) g_InventoryRuntime.storage[j] = 0;
-        for (int j = 0; j < 82; j++) if (g_InventoryRuntime.specialStorage[j] == value) g_InventoryRuntime.specialStorage[j] = 0;
-        memset(&g_InventoryRuntime.equipment[value - 0x100], 0, sizeof(ItemDataRecord));
-        mounted[i] = 0;
-    }
+    for (unsigned i = 0; i < PE_RE_OWNED_WEAPONS; i++) remove_mounted(i);
     if (restore_native) equip(native_weapon);
 }
 
@@ -120,9 +128,16 @@ int pe_re_weapon_pickup(const char *game, uint16_t item, unsigned count) {
         if (!progress->weapons[i].item && slot == PE_RE_OWNED_WEAPONS) slot = i;
     }
     const ItemDataRecord *base = pe_base_item(rule->base);
-    if (!base || count > (unsigned)(base->baseStats[2] + base->bonusStats[2]) ||
-        slot == PE_RE_OWNED_WEAPONS || !mount(slot, rule, count)) return -1;
-    progress->weapons[slot] = (PeReOwnedWeapon){item, (uint16_t)count, rule->ammo_item};
+    if (!base || slot == PE_RE_OWNED_WEAPONS) return -1;
+    const int capacity = base->baseStats[2] + base->bonusStats[2];
+    if (capacity <= 0) return -1;
+    const unsigned loaded = count < (unsigned)capacity ? count : (unsigned)capacity;
+    if (!mount(slot, rule, loaded)) return -1;
+    if (count > loaded && pe_re_ammo_pickup(game, rule->ammo_item, count - loaded) != 1) {
+        remove_mounted(slot);
+        return -1;
+    }
+    progress->weapons[slot] = (PeReOwnedWeapon){item, (uint16_t)loaded, rule->ammo_item};
     return 1;
 }
 
