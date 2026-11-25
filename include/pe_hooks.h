@@ -103,6 +103,8 @@ typedef enum PeHookId {
     PE_HOOK_FIELD_CAMERA, /* PeHookFieldCamera: nonzero supplies a fixed view for native actor drawing */
     PE_HOOK_FIELD_MOVE, /* FieldActor *: after Aya integrates a movement step; positive consumes it
                          * in a preview and restores her host-room position */
+    PE_HOOK_AMMO_POOL, /* PeHookAmmoPool: which ammo pool record a weapon or ammo item uses
+                        * (Inv_AmmoPoolIndex); a mod's ammo scheme may pick another; appended */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -124,6 +126,13 @@ typedef struct PeHookActorDraw {
     void *actor;         /* FieldActor * */
     const void *view;    /* the entity view matrix (GteMatrix, then the projection distance) */
 } PeHookActorDraw;
+
+/* The ammo pool record (0..8 of g_InvSpecialItemRecords, -1 none) for `item`: `native` is the
+ * game's own choice; a handler may set `pool` to another record. */
+typedef struct PeHookAmmoPool {
+    const struct ItemDataRecord *item;
+    int native, pool;
+} PeHookAmmoPool;
 
 typedef struct PeHookStealResult {
     int item, success;

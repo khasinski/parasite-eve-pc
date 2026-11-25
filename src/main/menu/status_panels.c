@@ -335,7 +335,7 @@ int Menu_CheckItemAffordable(int actionId)
                 category = weapon->kind < 19 ? 0 : weapon->kind - 18;
             }
             if (category == 1 || category == 3) {
-                int ammo = Inv_GetWeaponCategoryAmmoBase(category - 1);
+                int ammo = Inv_GetWeaponAmmoBase(weapon, category - 1);
                 enabled &= weapon->ammo + ammo > 0 ? 1 : 0;
             } else enabled = 0;
         }

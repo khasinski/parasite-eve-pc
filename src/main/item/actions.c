@@ -650,6 +650,32 @@ int Inv_GetWeaponCategoryAmmoBase(unsigned int arg0) {
     return g_KeyItemRecords[arg0].ammo;
 }
 
+int Inv_AmmoPoolIndex(const ItemDataRecord *item, int native) {
+#if defined(PE_MODS) && PE_MODS
+    PeHookAmmoPool query = {item, native, native};
+    PE_HOOK(PE_HOOK_AMMO_POOL, &query);
+    if (query.pool >= -1 && query.pool < 9) return query.pool;
+#endif
+    (void)item;
+    return native;
+}
+
+int Inv_GetWeaponAmmoBase(const ItemDataRecord *weapon, unsigned native) {
+    const int game = native < 3 ? (int)native : -1;
+    const int pool = weapon ? Inv_AmmoPoolIndex(weapon, game) : game;
+    if (pool == game) return Inv_GetWeaponCategoryAmmoBase(native);
+    return pool >= 0 && pool < 9 ? g_InvSpecialItemRecords[pool].ammo : 0;
+}
+
+ItemDataRecord *Inv_EquippedWeaponRecord(void) {
+    const int slot = g_AyaSaveState.equipped_weapon_slot;
+    int value;
+    if (slot < 0 || slot >= 50) return 0;
+    value = g_AyaSaveState.inventory_items[slot];
+    if (value < 0x100 || value >= 0x180) return 0;
+    return &g_InventoryRuntime.equipment[value - 0x100];
+}
+
 /* Keep resolved pointers for the comparison UI, then snapshot both records.
  * Both retained pointers must be valid at copy time. Copies are sequential,
  * including when aliased. */
@@ -811,6 +837,11 @@ int Inv_DrawSlotItemIcon(void) {
         pool = &g_InvSpecialItemRecords[(int)(kind - 19)];
     } else {
         pool = &g_InvFallbackAmmoRecord;
+    }
+    {   /* a mod's ammo scheme may give this weapon its own pool */
+        const int native = pool == &g_InvFallbackAmmoRecord ? -1 : (int)(pool - g_InvSpecialItemRecords);
+        const int chosen = Inv_AmmoPoolIndex(weapon, native);
+        if (chosen != native) pool = chosen >= 0 ? &g_InvSpecialItemRecords[chosen] : &g_InvFallbackAmmoRecord;
     }
     amount = weapon->baseStats[2] + weapon->bonusStats[2];
     available = pool->ammo;

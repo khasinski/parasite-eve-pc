@@ -76,6 +76,13 @@ void Inv_SetAyaSlotCount(int count);
 void Inv_MergeStorageToSlot(void);
 void Inv_RebuildSelectionBitset(void);
 int Inv_AddItem(int id);
+/* The ammo pool record (0..8) `item` uses, given the game's own choice `native` (-1 none): native
+ * unless a mod's ammo scheme picks another (PE_HOOK_AMMO_POOL). */
+int Inv_AmmoPoolIndex(const ItemDataRecord *item, int native);
+/* The rounds in the pool a weapon draws from; `native` is the game's pool for it (category - 1). */
+int Inv_GetWeaponAmmoBase(const ItemDataRecord *weapon, unsigned native);
+/* The equipped weapon's record, or NULL. */
+ItemDataRecord *Inv_EquippedWeaponRecord(void);
 int Inv_CanAddActiveListItemToAya(int index);
 void Inv_TransferItemAlt(void);
 void Inv_ClearDisplaySlots(void);
