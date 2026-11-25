@@ -13,9 +13,9 @@ How to use it:
 - Keep the module boundaries in "Architecture": a game or a host must be
   addable without editing the shared battle code.
 
-Status (2026-11-24): phases 0, 1 and 3 built for RE2 on `feat/re-play`; phase 2
-built by Codex on `feat/re-battle-director` (to merge). Spikes done; S5 deferred
-(D16). Phases 4-6 not started (Codex: their director side).
+Status (2026-11-24): phases 0-3 built for RE2 (phase 2 by Codex, merged), and
+the director side of phases 4 and 5 (Codex). Next: the PE1 adapter hookup of
+phases 4 and 5. Spikes done; S5 deferred (D16).
 
 ## The battle we want
 
@@ -60,8 +60,10 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D16 | 2026-11-24 | S5 deferred: battle distances keep following RE play's scale (Aya's size setting) for now. The mapping takes k from one place so it can become a fixed battle scale or scaled weapon ranges once play-testing shows which feels right. | The user wants to tune it from harness and real play. |
 | D17 | 2026-11-24 | In a battle started in place, the imported enemies join on its first frame (no opening wait). | They vanished for about 11 frames as a battle began (the wait meant for room battles' own enemies), then came back: a visible blink. |
 | D18 | 2026-11-24 | The grace period after an escape covers only that battle's survivors (other enemies can still start a fight); it ends after a time or once Aya is a distance from them, whichever is first; the survivors keep pursuing (D7) but can't start a battle meanwhile; each further escape from the same enemies halves their grace. Seconds, distance and the halving are F1 settings (Fights) to tune in play, starting at 3 seconds, 4,000 room units, halving on. Escape stays PE's own roll. Accepted by the user. | A grace is needed so the same fight doesn't re-trigger by accident; scoping it to the survivors and shrinking it on repeats keeps escaping from becoming a way to walk through a room. |
-| D21 | 2026-11-24 | After a battle Aya stays where it left her in the room (and in its last camera), instead of going back to where it began. | With the camera following her (D6), going back would be a jump across the room. |
 | D19 | 2026-11-24 | A joining enemy continues from where it is, in its own walk toward Aya, facing her: no pop-in or entrance anim. It joins with an empty attack timer (it can't hit on arrival), enters the target order as usual (D10), and a short cue marks it (a sound and a brief marker over it). Enemies the original game brings in with their own entrance (a Licker from the ceiling, crows) use it when the room's script has one, a per-game rule. Accepted by the user. | RE: zombies shamble into view, already pursuing (D7). PE: reinforcements are visible and fair. |
+| D20 | 2026-11-24 | The detached phase 2 director keeps the lead first and ranks the other visible foes by distance from the lead, with room placement order breaking ties. Its join order is explicit and phases 3-6 retain their runtime integration work. The T1-T2 anchor geometry uses host-supplied bounds and clearance. | Preserves the current visible roster and makes it possible to test the director while the phase 1 adapter is developed independently. |
+| D21 | 2026-11-24 | The director queues newly visible foes nearest Aya first, breaking ties by slot. Queued foes keep their place but can join only while visible on the battle floor. The adapter supplies visibility for the current camera and steps grace at 60 updates per second, including outside combat. Escape history is tracked per room slot until that foe dies or Aya leaves the room. Each repeat halves both grace limits when enabled. | Makes join and target order deterministic and keeps survivor grace independent of other enemies. |
+| D22 | 2026-11-24 | After a battle Aya stays where it left her in the room (and in its last camera), instead of going back to where it began. | With the camera following her (D6), going back would be a jump across the room. |
 
 ## Architecture
 
@@ -128,6 +130,8 @@ typedef struct PeReBattle {
     double aya_x, aya_z;                   /* her room position, from the adapter each frame */
     int camera;                            /* the room camera she's in */
     PeReBattleFoe foe[PE_RE_ENEMIES_MAX];  /* every enemy the battle knows of, by slot */
+    uint8_t initial_slots[PE_RE_ENEMIES_MAX];  /* first roster, in join order */
+    int initial_count;
     int joined;                            /* live joined count (<= rules->max_foes) */
     int grace_frames;                      /* D13 */
 } PeReBattle;
@@ -263,7 +267,7 @@ into the named room with the user's store), tests.
    `pe_re_battle_begin` takes over `pe_trip_select_approach`'s selection; the
    adapter calls the director but behaviour is unchanged. Exit: the five story
    routes finish; battles start with the same enemies as before.
-   Tests: T3, T4, the route tests.
+   Done 2026-11-24 (Codex, c5134ecb6) for the portable scope. T1-T4, portability, the disc-backed mod-re-session test, and all five story routes passed on Windows. Live roster parity is an adapter integration check.
 3. **Camera follows, masks and effects (D6, D8).** Done 2026-11-24 (57fcf6aab).
    Entry: G2 and G3 built.
    Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
@@ -274,10 +278,15 @@ into the named room with the user's store), tests.
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
    up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
    Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
+   The director and these headless tests are built. Live spawning and
+   target UI are adapter integration work.
 5. **Pursuit, escape, write-back, grace (D7, D13, D18).** Build: `chase_step` in
    battle time, `pe_re_battle_end`, the survivors' grace and its F1 settings. Exit: a zombie off screen walks into
    view and joins; after Escape the survivors stand where the battle left them
    and no battle starts during the grace period. Tests: T9, T10.
+   The director and these headless tests are built. After each field frame,
+   the adapter steps survivor grace and checks the lead with
+   `pe_re_battle_encounter_allowed_for` before starting a fight.
 6. **Bosses and story fights (D9).** Build: `boss`, `joins_boss` for RE2.
    Exit: G's embryos join the G fight; the canister and launcher finishes still
    work; the five story routes finish. Tests: T11, the route tests.
@@ -297,7 +306,7 @@ floor was x 1930..7326, z -3354..3821 and the battle was fought at -2086,1711; w
 route that had changed rooms (map 66 -> 67) left the room unchanged; both zombies shot
 dead, the battle ended, Aya back at her exact field position.
 
-Phase 3 as built (G2, G3, D6, D8, D21), `mods/pe_re_play/hosts/pe1/pe_re_stage.c`: the stage
+Phase 3 as built (G2, G3, D6, D8, D22), `mods/pe_re_play/hosts/pe1/pe_re_stage.c`: the stage
 keeps the shown room's logic; `pe_re_stage_battle_camera` swaps picture, masks and view in
 battle without touching Aya, the collision or the backdrop's saved pages (the picture code
 is shared with `pe_re_stage_show` as `install_picture`); `battle_follow` asks
