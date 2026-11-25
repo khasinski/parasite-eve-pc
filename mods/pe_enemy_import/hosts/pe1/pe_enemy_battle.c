@@ -126,6 +126,7 @@ enum { LAUNCHER_NONE, LAUNCHER_WAITING, LAUNCHER_DROPPED, LAUNCHER_HELD, LAUNCHE
 
 static struct {
     int active, frames, open_frames, joined, sent_away, room_enemies;
+    int direct;                      /* started in place: no room enemies, the imported ones join at once */
     int away_later;                  /* joined during the opening: send the room's enemies away
                                       * once the clock runs */
     PeFoe foe[PE_FOES_MAX];
@@ -954,6 +955,7 @@ static void pe_begin(void) {
     s.canister_exposed = s_canister_armed;
     if (s_here_direct) {        /* no room enemies to take their places and start the clock: now */
         s_here_direct = 0;
+        s.direct = 1;
         g_BattleEnemyEscapeFlag = 1;
     }
     s.launcher = s_launcher_armed ? LAUNCHER_WAITING : LAUNCHER_NONE;
@@ -1259,6 +1261,13 @@ static int pe_on_battle(void *ctx, void *user) {
         s_armed = 0;
     }
     if (!s.active) return 0;
+    if (!s.joined && s.direct) {
+        /* a battle started in place has no room enemies to wait for: the imported ones take over
+         * from the room's on the battle's first frame (waiting the opening out, they vanished from
+         * the picture for a third of a second, then came back) */
+        pe_join(0);
+        return 0;
+    }
     if (!s.joined) {
         /* Join once the opening is over: the room's battle script starts the clock
          * (Script_SignalExit) when its enemies are in place. Sent away before that, they never

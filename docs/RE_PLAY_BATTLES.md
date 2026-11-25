@@ -56,6 +56,8 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D13 | 2026-11-24 | No interaction until the battle is resolved: all enemies dead, or Escape. After an escape, Aya stays where she is with a grace period. | User's rule; RE play is already paused for the battle. |
 | D14 | 2026-11-24 | Battles are fought off the hidden PE room's map: Aya's native position moves to a battle anchor far from every zone the room has, and back afterwards. | The room's scripts are zones on her position: running in battle walked her into map 66's exit mid-battle. Refusing only the transfer leaves its locks set. |
 | D15 | 2026-11-24 | One battle system for RE1, RE2 and RE3: per-game rules, a shared director, one adapter per host engine. | The same system across the three games, each adjusted where it differs. |
+| D16 | 2026-11-24 | S5 deferred: battle distances keep following RE play's scale (Aya's size setting) for now. The mapping takes k from one place so it can become a fixed battle scale or scaled weapon ranges once play-testing shows which feels right. | The user wants to tune it from harness and real play. |
+| D17 | 2026-11-24 | In a battle started in place, the imported enemies join on its first frame (no opening wait). | They vanished for about 11 frames as a battle began (the wait meant for room battles' own enemies), then came back: a visible blink. |
 
 ## Architecture
 
@@ -233,7 +235,7 @@ Settle each before the phase that needs it.
 
 | # | Gap | Resolution |
 |---|-----|------------|
-| G1 | An imported enemy that died while the battle mode wasn't 0 froze in its death anim (D4's time stop came before the death code), and the battle could never end. | Fixed 2026-11-24: the time stop applies to living foes; dying ones play on. (The Cheats mod's Win this battle can still leave a two-enemy battle hanging; the same battle ends normally when shot. Look at it with phase 4.) |
+| G1 | An imported enemy that died while the battle mode wasn't 0 froze in its death anim (D4's time stop came before the death code), and the battle could never end. | Fixed 2026-11-24 (bd61eaf51): the time stop applies to living foes; dying ones play on. A suspected Win-this-battle hang with two enemies was the results screen waiting for a button (the test pressed none); with Cross it ends normally. |
 | G2 | The enemy pack loader and RE play share VRAM without knowing it: the loader overwrote the effect pages. | Phase 3 entry: RE play publishes the VRAM it uses (`ReHost` -> `vram_reserved(rects)`: picture, effect pages, mesh texture, palettes); `pe_vram_reserved` refuses those. A late joiner re-samples before placing. |
 | G3 | The stage doesn't keep the room logic, and `pe_re_stage_show` isn't meant for battle use. | Phase 3: `battle_camera(camera)` in the stage: keeps the logic from the last show, swaps picture, masks, effects and view, leaves the backdrop's saved pages alone. |
 | G4 | Positional sound at the off-map anchor is unchecked. | Phase 1 exit: listen in a play-test (the harness has no audio). |
@@ -245,7 +247,7 @@ into the named room with the user's store), tests.
 
 0. **Battles in place (RE2).** Built: D1-D5 (c383bf512, a7e42b88f, 1f1b56ae6,
    9d0db2f64, bdb868a05).
-1. **Off-map anchor (D14).** Entry: S5 decided.
+1. **Off-map anchor (D14).** Entry: none (S5 deferred, D16).
    Build: anchor choice from the room's extent; native move at start, back at
    end; I1, I5, I6 logged. Exit: 1-00, run the length of the street in a
    battle; the PE room never changes; the battle ends normally.
@@ -362,7 +364,7 @@ run, people (kinds 0x40 and up) left out:
 
 ## Open questions
 
-- S5: fix battle scale to Aya's size 100, or scale weapon ranges?
+- S5 (D16): fixed battle scale or scaled weapon ranges, once play-testing shows which feels right.
 - Grace period: how long, and does it end early once Aya has walked a set
   distance away?
 - Does a joining enemy walk in with RE's own entrance, or appear where it stands?
