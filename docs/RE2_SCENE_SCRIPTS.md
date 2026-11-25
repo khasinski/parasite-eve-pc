@@ -41,6 +41,12 @@ The imported 1-01 variants both run procedure 10, which stages four EM1F zombies
 
 The turn fix changes procedure 30's heading and arrival. The single-model atlas and room-only effect lookup are independent of that change. Compare logs for procedure 30's arrival and the first frame of move 11 before attributing a death-pose timing defect to the turn fix.
 
+### Implementation status
+
+- The field renderer now keeps multiple model kinds resident and reserves each texture and palette rectangle during battle allocation. Wider imported atlases are retained. EM48's 384-pixel source texture needs three 128-pixel columns.
+- The room pose renderer uses the selected room bank and its authored root offset. The installed Leon and Claire variants contain 15- and 34-frame moves 11 and 12 in their EM48 room bindings. The session regression starts procedure 30 and checks that both commands select the room bank. Frame comparison from the natural trigger remains open.
+- The retail Leon disc has eight common effects in `COMMON/DATA/CORE00.ESP`, including IDs 00–03. The file has a reverse footer of block offsets. It carries animation data and native CLUT/TPage references. The companion `CORE01.TIM` is a 65536-byte raw image. Retail uploads its palette separately. The common bank needs the correct palette source, slot/part transforms and rendering before Kendo's attack sprite cues can be verified.
+
 ## Scripted enemy and boss audit
 
 Enemy work slots already accept the shared destination step and compatible direct clips. Several entrances also depend on the enemy's own routine to animate, update a scratch field, change the camera or acknowledge defeat. Those transitions currently use encounter-specific stand-ins. The boss readiness check reads their results before handing the same room slot to battle.
