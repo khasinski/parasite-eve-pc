@@ -606,7 +606,7 @@ static void restore_field_texture(void) {
             if (!memcmp(s_vram_check, pixels, bytes)) continue;
             LoadImage(&rect, (void *)pixels);
             DrawSync(0);
-            if (getenv("PE_TEST_RE_SCENE"))
+            if (s_trace_scene)
                 pe_mod_log("pe_re_play", "EM%02x restored field %s at %d,%d", kind,
                            palette ? "palette" : "texture", rect.x, rect.y);
         }
