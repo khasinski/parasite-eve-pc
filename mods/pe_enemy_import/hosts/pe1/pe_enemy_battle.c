@@ -329,6 +329,14 @@ void pe_enemy_battle_set_start(int i, double dx, double dz) {
     s_start[i].set = 1, s_start[i].dx = dx, s_start[i].dz = dz;
 }
 
+/* A room slot's own walking pace in field units a frame (0: its pack's speed). Kept across battles
+ * (a slot's pace is its kind's); a new room's enemies set theirs. */
+static double s_slot_speed[32];
+
+void pe_enemy_battle_set_slot_speed(int slot, double speed) {
+    if ((unsigned)slot < 32) s_slot_speed[slot] = speed;
+}
+
 void pe_enemy_battle_set_room_slot(int i, int slot) {
     if (i < 0 || i >= PE_FOES_MAX) return;
     s_start[i].slot = slot, s_start[i].has_slot = 1;
@@ -1266,7 +1274,9 @@ static void pe_foe_think(PeFoe *f) {
         if (aya && dist > reach * (moving ? 0.8 : 0.9) && dist - reach * 0.8 >= 1.0 && pack->speed > 0 &&
             abs(diff) < 0x400) {
             const double left = dist - reach * 0.8;
-            const double step = pack->speed < left ? pack->speed : left;
+            const double own = (unsigned)f->room_slot < 32 ? s_slot_speed[f->room_slot] : 0;
+            const double speed = own > 0 ? own : pack->speed;
+            const double step = speed < left ? speed : left;
             const double ang = a->rot_y * 2 * PE_PI / 4096.0;
             a->base_x = a->pos_x;
             a->base_y = a->pos_y;

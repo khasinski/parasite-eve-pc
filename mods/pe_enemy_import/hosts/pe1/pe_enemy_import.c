@@ -563,6 +563,22 @@ static int pe_available_approach(const PeRePlayApi *api, const PeReRoomEvent *ro
     return pe_trip_select_approach(api, &available, x, z, floor, close);
 }
 
+/* Every room enemy walks in battle at its own pace from the field (room units a frame over the
+ * battle's scale), so a zombie closes in as fast in a fight as out of one. */
+static void pe_battle_paces(const PeRePlayApi *api) {
+    PeReRoomEvent room = {sizeof room};
+    const double k = api && api->units_per_pe_unit ? api->units_per_pe_unit() : 0;
+    const int has = api && api->struct_size >= offsetof(PeRePlayApi, enemy_walk_speed) + sizeof api->enemy_walk_speed &&
+                    api->enemy_walk_speed && k > 0;
+    for (int slot = 0; slot < 32; slot++) pe_enemy_battle_set_slot_speed(slot, 0);
+    if (!has || api->room(&room)) return;
+    for (int i = 0; i < room.count; i++) {
+        const double pace = api->enemy_walk_speed(room.enemies[i].slot) / k;
+        pe_enemy_battle_set_slot_speed(room.enemies[i].slot, pace);
+        if (pace > 0) pe_mod_log(MOD_ID, "battle: room slot %u walks %.1f a frame, as in the field", room.enemies[i].slot, pace);
+    }
+}
+
 static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
@@ -607,6 +623,7 @@ static int pe_room_creature(const PeRePlayApi *api) {
         s.room_x = x, s.room_z = z, s.room_pos_known = 1;
     }
     for (int i = 0; i < count; ++i) pe_enemy_battle_set_room_slot(i, s_trip.slot[i]);
+    pe_battle_paces(api);
     s_battle_pack_count = 0;
     for (int i = 0; i < packs.count && i < PE_TRIP_FOES_MAX; i++, s_battle_pack_count++) {
         snprintf(s_battle_packs[i].asset, sizeof s_battle_packs[i].asset, "%s", packs.assets[i]);

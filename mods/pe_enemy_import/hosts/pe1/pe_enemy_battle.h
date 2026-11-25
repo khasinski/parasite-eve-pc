@@ -23,6 +23,9 @@ void pe_enemy_battle_begin_roster(void);
 void pe_enemy_battle_set_start(int i, double dx, double dz);
 /* Roster enemy i stands for this room slot (an imported room's battle, reported back by slot). */
 void pe_enemy_battle_set_room_slot(int i, int slot);
+/* Room slot `slot` walks this many field units a frame in battle (its room's own pace); 0: its
+ * pack's speed. */
+void pe_enemy_battle_set_slot_speed(int slot, double speed);
 /* A running battle takes in one more of the room's enemies: its pack (folder under the enemy packs),
  * at x, z (16.16 field units). The foe's index, or -1 (no battle, no place, no VRAM). */
 int pe_enemy_battle_join(const char *pack, int room_slot, int x, int z);

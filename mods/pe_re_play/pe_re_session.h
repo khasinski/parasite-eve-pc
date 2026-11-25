@@ -148,6 +148,10 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
 /* Advance mobile placements on the player's floor and write new coordinates to their script slots. */
 int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
                        PeReEnemyPlacement *enemies, int count, double x, double z, int floor);
+/* How far a room enemy walks in a frame while it pursues (room units), by its kind and how it moves
+ * now (a crawling zombie is slower); 0 for a kind that doesn't walk after the player. The field chase
+ * and battles both use it, so an enemy keeps its pace in and out of a fight. */
+double pe_re_session_walk_speed(const PeReSession *s, const PeReEnemyPlacement *e);
 /* Scripted boss slot ready to fight, or -1 while the entrance is running. */
 int pe_re_session_ready_boss(const PeReSession *s);
 int pe_re_session_alligator(const PeReSession *s, unsigned slot);

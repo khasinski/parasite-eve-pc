@@ -118,6 +118,9 @@ typedef struct PeRePlayApi {
     int (*battle_point)(int to_room, double x, double z, double *out_x, double *out_z);
     /* a mark in the battle at a host position (D10's off-screen target, D19's joining cue); kind 0 clears */
     void (*battle_mark)(int id, int kind, double x, double z);
+    /* how far room enemy `slot` walks in a frame while it pursues, in room units (0: it doesn't): a
+     * battle moves it at the same pace as the field does */
+    double (*enemy_walk_speed)(uint8_t slot);
 } PeRePlayApi;
 
 #define PE_RE_MARK_TARGET 1

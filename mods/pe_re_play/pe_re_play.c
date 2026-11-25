@@ -290,6 +290,13 @@ static void api_battle_mark(int id, int kind, double x, double z) {
         host->battle_mark(id, kind, x, z);
 }
 
+static double api_enemy_walk_speed(uint8_t slot) {
+    if (!s_playing) return 0;
+    for (int i = 0; i < s_nenemies; i++)
+        if (s_enemies[i].slot == slot) return pe_re_session_walk_speed(&s_session, &s_enemies[i]);
+    return 0;
+}
+
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
@@ -297,7 +304,7 @@ static const PeRePlayApi s_api = {
     api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved,
     api_battle_begin, api_battle_step, api_battle_foe_moved, api_battle_foe_died, api_battle_end,
     api_battle_target_order, api_battle_encounter_allowed_for, api_battle_settings, api_battle_point,
-    api_battle_mark
+    api_battle_mark, api_enemy_walk_speed
 };
 
 static void report_enemies(void) {

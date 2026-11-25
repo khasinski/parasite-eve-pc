@@ -605,6 +605,18 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
     return n;
 }
 
+static double walk_speed(const PeReEnemyPlacement *e, PeReZombieMode mode) {
+    if (!pe_re2_ground_pursuit_kind(e->kind)) return 0;
+    return e->kind == 0x20 ? 62 : e->kind == 0x22 || e->kind == 0x24 ? 44 : e->kind == 0x25 ? 54 :
+           pe_re2_ivy(e->kind) ? 26 : mode == PE_RE_ZOMBIE_CRAWL ? 12 : 22;
+}
+
+double pe_re_session_walk_speed(const PeReSession *s, const PeReEnemyPlacement *e) {
+    if (!s || !e || !s->game || strcmp(s->game->game, "re2") || e->slot >= 16) return 0;
+    const int16_t *work = s->run.works[2 + e->slot];
+    return walk_speed(e, pe_re_zombie_mode(e->behaviour & 0x3f, work[PE_RE_MEMBER_ROUTINE0]));
+}
+
 int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
                        PeReEnemyPlacement *enemies, int count, double x, double z, int floor) {
     memset(s->enemy_state, 0, sizeof s->enemy_state);
@@ -687,8 +699,7 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         *alerted = 1;
         *state = PE_RE_ENEMY_CLOSE;
         if (distance <= (spider ? 1500 : 1200)) continue;
-        const double speed = dog ? 62 : licker || enhanced_licker ? 44 : spider ? 54 : ivy ? 26 :
-                             mode == PE_RE_ZOMBIE_CRAWL ? 12 : 22;
+        const double speed = walk_speed(e, mode);
         const double radius = dog ? 210 : spider ? 420 : ivy ? 340 : licker || enhanced_licker ? 310 : 240;
         *state = PE_RE_ENEMY_BLOCKED;
         double next_x = e->x, next_z = e->z, ground = -(double)floor * PE_RE2_FLOOR_HEIGHT;
