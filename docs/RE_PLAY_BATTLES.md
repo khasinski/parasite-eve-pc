@@ -58,6 +58,8 @@ Newest last. A decision changes only by adding a new entry that replaces it.
 | D15 | 2026-11-24 | One battle system for RE1, RE2 and RE3: per-game rules, a shared director, one adapter per host engine. | The same system across the three games, each adjusted where it differs. |
 | D16 | 2026-11-24 | S5 deferred: battle distances keep following RE play's scale (Aya's size setting) for now. The mapping takes k from one place so it can become a fixed battle scale or scaled weapon ranges once play-testing shows which feels right. | The user wants to tune it from harness and real play. |
 | D17 | 2026-11-24 | In a battle started in place, the imported enemies join on its first frame (no opening wait). | They vanished for about 11 frames as a battle began (the wait meant for room battles' own enemies), then came back: a visible blink. |
+| D18 | 2026-11-24 | Proposed, to confirm: the grace period after an escape covers only that battle's survivors (other enemies can still start a fight); it ends after a time or once Aya is a distance from them, whichever is first; the survivors keep pursuing (D7) but can't start a battle meanwhile; each further escape from the same enemies halves their grace. Seconds, distance and the halving are F1 settings (Fights) to tune in play. Escape stays PE's own roll. | A grace is needed so the same fight doesn't re-trigger by accident; scoping it to the survivors and shrinking it on repeats keeps escaping from becoming a way to walk through a room. |
+| D19 | 2026-11-24 | Proposed, to confirm: a joining enemy continues from where it is, in its own walk toward Aya, facing her: no pop-in or entrance anim. It joins with an empty attack timer (it can't hit on arrival), enters the target order as usual (D10), and a short cue marks it (a sound and a brief marker over it). Enemies the original game brings in with their own entrance (a Licker from the ceiling, crows) use it when the room's script has one, a per-game rule. | RE: zombies shamble into view, already pursuing (D7). PE: reinforcements are visible and fair. |
 
 ## Architecture
 
@@ -262,13 +264,13 @@ into the named room with the user's store), tests.
    Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
    effects in battle. Exit: 1-00, a battle from camera 0 into camera 1; the
    picture, foreground and fires change with her; aiming still works. Tests: T5.
-4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12).** Entry: G2's re-sample for late joiners.
+4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12, D19).** Entry: G2's re-sample for late joiners.
    Build: JOIN events, queue, spawn mid-battle, trip result per joiner, target
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
    up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
    Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
-5. **Pursuit, escape, write-back, grace (D7, D13).** Build: `chase_step` in
-   battle time, `pe_re_battle_end`, grace. Exit: a zombie off screen walks into
+5. **Pursuit, escape, write-back, grace (D7, D13, D18).** Build: `chase_step` in
+   battle time, `pe_re_battle_end`, the survivors' grace and its F1 settings. Exit: a zombie off screen walks into
    view and joins; after Escape the survivors stand where the battle left them
    and no battle starts during the grace period. Tests: T9, T10.
 6. **Bosses and story fights (D9).** Build: `boss`, `joins_boss` for RE2.
@@ -294,7 +296,7 @@ fake `in_view`; they need no disc.
 | T7 | Floors: an enemy on another floor never joins. | 4 |
 | T8 | Target order: in view first by distance, then out of view by distance. | 4 |
 | T9 | Pursuit moves only while time runs; positions are written back after an escape. | 5 |
-| T10 | Grace: no encounter for its length after an escape; encounters again after. | 5 |
+| T10 | Grace (D18): the survivors can't start a fight until the time or the distance runs out; other enemies can; a second escape from the same survivors halves it. | 5 |
 | T11 | Boss: who joins a boss fight follows `joins_boss`. | 6 |
 
 Disc tests: `mod-re-session` and the five story routes (`mod-re-route`) after
@@ -365,6 +367,5 @@ run, people (kinds 0x40 and up) left out:
 ## Open questions
 
 - S5 (D16): fixed battle scale or scaled weapon ranges, once play-testing shows which feels right.
-- Grace period: how long, and does it end early once Aya has walked a set
-  distance away?
-- Does a joining enemy walk in with RE's own entrance, or appear where it stands?
+- D18 and D19: confirm, and the grace period's starting values (proposed: 3 seconds or
+  4,000 room units, halving on).
