@@ -13,9 +13,11 @@ How to use it:
 - Keep the module boundaries in "Architecture": a game or a host must be
   addable without editing the shared battle code.
 
-Status (2026-11-24): phases 0-3 built for RE2 (phase 2 by Codex, merged), and
-the director side of phases 4 and 5 (Codex). Next: the PE1 adapter hookup of
-phases 4 and 5. Spikes done; S5 deferred (D16).
+Status (2026-11-24): phases 0-5 built for RE2 (phase 2 and the director side of
+4 and 5 by Codex; the PE1 adapter hookup 953def9c6). Open from 4-5: the joining
+cue's sound (D19), an escape checked in play (the harness can't drive PE's escape
+command), and phase 4's wave and floor exits in 2-05 and 1-03. Next: phase 6.
+Spikes done; S5 deferred (D16).
 
 ## The battle we want
 
@@ -247,7 +249,7 @@ Settle each before the phase that needs it.
 | G2 | The enemy pack loader and RE play share VRAM without knowing it: the loader overwrote the effect pages. | Phase 3 entry: RE play publishes the VRAM it uses (`ReHost` -> `vram_reserved(rects)`: picture, effect pages, mesh texture, palettes); `pe_vram_reserved` refuses those. A late joiner re-samples before placing. |
 | G3 | The stage doesn't keep the room logic, and `pe_re_stage_show` isn't meant for battle use. | Phase 3: `battle_camera(camera)` in the stage: keeps the logic from the last show, swaps picture, masks, effects and view, leaves the backdrop's saved pages alone. |
 | G4 | Positional sound at the off-map anchor is unchecked. | Phase 1 exit: listen in a play-test (the harness has no audio). |
-| G5 | Since D17 the imported enemies join on the battle's first frame, so the pack loader places their textures with no battle frames sampled ("0 frames looked at"): it can't see what the battle itself reads, and may overwrite it. Seen once at 640,0 with no visible harm. | Phase 4: reserve PE's own battle VRAM explicitly (HUD, Aya, effects; a known map) instead of sampling, and re-check for late joiners. |
+| G5 | Since D17 the imported enemies join on the battle's first frame, so the pack loader places their textures with no battle frames sampled ("0 frames looked at"): it can't see what the battle itself reads, and may overwrite it. Seen once at 640,0 with no visible harm. | Phase 4, done in part (953def9c6): the loader keeps sampling the battle's frames (every fourth) and keeps out of every image the battle uploads through `Asset_LoadTimImage` (`PE_HOOK_TIM_UPLOAD`), so late joiners see what the battle uses. The first-frame packs are still placed before any battle frame; a fixed map of PE's battle VRAM would close that. |
 
 ## Phases
 
@@ -278,8 +280,15 @@ into the named room with the user's store), tests.
    order and edge marker. Exit: 1-00's six zombies across two cameras all end
    up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
    Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
-   The director and these headless tests are built. Live spawning and
-   target UI are adapter integration work.
+   The director and these headless tests are built. Adapter (953def9c6): joiners
+   spawn with the battle's packs (no build mid-battle; a kind the battle didn't
+   start with uses its installed pack or doesn't join); targets are reordered
+   each frame (`pe_enemy_battle_order_targets`: a freshly built list starts on
+   the first, a shown one keeps the chosen target); the chosen target's arrow
+   and the joining cue are drawn by the stage (`battle_mark`, PE_RE_MARK_*).
+   Checked in 1-00: zombies 2 and 3 walk in, join and are beaten (4 of 4);
+   order "3 2 0 1" then "1 0 2 3" as they come into view; both marks draw.
+   Known: the arrow sits about 30 px low of the target (left/right is right).
 5. **Pursuit, escape, write-back, grace (D7, D13, D18).** Build: `chase_step` in
    battle time, `pe_re_battle_end`, the survivors' grace and its F1 settings. Exit: a zombie off screen walks into
    view and joins; after Escape the survivors stand where the battle left them
@@ -287,6 +296,10 @@ into the named room with the user's store), tests.
    The director and these headless tests are built. After each field frame,
    the adapter steps survivor grace and checks the lead with
    `pe_re_battle_encounter_allowed_for` before starting a fight.
+   Adapter (953def9c6): `battle_begin` picks the battle, `battle_step` runs each
+   battle frame with PE's clock, deaths and positions go back by room slot, and
+   `battle_end(escaped)` starts the grace; F1 > Fights has "Escape grace
+   (seconds)", "Escape grace distance" and "Halve grace on repeat escapes".
 6. **Bosses and story fights (D9).** Build: `boss`, `joins_boss` for RE2.
    Exit: G's embryos join the G fight; the canister and launcher finishes still
    work; the five story routes finish. Tests: T11, the route tests.
