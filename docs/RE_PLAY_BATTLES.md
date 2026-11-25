@@ -249,7 +249,7 @@ into the named room with the user's store), tests.
 
 0. **Battles in place (RE2).** Built: D1-D5 (c383bf512, a7e42b88f, 1f1b56ae6,
    9d0db2f64, bdb868a05).
-1. **Off-map anchor (D14).** Done 2026-11-24 (commit below the phase list).
+1. **Off-map anchor (D14).** Done 2026-11-24 (d1b30cee9).
    Entry: none (S5 deferred, D16).
    Build: anchor choice from the room's extent; native move at start, back at
    end; I1, I5, I6 logged. Exit: 1-00, run the length of the street in a
