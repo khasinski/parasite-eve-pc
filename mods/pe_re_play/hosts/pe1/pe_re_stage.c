@@ -61,13 +61,8 @@ enum { PE_RE_PAL = 1 };
 #define FIELD_TEX_Y 64
 #define FIELD_TEX_WORDS 64
 #define FIELD_TEX_HEIGHT 128
-/* the field meshes' palettes: the first empty spot of these for the mesh's rows (a PE room may have
- * filled the first: Central Park's does) */
-static const struct { int x, y, rows; } k_field_clut_spots[] = {{320, 496, 16}, {0, 475, 5}, {0, 508, 4}};
-static int s_clut_x = 320, s_clut_y = 496;
-#define FIELD_CLUT_X s_clut_x
-#define FIELD_CLUT_Y s_clut_y
 #define FIELD_CLUT_ROWS 16
+#define FIELD_TEXTURE_SLOTS 11
 #define BACKDROP_SETTLE 10       /* frames Aya stands still before the battle's camera is fixed */
 #define FIELD_TURN_RADIANS (6.283185307179586 / 4096.0)
 
@@ -143,12 +138,17 @@ typedef struct FieldTexturedTriangle {
 PE1_STATIC_ASSERT(PE1_OFFSETOF(FieldTexturedTriangle, pad) == sizeof(RenderNativeTag) + 26,
                   field_textured_triangle_layout);
 static FieldTexturedTriangle s_tex_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
-static int s_texture_kind = -1, s_texture_checked;
-static unsigned s_texture_palette_rows;
-static uint16_t s_texture_words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
-static uint16_t s_texture_clut[FIELD_CLUT_ROWS][256];
-static uint16_t s_vram_check[64 * 256];
 enum { FIELD_MESH_KINDS = 256 };
+typedef struct {
+    RECT texture, palette;
+    uint16_t words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
+    uint16_t colours[FIELD_CLUT_ROWS][256];
+} FieldTexture;
+
+static FieldTexture s_field_textures[FIELD_TEXTURE_SLOTS];
+static FieldTexture *s_texture_by_kind[FIELD_MESH_KINDS];
+static uint8_t s_texture_failed[FIELD_MESH_KINDS];
+static uint16_t s_vram_check[64 * 256];
 
 static struct {
     PeImpModel model;
@@ -1119,27 +1119,28 @@ static void free_field_mesh(unsigned kind) {
 }
 
 static void clear_field_texture(void) {
-    if (s_texture_kind >= 0) {
-        const RECT areas[] = {{FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT},
-                              {FIELD_CLUT_X, FIELD_CLUT_Y, 256, s_texture_palette_rows}};
-        const uint16_t *pixels[] = {s_texture_words, &s_texture_clut[0][0]};
-        for (int i = 0; i < 2; i++) {
-            const size_t bytes = (size_t)areas[i].w * areas[i].h * sizeof(uint16_t);
-            RECT rect = areas[i];
+    for (int i = 0; i < FIELD_TEXTURE_SLOTS; i++) {
+        FieldTexture *texture = &s_field_textures[i];
+        if (!texture->texture.w) continue;
+        const RECT areas[] = {texture->texture, texture->palette};
+        const uint16_t *pixels[] = {texture->words, &texture->colours[0][0]};
+        for (int j = 0; j < 2; j++) {
+            RECT rect = areas[j];
+            const size_t bytes = (size_t)rect.w * rect.h * sizeof(uint16_t);
             DrawSync(0);
             StoreImage(&rect, s_vram_check);
             DrawSync(0);
-            /* Scene loading may have assigned this rectangle to native graphics already. */
-            if (memcmp(s_vram_check, pixels[i], bytes) != 0) continue;
+            /* A room transition can supersede an upload before this cleanup. */
+            if (memcmp(s_vram_check, pixels[j], bytes) != 0) continue;
             memset(s_vram_check, 0, bytes);
             LoadImage(&rect, s_vram_check);
             DrawSync(0);
         }
+        texture->texture.w = 0;
     }
-    s_texture_kind = -1;
-    s_texture_checked = 0;
+    memset(s_texture_by_kind, 0, sizeof s_texture_by_kind);
+    memset(s_texture_failed, 0, sizeof s_texture_failed);
 }
-
 static int ledge_camera(void) {
     PeImpImageSet *set = NULL;
     char why[160];
@@ -1216,54 +1217,69 @@ static int show_placement_mesh(const PeReEnemyPlacement *p) {
             ((p->kind >= 0x10 && p->kind < 0x20) || pe_re2_proximity_enemy(p, 0))));
 }
 
-static void prepare_field_texture(void) {
-    if (s_texture_checked) return;
-    s_texture_checked = 1;
-    /* Pick one compatible model. All placements using it share a single atlas upload. */
-    int kind = -1;
-    for (int i = 0; i < s_placement_count; i++) {
-        const unsigned candidate = s_placements[i].kind;
-        if (!show_placement_mesh(&s_placements[i])) continue;
-        const PeImpModel *model = &s_field_mesh[candidate].model;
-        if (model->parts && model->h <= FIELD_TEX_HEIGHT * 2 && model->pal_rows &&
-            model->pal_rows <= FIELD_CLUT_ROWS) {
-            kind = (int)candidate;
-            break;
+static int field_palette_rect(RECT *palette) {
+    static const int rows[] = {496, 475, 480, 488, 504};
+    for (unsigned i = 0; i < sizeof rows / sizeof *rows; i++) {
+        palette->y = rows[i];
+        if (palette->y + palette->h > 512) continue;
+        for (int x = 320; x + palette->w <= 1024; x += 16) {
+            /* Leave the effect palette columns (640 and up) at y=500 to the effect bank. */
+            if (palette->y + palette->h > 500 && x + palette->w > 640) continue;
+            palette->x = x;
+            int occupied = 0;
+            for (int j = 0; j < FIELD_TEXTURE_SLOTS; j++) {
+                if (!s_field_textures[j].texture.w) continue;
+                const RECT used = s_field_textures[j].palette;
+                occupied |= x < used.x + used.w && x + palette->w > used.x &&
+                            palette->y < used.y + used.h && palette->y + palette->h > used.y;
+            }
+            if (!occupied && empty_texture_area(palette)) return 1;
         }
     }
-    if (kind < 0) {               /* no mesh loaded yet (they load as placements show): next frame */
-        s_texture_checked = 0;
-        return;
-    }
-    RECT texture = {FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT};
-    const PeImpModel *model = &s_field_mesh[kind].model;
-    if (!empty_texture_area(&texture)) return;
-    RECT clut = {0, 0, 256, model->pal_rows};
-    int spot = -1;
-    for (int i = 0; spot < 0 && i < (int)(sizeof k_field_clut_spots / sizeof *k_field_clut_spots); i++) {
-        if ((int)model->pal_rows > k_field_clut_spots[i].rows) continue;
-        clut.x = k_field_clut_spots[i].x, clut.y = k_field_clut_spots[i].y;
-        if (empty_texture_area(&clut)) spot = i;
-    }
-    if (spot < 0) return;
-    s_clut_x = clut.x, s_clut_y = clut.y;
-    /* Pack two 128-texel source columns at half resolution into a single
-     * checked VRAM rectangle. The full atlas does not fit beside native textures. */
-    const unsigned width = model->w < 4 * FIELD_TEX_WORDS ? model->w : 4 * FIELD_TEX_WORDS;
-    memset(s_texture_words, 0, sizeof s_texture_words);
-    memset(s_texture_clut, 0, sizeof s_texture_clut);
-    for (unsigned y = 0; y < model->h; y += 2)
-        for (unsigned x = 0; x < width; x += 2)
-            s_texture_words[(y / 2) * FIELD_TEX_WORDS + x / 4] |=
-                (uint16_t)model->image[y * model->w + x] << (8 * ((x / 2) & 1));
-    memcpy(s_texture_clut, model->pal, model->pal_rows * sizeof s_texture_clut[0]);
-    LoadImage(&texture, s_texture_words);
-    LoadImage(&clut, &s_texture_clut[0][0]);
-    DrawSync(0);
-    s_texture_palette_rows = model->pal_rows;
-    s_texture_kind = kind;
+    return 0;
 }
 
+static void prepare_field_texture(void) {
+    for (int i = 0; i < s_placement_count; i++) {
+        const PeReEnemyPlacement *placement = &s_placements[i];
+        if (!show_placement_mesh(placement)) continue;
+        const unsigned kind = placement->kind;
+        const PeImpModel *model = &s_field_mesh[kind].model;
+        if (s_texture_by_kind[kind] || s_texture_failed[kind] || !model->parts) continue;
+        s_texture_failed[kind] = 1;
+        if (model->h > FIELD_TEX_HEIGHT * 2 || !model->pal_rows || model->pal_rows > FIELD_CLUT_ROWS) {
+            pe_mod_log("pe_re_play", "EM%02x texture exceeds the field atlas dimensions", kind);
+            continue;
+        }
+        RECT palette = {0, 0, 256, model->pal_rows};
+        if (!field_palette_rect(&palette)) {
+            pe_mod_log("pe_re_play", "No field palette space for EM%02x", kind);
+            continue;
+        }
+        for (int slot = 0; slot < FIELD_TEXTURE_SLOTS; slot++) {
+            FieldTexture *texture = &s_field_textures[slot];
+            if (texture->texture.w) continue;
+            RECT rect = {FIELD_TEX_X + slot * FIELD_TEX_WORDS, FIELD_TEX_Y, FIELD_TEX_WORDS, (model->h + 1) / 2};
+            if (!empty_texture_area(&rect)) continue;
+            const unsigned width = model->w < 4 * FIELD_TEX_WORDS ? model->w : 4 * FIELD_TEX_WORDS;
+            memset(texture->words, 0, sizeof texture->words);
+            for (unsigned y = 0; y < model->h; y += 2)
+                for (unsigned x = 0; x < width; x += 2)
+                    texture->words[(y / 2) * FIELD_TEX_WORDS + x / 4] |=
+                        (uint16_t)model->image[y * model->w + x] << (8 * ((x / 2) & 1));
+            memcpy(texture->colours, model->pal, model->pal_rows * sizeof texture->colours[0]);
+            LoadImage(&rect, texture->words);
+            LoadImage(&palette, &texture->colours[0][0]);
+            DrawSync(0);
+            texture->texture = rect;
+            texture->palette = palette;
+            s_texture_by_kind[kind] = texture;
+            s_texture_failed[kind] = 0;
+            break;
+        }
+        if (s_texture_failed[kind]) pe_mod_log("pe_re_play", "No field texture page for EM%02x", kind);
+    }
+}
 static int field_rig_supported(const PeImpModel *model) {
     for (uint32_t b = 0; b < model->bones; b++)
         if (model->parent[b] >= (int)b || (b && model->parent[b] < 0)) return 0;
@@ -1414,7 +1430,7 @@ static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, cons
 }
 
 static int field_face_texture(const PeImpModel *model, const PeImpFace *face, const int corners[3],
-                              unsigned first_page, unsigned first_palette, unsigned *clut, unsigned *u_offset) {
+                              unsigned first_page, unsigned first_palette, const FieldTexture *texture, unsigned *clut, unsigned *u_offset) {
     const unsigned column = (face->page & 15u) - first_page;
     const unsigned palette = (face->clut >> 6) - first_palette;
     if (column >= 2 || palette >= model->pal_rows) return 0;
@@ -1424,7 +1440,7 @@ static int field_face_texture(const PeImpModel *model, const PeImpFace *face, co
             return 0;
     }
     *u_offset = column * 64;
-    *clut = (FIELD_CLUT_Y + palette) << 6 | (FIELD_CLUT_X / 16);
+    *clut = (texture->palette.y + palette) << 6 | (texture->palette.x / 16);
     return 1;
 }
 
@@ -1520,8 +1536,8 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                         unsigned clut, u_offset;
                         const unsigned first_page = s_field_mesh[p->kind].first_page;
                         const unsigned first_palette = s_field_mesh[p->kind].first_palette;
-                        if (s_texture_kind == p->kind &&
-                            field_face_texture(model, f, v, first_page, first_palette, &clut, &u_offset)) {
+                        const FieldTexture *texture = s_texture_by_kind[p->kind];
+                        if (texture && field_face_texture(model, f, v, first_page, first_palette, texture, &clut, &u_offset)) {
                             FieldTexturedTriangle *packet = &s_tex_packets[slot][i][emitted++];
                             *packet = (FieldTexturedTriangle){
                                 .color.bytes = {shade, shade, shade, 0x24},
@@ -1530,7 +1546,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                                 .x2 = (uint16_t)(int)lround(c[0]), .y2 = (uint16_t)(int)lround(c[1]),
                                 .u0 = u_offset + f->uv[v[0]][0] / 2, .v0 = FIELD_TEX_Y + f->uv[v[0]][1] / 2, .clut = clut,
                                 .u1 = u_offset + f->uv[v[1]][0] / 2, .v1 = FIELD_TEX_Y + f->uv[v[1]][1] / 2,
-                                .page = 0x80u | (FIELD_TEX_X / 64),
+                                .page = 0x80u | (texture->texture.x / 64),
                                 .u2 = u_offset + f->uv[v[2]][0] / 2, .v2 = FIELD_TEX_Y + f->uv[v[2]][1] / 2
                             };
                             packet->tag.length = 7;
@@ -1948,7 +1964,7 @@ void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count)
         if (show_placement_mesh(old) != show_placement_mesh(next)) changed = 1;
         if (old->x != next->x || old->z != next->z) s_last_motion[i] = now;
     }
-    if (changed) clear_field_texture();
+    if (changed) memset(s_texture_failed, 0, sizeof s_texture_failed);
     s_placement_count = count;
     if (count) memcpy(s_placements, placements, (size_t)count * sizeof *placements);
     if (!count) s_scene_count = 0;
@@ -1962,7 +1978,7 @@ void pe_re_stage_set_scene_actors(const PeReSceneActor *actors, int count) {
     if (count) memcpy(s_scene_actors, actors, (size_t)count * sizeof *actors);
     s_scene_count = count;
     if (changed) {
-        clear_field_texture();
+        memset(s_texture_failed, 0, sizeof s_texture_failed);
         load_field_meshes();
     }
 }
@@ -2080,9 +2096,11 @@ int pe_re_stage_vram_reserved(int *out, int max) {
             RESERVE(s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_FIRST_ROW, 64, (int)s_effect_pages[i].height);
             RESERVE(s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y, 16, (int)s_effect_pages[i].palettes);
         }
-    if (s_texture_kind >= 0) {
-        RESERVE(FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT);
-        RESERVE(FIELD_CLUT_X, FIELD_CLUT_Y, 256, (int)s_texture_palette_rows);
+    for (int i = 0; i < FIELD_TEXTURE_SLOTS; i++) {
+        const FieldTexture *texture = &s_field_textures[i];
+        if (!texture->texture.w) continue;
+        RESERVE(texture->texture.x, texture->texture.y, texture->texture.w, texture->texture.h);
+        RESERVE(texture->palette.x, texture->palette.y, texture->palette.w, texture->palette.h);
     }
 #undef RESERVE
     return n;
