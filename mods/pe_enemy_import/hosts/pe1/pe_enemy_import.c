@@ -153,7 +153,7 @@ static struct {
     int here, move_lock;     /* started in place; the field's movement lock bit 1 before it */
     int directed;            /* RE play's battle director runs this battle (docs/RE_PLAY_BATTLES.md) */
     unsigned dead_slots;     /* room slots whose foes died in it, reported to the director */
-    int anchored;            /* Aya's native position moved off the host room's map (D14) */
+    int anchored, aya_floorless;            /* Aya's native position moved off the host room's map (D14) */
     unsigned host_token;     /* the host room when the battle started: it must not change (I5) */
     int room_pos_known;      /* her room position at the encounter (RE play can't say once paused) */
     double room_x, room_z;
@@ -340,6 +340,10 @@ static void pe_anchor_battle(const PeRePlayApi *api) {
     g_PlayerEntity->pos_x = g_PlayerEntity->base_x = (int)lround(space.anchor_x * 65536.0);
     g_PlayerEntity->pos_z = g_PlayerEntity->base_z = (int)lround(space.anchor_z * 65536.0);
     g_PlayerEntity->collision_face = g_PlayerEntity->collision_face_mirror = NULL;
+    /* no floor of PE's out here: she stays out of PE's floor checks (a move would read the null face:
+     * a crash) until the stage walks her on the room's own colliders, and after it */
+    s.aya_floorless = !(g_PlayerEntity->flags & 0x80);
+    g_PlayerEntity->flags |= 0x80;
     s.anchored = 1;
     pe_mod_log(MOD_ID, "battle: fought off the host room at %d,%d (host floor %d..%d, %d..%d)",
                (int)space.anchor_x, (int)space.anchor_z, (int)host.x0, (int)host.x1, (int)host.z0, (int)host.z1);
@@ -349,6 +353,8 @@ static void pe_anchor_battle(const PeRePlayApi *api) {
 static void pe_unanchor_battle(void) {
     if (!s.anchored) return;
     s.anchored = 0;
+    if (s.aya_floorless && g_PlayerEntity) g_PlayerEntity->flags &= ~0x80u;
+    s.aya_floorless = 0;
     if ((unsigned)g_SceneDispatchToken != s.host_token)
         pe_mod_log(MOD_ID, "battle: INVARIANT I5 broken: the host room changed (%08X -> %08X)", s.host_token,
                    (unsigned)g_SceneDispatchToken);

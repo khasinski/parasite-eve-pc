@@ -45,6 +45,8 @@ static bool Host_StateChord(const SDL_Event *event);
 #include <psyz/video.h>
 #include "pe1/boot.h"
 #include "pe1/battle_runtime.h"
+#include "pe1/entity_allocation.h"
+#include "pe1/player_entity.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/boot_display.h"
 #include "pe1/boot_services.h"
@@ -3935,6 +3937,27 @@ static void Host_DescribeCrash(char *out, size_t size) {
         Host_CrashAppend(out, size, &used, "Speed-up: ON at the crash, the game was running at %ux\r\n", speed);
     } else {
         Host_CrashAppend(out, size, &used, "Speed-up: off at the crash (normal speed)\r\n");
+    }
+    /* The field's actors, for matching a register (g_EntityPool+0x...) to one: who it is, its flags
+     * (0x80: no floor checks), position, and the floor face under it (none: a floor check reads null). */
+    Host_CrashAppend(out, size, &used, "Actors (pool entry, pool offset, flags, position x/y/z, floor face, state):\r\n");
+    {
+        const FieldActor *pool = g_EntityPool, *end = pool + sizeof g_EntityPool / sizeof *g_EntityPool;
+        const FieldActor *a = g_FieldActorListHead;
+        int n = 0;
+        for (; a && n < 32; a = a->next, ++n) {
+            const int in_pool = a >= pool && a < end;
+            if (!in_pool && a != g_PlayerEntity) {
+                Host_CrashAppend(out, size, &used, "  %p: not in the entity pool; list not followed further\r\n",
+                                 (const void *)a);
+                break;
+            }
+            Host_CrashAppend(out, size, &used, "  %s%-2d +0x%04X flags 0x%08X at %d/%d/%d face %p state %p\r\n",
+                             a == g_PlayerEntity ? "Aya " : "", in_pool ? (int)(a - pool) : -1,
+                             in_pool ? (unsigned)((const char *)a - (const char *)pool) : 0u, a->flags,
+                             a->pos_x >> 16, a->pos_y >> 16, a->pos_z >> 16, a->collision_face, (const void *)a->state);
+        }
+        if (!n) Host_CrashAppend(out, size, &used, "  none\r\n");
     }
 
     /* The same names as the settings screen (settings_overlay.h). */
