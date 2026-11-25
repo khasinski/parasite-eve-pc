@@ -24,11 +24,11 @@ static const struct { unsigned em; int life; } k_life[] = {
     {0x2B, 200},   /* Mr. X, the last form */
     {0x2D, 250},
     {0x2E, 100},   /* ivy */
-    {0x30, 500},
-    {0x31, 700},   /* G, first form */
-    {0x33, 900},
-    {0x34, 1100},
-    {0x36, 600},
+    {0x30, 500},   /* G1 */
+    {0x31, 700},   /* G2 */
+    {0x33, 900},   /* G3 (Scenario B) */
+    {0x34, 1100},  /* G3/G4 overlay: initial non-alt value, before phase resets */
+    {0x36, 600},   /* G5 */
     {0x3A, 150},   /* moth */
 };
 
