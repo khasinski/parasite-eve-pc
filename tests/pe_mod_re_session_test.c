@@ -877,9 +877,31 @@ static void test_music_table_script(void)
     free(logic);
 }
 
+static unsigned routed_rounds;
+
+static int route_test_pickup(const char *game, uint16_t item, unsigned count) {
+    if (strcmp(game, "re2") || item != 0x14) return 0;
+    if (count > 999 - routed_rounds) return -1;
+    routed_rounds += count;
+    return 1;
+}
+
+/* Pocket ammo moves into the reserve whole, when it fits; other items stay. */
+static void test_move_pocket_ammo(void) {
+    PeReProgress p = {0};
+    CHECK(!pe_re_give(&p, 0x14, 15) && !pe_re_give(&p, 0x1D, 36) && !pe_re_give(&p, 0x5A, 1));
+    routed_rounds = 990;
+    CHECK(pe_re_move_ammo(&p, "re2", route_test_pickup) == 0 && pe_re_has(&p, 0x14));   /* no room yet */
+    routed_rounds = 0;
+    CHECK(pe_re_move_ammo(&p, "re2", route_test_pickup) == 1 && routed_rounds == 15);
+    CHECK(!pe_re_has(&p, 0x14) && pe_re_has(&p, 0x1D) && pe_re_has(&p, 0x5A) && p.held == 2);
+    CHECK(pe_re_move_ammo(&p, "re2", NULL) == 0);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "--host-store")) return re_headless_smoke(argv[2], 0) != 0;
     test_ground_enemy_variants();
+    test_move_pocket_ammo();
     test_movie_script();
     test_music_table_script();
     test_part_commands();
@@ -1087,6 +1109,17 @@ int main(int argc, char **argv) {
         CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, &got) == 0 && got.item == 88);
         CHECK(!pe_re_take(&q, l, &got, NULL, say, sizeof say) && !strcmp(say, "Picked up the item 88.") && pe_re_has(&q, 88));
         CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, NULL) < 0);     /* both copies gone: same flag */
+        memset(&q, 0, sizeof q);
+        got.item = 0x14;
+        got.count = 15;
+        routed_rounds = 990;
+        CHECK(pe_re_take_routed(&q, l, &got, NULL, say, sizeof say, "re2", route_test_pickup) < 0);
+        CHECK(routed_rounds == 990 && q.ntaken == 0 && !q.held);
+        CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, NULL) == 0);
+        routed_rounds = 900;
+        CHECK(!pe_re_take_routed(&q, l, &got, NULL, say, sizeof say, "re2", route_test_pickup));
+        CHECK(routed_rounds == 915 && q.ntaken == 1 && !q.held);
+        CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, NULL) < 0);
         CHECK(pe_re_message_at(l, NULL, 1200, 100) == 1 && pe_re_message_at(l, NULL, 600, 100) < 0);
         CHECK(!pe_re_message(l, 1, say, sizeof say) && !strcmp(say, "A paper, nothing useful."));
         CHECK(!pe_re_message(l, 0, say, sizeof say) && !strcmp(say, "First.") && pe_re_message(l, 2, say, sizeof say));

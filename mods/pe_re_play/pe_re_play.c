@@ -1240,6 +1240,11 @@ static int on_frame(void *ctx, void *user) {
     }
     if (movie_frame() || tick_ending()) return 0;
     s_session.talking = re_host()->dialogue_busy;
+    s_session.pickup_ammo = RE_HOST_HAS(re_host(), pickup_ammo) ? re_host()->pickup_ammo : NULL;
+    /* ammo already in the pocket (picked up before typed reserves, or taken from the item box) joins
+     * the combat reserves; what doesn't fit waits */
+    if (s_playing && !s_battle_paused && s_session.game && re_host()->room_active())
+        pe_re_move_ammo(&s_session.progress, s_session.game->game, s_session.pickup_ammo);
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
         const int up = re_host()->dialogue_busy();
         const uint16_t held = re_host()->held_buttons();

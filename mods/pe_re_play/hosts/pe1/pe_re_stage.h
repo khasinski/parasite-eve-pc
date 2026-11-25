@@ -73,5 +73,6 @@ void pe_re_stage_backdrop_release(void);
 int pe_re_stage_backdrop_shown(void);
 /* RE2's ammo types (pe_re_ammo.c), registered with "ammo_types" once it is up. */
 void pe_re_ammo_register(void);
+int pe_re_ammo_pickup(const char *game, uint16_t item, unsigned count);
 
 #endif

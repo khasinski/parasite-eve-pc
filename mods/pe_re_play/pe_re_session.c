@@ -334,6 +334,12 @@ static void start_event(PeReSession *s, const uint8_t data[6], int again) {
     s->events++;
 }
 
+static PeReChange take_pickup(PeReSession *s, const PeImpPickup *pk) {
+    pe_re_take_routed(&s->progress, s->logic, pk, s->items, s->said, sizeof s->said,
+                      s->game->game, s->pickup_ammo);
+    return PE_RE_SAID;
+}
+
 /* What a zone does, by its kind (SCE_AT.C's handlers). */
 static PeReChange zone_act(PeReSession *s, const char *store, const PeReZoneHit *h, int examine, char *why, size_t n) {
     s->zone = *h;
@@ -346,8 +352,7 @@ static PeReChange zone_act(PeReSession *s, const char *store, const PeReZoneHit 
     case PE_RE_ZONE_ITEM: {
         PeImpPickup pk;
         if (h->from != PE_RE_FROM_PICKUP || pe_imp_logic_pickup(s->logic, h->index, &pk)) return PE_RE_STAY;
-        pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
-        return PE_RE_SAID;
+        return take_pickup(s, &pk);
     }
     case PE_RE_ZONE_MESSAGE: return say_message(s, h->data);
     case PE_RE_ZONE_EVENT: start_event(s, h->data, examine); return PE_RE_STAY;
@@ -383,10 +388,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         }                                                  /* frame's underfoot zones (Sce_at), before its event runs */
         /* else, more forgiving than the game: a door, pickup or message zone she stands in */
         if (pe_re_door_at(s->logic, &s->run, x, z, &d) >= 0) return take_door(s, store, &d, why, n);
-        if (pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) {
-            pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
-            return PE_RE_SAID;
-        }
+        if (pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) return take_pickup(s, &pk);
         const int message = pe_re_message_at(s->logic, &s->run, x, z);
         if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
     }

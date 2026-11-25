@@ -197,6 +197,7 @@ const ReHost *re_host(void) {
         .vram_reserved = pe_re_stage_vram_reserved,
         .battle_point = pe_re_stage_battle_point,
         .battle_mark = pe_re_stage_battle_mark,
+        .pickup_ammo = pe_re_ammo_pickup,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,
         .player_scale = pe_re_stage_scale,

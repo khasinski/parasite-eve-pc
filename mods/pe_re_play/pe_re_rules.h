@@ -50,6 +50,10 @@ int pe_re_has(const PeReProgress *p, uint16_t item);
 int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count);
 /* Out of the pocket: `count` of it, or all when 0 (Sce_Item_lost / Sce_Item_lost2). 0, or -1 if not held. */
 int pe_re_lose(PeReProgress *p, uint16_t item, uint16_t count);
+
+/* Ammo in the pocket into the combat reserves: every stack `credit` takes whole (it returns 1, as a
+ * room pickup's host credit does) leaves the pocket. Others stay. How many stacks moved. */
+int pe_re_move_ammo(PeReProgress *p, const char *game, int (*credit)(const char *, uint16_t, unsigned));
 /* The item box: pocket slot `i` into it, or box slot `i` back into the pocket. 0, or -1 (no such
  * slot, the box or the pocket full). */
 int pe_re_box_put(PeReProgress *p, int i);
@@ -78,6 +82,9 @@ int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeR
  * script stops placing it); `say` gets "Picked up the Cabin Key." 0 or -1 (pocket full). */
 int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,
                char *say, size_t n);
+int pe_re_take_routed(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
+                      const PeImpRoomLogic *items, char *say, size_t n, const char *game,
+                      int (*credit)(const char *, uint16_t, unsigned));
 /* The message zone checked at (x, z): its message index, or -1. */
 int pe_re_message_at(const PeImpRoomLogic *room, const PeReScdRun *run, double x, double z);
 /* The kind a zone id has now: its last aot_reset's, else `sce`; data likewise. */

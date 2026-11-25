@@ -37,6 +37,16 @@ int pe_re_lose(PeReProgress *p, uint16_t item, uint16_t count) {
     return -1;
 }
 
+int pe_re_move_ammo(PeReProgress *p, const char *game, int (*credit)(const char *, uint16_t, unsigned)) {
+    int moved = 0;
+    if (!credit) return 0;
+    for (int i = p->held - 1; i >= 0; i--) {
+        const PeReHeld h = p->pocket[i];
+        if (h.count && credit(game, h.item, h.count) == 1 && !pe_re_lose(p, h.item, h.count)) moved++;
+    }
+    return moved;
+}
+
 int pe_re_box_put(PeReProgress *p, int i) {
     if (i < 0 || i >= p->held) return -1;
     const PeReHeld h = p->pocket[i];
@@ -168,11 +178,14 @@ int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeR
     return -1;
 }
 
-int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,
-               char *say, size_t n) {
+int pe_re_take_routed(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk,
+                      const PeImpRoomLogic *items, char *say, size_t n, const char *game,
+                      int (*credit)(const char *, uint16_t, unsigned)) {
     char name[48];
     pe_re_item_name(items, pk->item, name, sizeof name);
-    if (p->ntaken >= PE_RE_TAKEN_MAX || pe_re_give(p, pk->item, pk->count)) {
+    const int routed = p->ntaken >= PE_RE_TAKEN_MAX ? -1 :
+                       credit ? credit(game, pk->item, pk->count ? pk->count : 1) : 0;
+    if (routed < 0 || (!routed && pe_re_give(p, pk->item, pk->count))) {
         snprintf(say, n, "No room for the %s.", name);
         return -1;
     }
@@ -181,6 +194,11 @@ int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *p
     if (pk->count > 1) snprintf(say, n, "Picked up %u %s.", (unsigned)pk->count, name);
     else snprintf(say, n, "Picked up the %s.", name);
     return 0;
+}
+
+int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,
+               char *say, size_t n) {
+    return pe_re_take_routed(p, room, pk, items, say, n, NULL, NULL);
 }
 
 /* A message zone: a trigger of kind 4, or any live zone an aot_reset turned into one (a door that

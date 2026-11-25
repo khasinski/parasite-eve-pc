@@ -114,6 +114,8 @@ typedef struct ReHost {
     int (*battle_point)(int to_room, double x, double z, double *out_x, double *out_z);
     /* Optional. In battle: mark id at a host position, kind PE_RE_MARK_* (re_play_api.h); 0 clears it. */
     void (*battle_mark)(int id, int kind, double x, double z);
+    /* Room pickup: 1 credited, 0 use the room pocket, -1 reserve full. */
+    int (*pickup_ammo)(const char *game, uint16_t item, unsigned count);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

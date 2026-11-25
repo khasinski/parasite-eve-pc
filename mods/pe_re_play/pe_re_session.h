@@ -81,6 +81,7 @@ typedef struct {
     char said[200];                   /* the last thing to tell the player ("" if nothing) */
     PeImpDoor door;                   /* the last door taken (for its transition) */
     int (*talking)(void);             /* a message is up (scripts' wsleeping waits on it); NULL: never */
+    int (*pickup_ammo)(const char *game, uint16_t item, unsigned count);
     int doors_taken;
     const char *store;                /* the import store (for doors scripts set off) */
     uint32_t key, key_trg;            /* the game's key bits this frame (pe_re_scd_keys), for scripts */
