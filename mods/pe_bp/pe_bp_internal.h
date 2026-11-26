@@ -16,6 +16,7 @@
 
 /* ---- bp_store.c ---- */
 void bp_store_init(const char *mod_id);
+void bp_state_register(void);                /* bp_state.c: live state for test tools */
 const BpRecord *bp_store_record(void);
 int bp_store_readable(void);                 /* a game is loaded and its BP sections were readable */
 int bp_store_ready(void *user);              /* enable the sections for writing; 0 = refused */

@@ -21,8 +21,9 @@
  * the older "pe_stacks.counts" tail record moves to the section on load and the record is dropped;
  * if the section is refused, that save stays on the record. With the option switched off, the
  * extra copies go back into free slots of their list as plain items; what doesn't fit stays
- * counted. With the mod off, an old record is released the same way, and a companion section is
- * kept untouched until the mod is on again. */
+ * counted. With the mod off, the host releases them the same way (pe_extension_refill_stacks for
+ * the section, pe_save_refill_legacy_stacks for an old record): the extra copies go to free slots
+ * and only what didn't fit stays counted for when the mod is on again. */
 #include <stdio.h>
 #include <string.h>
 

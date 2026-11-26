@@ -315,6 +315,10 @@ void Entity_UpdateTimers(void) {
         }
     }
     if (g_ActiveActor->attributes->effectFlags & EFFECT_AUTO_MEDICINE) {
+        /* The original order, strongest first; PE_HOOK_AUTO_MEDICINE may reorder it. */
+        int medicine_order[5] = {ITEM_FULL_RECOVER, ITEM_MEDICINE_4, ITEM_MEDICINE_3,
+                                 ITEM_MEDICINE_2, ITEM_MEDICINE_1};
+        int medicine_asked = 0;
         consumed_item = 0;
         if ((s16) g_ActiveActor->curHP > 0) {
             do {
@@ -322,37 +326,23 @@ void Entity_UpdateTimers(void) {
                 max_hp = (s16) g_ActiveActor->maxHP;
                 hp_threshold = max_hp / 5;
                 if ((s16) g_ActiveActor->curHP < hp_threshold) {
-                    if (Inv_CountByValue(ITEM_FULL_RECOVER) != 0) {
-                        consumed_item = 1;
-                        Battle_ApplyDamage(ITEM_FULL_RECOVER);
-                        Inv_FindItemById(ITEM_FULL_RECOVER);
-                        continue;
+                    int medicine_index, medicine_used = 0;
+                    if (!medicine_asked) {
+                        PeHookAutoMedicine query = {medicine_order, 5};
+                        medicine_asked = 1;
+                        PE_HOOK(PE_HOOK_AUTO_MEDICINE, &query);
                     }
-                    if (Inv_CountByValue(ITEM_MEDICINE_4) != 0) {
-                        consumed_item = 1;
-                        Battle_ApplyDamage(ITEM_MEDICINE_4);
-                        Inv_FindItemById(ITEM_MEDICINE_4);
-                        continue;
+                    for (medicine_index = 0; medicine_index < 5 && !medicine_used; ++medicine_index) {
+                        int medicine = medicine_order[medicine_index];
+                        if (medicine < ITEM_MEDICINE_1 || medicine > ITEM_FULL_RECOVER) continue;
+                        if (Inv_CountByValue(medicine) != 0) {
+                            consumed_item = 1;
+                            Battle_ApplyDamage(medicine);
+                            Inv_FindItemById(medicine);
+                            medicine_used = 1;
+                        }
                     }
-                    if (Inv_CountByValue(ITEM_MEDICINE_3) != 0) {
-                        consumed_item = 1;
-                        Battle_ApplyDamage(ITEM_MEDICINE_3);
-                        Inv_FindItemById(ITEM_MEDICINE_3);
-                        continue;
-                    }
-                    if (Inv_CountByValue(ITEM_MEDICINE_2) != 0) {
-                        consumed_item = 1;
-                        Battle_ApplyDamage(ITEM_MEDICINE_2);
-                        Inv_FindItemById(ITEM_MEDICINE_2);
-                        continue;
-                    }
-                    consumed_item_snapshot = consumed_item & 0xFF;
-                    if (Inv_CountByValue(ITEM_MEDICINE_1) != 0) {
-                        consumed_item = 1;
-                        Battle_ApplyDamage(ITEM_MEDICINE_1);
-                        Inv_FindItemById(ITEM_MEDICINE_1);
-                        continue;
-                    }
+                    if (medicine_used) continue;
                 }
                 break;
             } while (1);

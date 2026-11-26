@@ -665,6 +665,24 @@ not the number of enemies in a fight.
 pe_qol/pe_battle_frequency.c owns matching and settings. A single SCRIPT_RANDOM
 hook supplies local RNG bounds; loaded scripts and save data are not patched.
 
+## Hold to skip dialogue
+
+Movement / Hold to skip dialogue (Off, Square, R1, L1; Off by default). A dialogue
+box draws its whole page at once and waits for the cooked action edge (field bit
+0x100) to turn the page or close. While the chosen button is held (decoded pad
+bits from PE_HOOK_PAD_MAP), PE_HOOK_TEXTBOXES sets that edge every third frame,
+so each page is drawn, and its choice flag set, before the next press. It never
+presses while any box is opening (state 1), drew choices (control flag 0x200000)
+or shows a page with the choice command (FB 09), or a page it can't read to its
+end. pe_qol/pe_dialogue_skip.c.
+
+## Auto Medicine order
+
+Combat / Auto Medicine order: Strongest first (native) or Weakest first. The
+Auto Medicine effect in Entity_UpdateTimers asks PE_HOOK_AUTO_MEDICINE once per
+heal for the order it tries Full Recover and Medicine 4..1 in; it still uses as
+many as it needs to get above a fifth of max HP. pe_qol/pe_auto_medicine.c.
+
 ## Panacea and medicine combining
 
 Panacea (item 0x19) restores 400 HP and cures ailments in battle or the field,

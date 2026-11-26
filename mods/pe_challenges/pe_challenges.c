@@ -59,6 +59,7 @@ static int challenges_init(void) {
     pe_ch_tabs_register(MOD_ID);
     pe_ch_assist_register(MOD_ID);
     pe_ch_runlog_register(MOD_ID);
+    pe_ch_state_register();          /* pe_ch_state.c: live state for test tools */
     pe_ch_milestones_register(MOD_ID);
     pe_ch_records_register(MOD_ID);
     pe_ch_notice_register(MOD_ID);

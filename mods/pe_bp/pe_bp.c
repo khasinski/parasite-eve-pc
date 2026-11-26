@@ -42,6 +42,7 @@ static int bp_init(void) {
     pe_service_publish("bp", 1, bp_api_public(), MOD_ID);
     pe_service_publish("bp_screens", 1, &s_screens, MOD_ID);
     pe_bp_battle_init(MOD_ID, bp_store_record);
+    bp_state_register();             /* bp_state.c: live state for test tools */
     return 0;
 }
 
