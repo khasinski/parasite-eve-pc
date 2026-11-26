@@ -34,7 +34,9 @@ void pe_debug_control_install(void);   /* pe_debug_control.c */
 
 extern const PeMod *const g_pe_mods[]; /* generated: pe_mod_list.c */
 
-enum { PE_MAX_HANDLERS = 256, PE_MAX_EVENTS = 64, PE_MAX_SERVICES = 32, PE_MAX_MODS = 32 };
+/* Room for every mod in the tree at once (the default list plus the opt-in mods, with RE play):
+ * that set registers more than 256 handlers and 32 services, and a full table refuses the rest. */
+enum { PE_MAX_HANDLERS = 512, PE_MAX_EVENTS = 64, PE_MAX_SERVICES = 64, PE_MAX_MODS = 64 };
 
 typedef struct {
     int id, priority, order;
@@ -508,6 +510,7 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_TEXT_STRETCH] = "text stretch",
         [PE_HOOK_TEXT_LETTER] = "text letter",
         [PE_HOOK_DISC_READ] = "disc read",
+        [PE_HOOK_AUTO_MEDICINE] = "auto medicine",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

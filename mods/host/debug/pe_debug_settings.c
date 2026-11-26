@@ -73,7 +73,10 @@ static void pe_ctl_mod_state(const char *name) {
         PeMenuRow *r = pe_menu_row(i);
         if (r->mod_id && !strcmp(r->mod_id, name)) ++found;
     }
-    if (!found) { pe_debug_reply("err %s %s", "mod-state", "unknown mod id or no registered rows"); return; }
+    if (!found && !pe_mod_state_count(name)) {
+        pe_debug_reply("err %s %s", "mod-state", "unknown mod id, or no registered rows or state");
+        return;
+    }
     pe_debug_path(path, sizeof path, "out");
     if (!(f = fopen(path, "a"))) return;
     fputs("ok mod-state {\"id\":", f); pe_debug_json_string(f, name);
@@ -90,7 +93,14 @@ static void pe_ctl_mod_state(const char *name) {
         else snprintf(value, sizeof value, "inactive");
         fputs(",\"value\":", f); pe_debug_json_string(f, value); fputc('}', f);
     }
-    fputs("]}\n", f); fclose(f);
+    fputc(']', f);
+    /* Live state: only a running mod's providers are called. */
+    if (pe_mod_state_count(name)) {
+        fputs(",\"live\":", f);
+        if (pe_mod_is_running(name)) pe_mod_state_write(f, name);
+        else fputs("null", f);
+    }
+    fputs("}\n", f); fclose(f);
 }
 
 

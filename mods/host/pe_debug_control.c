@@ -25,9 +25,33 @@ void pe_debug_path(char *out, size_t size, const char *name) {
     snprintf(out, size, "%s/%s", s_dir, name);
 }
 
+/* What `snapshot` reports as the lead-up: commands ("> ...") and short answers, oldest dropped. */
+#define PE_HISTORY 32
+static struct { unsigned frame; char line[160]; } s_history[PE_HISTORY];
+static unsigned s_history_next;
+
+static void pe_debug_remember(const char *line) {
+    s_history[s_history_next % PE_HISTORY].frame = s_frame;
+    snprintf(s_history[s_history_next % PE_HISTORY].line, sizeof s_history[0].line, "%s", line);
+    ++s_history_next;
+}
+
+void pe_debug_history_write(FILE *f) {
+    unsigned start = s_history_next > PE_HISTORY ? s_history_next - PE_HISTORY : 0, i;
+    fputc('[', f);
+    for (i = start; i < s_history_next; ++i) {
+        fprintf(f, "%s{\"frame\":%u,\"line\":", i != start ? "," : "", s_history[i % PE_HISTORY].frame);
+        pe_debug_json_string(f, s_history[i % PE_HISTORY].line);
+        fputc('}', f);
+    }
+    fputc(']', f);
+}
+
 void pe_debug_reply(const char *fmt, const char *command, const char *detail) {
-    char path[1100];
+    char path[1100], line[160];
     FILE *f;
+    snprintf(line, sizeof line, fmt, command, detail ? detail : "");
+    pe_debug_remember(line);
     pe_debug_path(path, sizeof path, "out");
     if (!(f = fopen(path, "a"))) return;
     fprintf(f, fmt, command, detail ? detail : "");
@@ -54,6 +78,9 @@ static const PeDebugModule *const s_modules[] = {
     &pe_debug_setup_module,
     &pe_debug_settings_module,
     &pe_debug_trace_module,
+    &pe_debug_ui_module,
+    &pe_debug_snapshot_module,
+    &pe_debug_events_module,
 };
 
 const PeDebugModule *const *pe_debug_modules(size_t *count) {
@@ -68,6 +95,11 @@ static void pe_ctl_run(char *line) {
     line[strcspn(line, "\r\n")] = 0;
     if (!*line) return;
     pe_log("debug_control", "command %s", line);
+    {
+        char remembered[160];
+        snprintf(remembered, sizeof remembered, "> %s", line);
+        pe_debug_remember(remembered);
+    }
     for (m = 0; m < sizeof s_modules / sizeof *s_modules; ++m) {
         const PeDebugModule *module = s_modules[m];
         for (c = 0; c < module->count; ++c) {
