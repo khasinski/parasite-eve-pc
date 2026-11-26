@@ -42,11 +42,23 @@
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
 #include "psyz/system.h"
+#include "pe_mod_state.h"
+#include "pe1/menu_dialog.h"
+#include "pe1/menu_state.h"
+#include "pe1/save.h"
+#include "pe1/textbox.h"
+#include "pe1/textbox_open.h"
 
 
 #define PE_SCRIPT_SCAN 0x8000
-static PeHookFn s_hooks[PE_HOOK_COUNT];
-static void *s_hook_users[PE_HOOK_COUNT];
+#define TEST_SAVE_EVENT PE_HOOK_COUNT        /* pe_event_id("save.committed") */
+static PeHookFn s_hooks[PE_HOOK_COUNT + 1];
+static void *s_hook_users[PE_HOOK_COUNT + 1];
+u32 g_BootHostVBlankCount;
+s8 g_MenuEquipSlotIndex;
+int pe_event_id(const char *name) { return !strcmp(name, PE_EVENT_SAVE_COMMITTED) ? TEST_SAVE_EVENT : -1; }
+static void frame(void) { s_hooks[PE_HOOK_FRAME](NULL, s_hook_users[PE_HOOK_FRAME]); }
+static void fire(int hook) { s_hooks[hook](NULL, s_hook_users[hook]); }
 
 
 #define DIR "pe-debug-control-test"
@@ -67,6 +79,25 @@ BattleEnemySlot g_BattleEnemySlots[7];
 Combatant *g_ActiveActor;
 s32 g_ItemDropRngIndex;
 u8 g_ItemDropRngTable[521];
+TextboxEntry g_TextboxEntries[4];
+u8 g_DialogueChoiceCursor;
+unsigned char g_MenuActiveMode;
+int g_InvSelectedItemIndex, g_MenuActionSubmenuOpen, g_MemCardDialogState, g_SaveSelectedSlot;
+unsigned int g_MenuActionSubmenuSel;
+static const char *s_current_mod;
+static int s_mod_calls;
+const char *pe_mod_current(void) { return s_current_mod; }
+void pe_mod_call_begin(const char *mod, const char *what, const char *detail) { (void)mod; (void)what; (void)detail; ++s_mod_calls; }
+void pe_mod_call_end(void) {}
+static void wallet_state(PeStateWriter *w, void *user) {
+    pe_state_int(w, "junk", *(int *)user);
+    pe_state_text(w, "name", "a \"quoted\" one");
+    pe_state_begin_list(w, "list");
+    pe_state_int(w, NULL, 1);
+    pe_state_begin_object(w, NULL);
+    pe_state_bool(w, "ok", 1);
+    /* left open: the reader closes the object and the list */
+}
 static ItemDataRecord s_weapon;
 static PeMenuRow s_row;
 static int s_given;
@@ -106,6 +137,8 @@ int Text_EncodeBase32(char *out, unsigned int v) {
     for (i = 0; i < 6; ++i) out[i] = (char)g_Base32CharTable[(v >> ((5 - i) * 5 + 2)) & 0x1F];
     return 0;
 }
+static int s_day_calls;
+int Scene_SetStoryDay(int day) { g_GameState.current_story_day = (s8)day; ++s_day_calls; return 0; }
 int Script_EncodeBarcode(int **args) { s_warp_arg = (unsigned)*args[0]; ++s_warped; return 1; }
 int Inv_GetAyaSlotLimit(void) { return 30; }
 void Save_BuildHeader(void) {}
@@ -166,11 +199,13 @@ size_t Script_TaskBytesAvailable(const void *address) {
     for (unsigned i = 0; i < 3; ++i) if (address == s_script[i]) return s_script_bytes[i];
     return 0;
 }
+static int s_no_floor;          /* the next spot is off the walkable mesh: no triangle found */
 void Entity_FindFloor(struct BattleEntity *actor) {
     FieldActor *field = (FieldActor *)actor;
     assert(!field->collision_face && !field->collision_face_mirror);
-    field->collision_face = field->collision_face_mirror = (void *)s_script;
     ++s_floor_refreshes;
+    if (s_no_floor) return;      /* as the game's: the face stays as it was (null here) */
+    field->collision_face = field->collision_face_mirror = (void *)s_script;
 }
 
 int main(void) {
@@ -227,6 +262,7 @@ int main(void) {
         assert(starts(ask("ini-set Test/Enabled 2"), "err ini-set") && value == 1);
         assert(starts(ask("ini-set unknown 0"), "err ini-set"));
         assert(strstr(ask("mod-state test"), "\"running\":true"));
+        assert(!strstr(s_answer, "\"live\""));                  /* no providers yet */
         assert(starts(ask("mod-state unknown"), "err mod-state"));
         /* A choice whose list comes from the mod (F1 > Fights), and an action row pressed as Enter. */
         s_row.kind = PE_ROW_DYNAMIC_CHOICE; s_row.label = "Fight"; s_row.count_fn = test_three; s_row.count = 10;
@@ -237,6 +273,77 @@ int main(void) {
         assert(!strcmp(ask("mod-action Test/Start"), "ok mod-action Test/Start") && s_pressed == 1);
         assert(!strcmp(ask("mod-action Test/Other"), "err mod-action unknown action") && s_pressed == 1);
         s_row.kind = PE_ROW_TOGGLE; s_row.label = "Enabled"; s_row.value = &value;
+        {
+            static int junk = 12;
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == -1);   /* outside init */
+            s_current_mod = "test";
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == 0);
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == -1);  /* same name */
+            assert(pe_mod_state_provider("", wallet_state, &junk) == -1);
+            s_current_mod = "stopped";
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == 0);   /* other owner */
+            s_current_mod = NULL;
+            s_mod_calls = 0;
+            assert(strstr(ask("mod-state test"),
+                          "\"live\":{\"wallet\":{\"junk\":12,\"name\":\"a \\\"quoted\\\" one\",\"list\":[1,{\"ok\":true}]}}}"));
+            assert(s_mod_calls == 1);
+            /* A stopped mod's provider is never called; it still answers, with live null. */
+            assert(strstr(ask("mod-state stopped"), "\"running\":false,\"rows\":[],\"live\":null}"));
+            assert(s_mod_calls == 1);
+        }
+        {
+            /* ui-state: one dialogue box waiting on a two-way choice ("Yes"), and a page the
+             * box opened earlier, read through the late TEXT_PAGE hook. */
+            static unsigned char yes[] = { 0x28, 0x34, 0x42, 0xFF };
+            static unsigned char hello[] = { 0x17, 0x34, 0x3B, 0x3B, 0x3E, 0xFF };
+            unsigned char *message = hello;
+            PeHookTextPage page = { NULL, 23, &message };
+            assert(s_hooks[PE_HOOK_TEXT_PAGE]);
+            s_hooks[PE_HOOK_TEXT_PAGE](&page, s_hook_users[PE_HOOK_TEXT_PAGE]);
+            g_TextboxEntries[1].state = 2;
+            g_TextboxEntries[1].page_id = 24;
+            g_TextboxEntries[1].message = yes;
+            g_TextboxEntries[1].control.flags = 0x200000 | (2 << 0x16);
+            g_DialogueChoiceCursor = 1;
+            g_SaveSelectedSlot = 3;
+            ask("ui-state");
+            assert(starts(s_answer, "ok ui-state {\"menu\":{\"open\":false"));
+            assert(strstr(s_answer, "\"save_slot\":3"));
+            assert(strstr(s_answer, "{\"box\":1,\"state\":\"waiting\",\"page\":24,"));
+            assert(strstr(s_answer, "\"text\":\"Yes\",\"choices\":2,\"choice\":1}"));
+            assert(strstr(s_answer, "\"recent_pages\":[{\"frame\":0,\"map\":48,\"page\":23,\"text\":\"Hello\"}]"));
+            /* A mod rewrites the open box of page 23: the page's entry follows what it draws. */
+            g_TextboxEntries[1].page_id = 23;
+            s_hooks[PE_HOOK_FRAME](NULL, s_hook_users[PE_HOOK_FRAME]);
+            assert(strstr(ask("ui-state"), "\"page\":23,\"text\":\"Yes\"}]"));
+            g_TextboxEntries[1].state = 0;
+        }
+        {
+            /* snapshot: one JSON file holding every part, with the commands that led here. */
+            char *json;
+            long size;
+            assert(starts(ask("snapshot a/b"), "err snapshot"));
+            assert(!strcmp(ask("snapshot fail-1"), "ok snapshot snapshot-fail-1.json"));
+            f = fopen(DIR "/snapshot-fail-1.json", "rb");
+            assert(f);
+            fseek(f, 0, SEEK_END); size = ftell(f); fseek(f, 0, SEEK_SET);
+            json = calloc(1, (size_t)size + 1);
+            assert(json && fread(json, 1, (size_t)size, f) == (size_t)size);
+            fclose(f);
+            assert(starts(json, "{\"version\":1,"));
+            assert(strstr(json, "\"room\":{\"map\":48"));
+            assert(strstr(json, "\"ui\":{\"menu\""));
+            assert(strstr(json, "\"battle\":{\"active\""));
+            assert(strstr(json, "\"bag\":["));
+            assert(strstr(json, "\"actors\":["));
+            assert(strstr(json, "\"mods\":{\"test\":{\"wallet\":{\"junk\":12"));
+            assert(!strstr(json, "\"stopped\""));
+            assert(strstr(json, "\"line\":\"> snapshot fail-1\"}]"));
+            assert(strstr(json, "\"line\":\"err snapshot "));
+            free(json);
+            assert(!strcmp(ask("snapshot"), "ok snapshot snapshot.json"));
+            assert(!fopen(DIR "/snapshot.json.tmp", "r"));
+        }
         Psyz_Srand(123); g_FrameRngCounter = 456; g_ItemDropRngIndex = 520;
         memset(g_ItemDropRngTable, 0xab, sizeof g_ItemDropRngTable);
         snprintf(snapshot, sizeof snapshot, "%s", ask("rng-get") + 11);
@@ -275,6 +382,14 @@ int main(void) {
     assert(!strcmp(ask("get-var 48"), "ok get-var 48=12C"));
     assert(starts(ask("get-var 512"), "err get-var"));
     assert(starts(ask("set-var 3"), "err set-var"));
+
+    /* set-day: the game's own day change, 1..8, free field only */
+    assert(!strcmp(ask("set-day 3"), "ok set-day day=3") && s_day_calls == 1);
+    assert(starts(ask("set-day 9"), "err set-day") && starts(ask("set-day x"), "err set-day") && s_day_calls == 1);
+    s_free = 0;
+    assert(!strcmp(ask("set-day 2"), "err set-day not in free field") && s_day_calls == 1);
+    s_free = 1;
+    g_GameState.current_story_day = 5;
 
     /* actors: Wayne (2.0) holds his Junk count at +1A98; Aya is the second actor */
     s_actor[0].next = &s_actor[1];
@@ -348,6 +463,15 @@ int main(void) {
     assert(!strcmp(ask("place 100 -200 1024"), "ok place 100,-200"));
     assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].rot_y == 1024);
     assert(s_floor_refreshes == 3 && s_actor[1].collision_face == (void *)s_script);
+    /* Off the walkable mesh: refused, and Aya stays where she was, on her floor (a null floor
+     * triangle crashed the field's movement). */
+    s_no_floor = 1;
+    assert(starts(ask("place 999999999 999999999 7"), "err place no floor"));
+    assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].rot_y == 1024);
+    assert(s_actor[1].collision_face == (void *)s_script && s_actor[1].collision_face_mirror == (void *)s_script);
+    assert(starts(ask("place-near 0 0x7FFFFFF"), "err place-near no floor"));
+    assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].collision_face == (void *)s_script);
+    s_no_floor = 0;
 
     /* save-block: no companion, then with one (copied, named, and the staged one dropped) */
     assert(!strcmp(ask("save-block 1"), "ok save-block BASLUS-006620000000A") && s_cancelled == 1);
@@ -379,6 +503,83 @@ int main(void) {
     f = fopen(DIR "/cmd", "r"); assert(f); fclose(f);
     pe_debug_control_poll();
     assert(!fopen(DIR "/cmd", "r") && !fopen(DIR "/cmd.processing", "r"));
-    puts("Debug control: room ids, warp, variables, actors, bounded find-script, floor refresh, save-block and queued commands");
+
+    /* Event log: changes only, one line each, in the order they happened. */
+    {
+        static unsigned char hi[] = { 0x17, 0x38, 0xFF };          /* "Hi" */
+        static unsigned char hi_more[] = { 0x17, 0x38, 0x2B, 0xFF }; /* "Hi!" */
+        static const char *const expected[] = {
+            "\"event\":\"dialogue_opened\",\"box\":2,\"page\":7,\"choices\":2,\"text\":\"Hi\"",
+            "\"event\":\"dialogue_waiting\",\"box\":2,\"page\":7,\"choices\":2,\"text\":\"Hi\"",
+            "\"event\":\"dialogue_changed\",\"box\":2,\"page\":7,\"choices\":3,\"text\":\"Hi!\"",
+            "\"event\":\"dialogue_closed\",\"box\":2,\"page\":7,\"choices\":3,\"answer\":1",
+            "\"event\":\"room\",\"map\":48,\"token\":\"A8005148\"",
+            "\"event\":\"battle_started\"",
+            "\"event\":\"player_down\"",
+            "\"event\":\"battle_ended\",\"hp\":0",
+            "\"event\":\"menu_opened\"",
+            "\"event\":\"no_control\"",
+            "\"event\":\"title\"",
+            "\"event\":\"save_loaded\"",
+            "\"event\":\"title_left\"",
+            "\"event\":\"scene_loaded\",\"map\":48",
+            "\"event\":\"new_game\"",
+            "\"event\":\"save_committed\"",
+            "\"event\":\"battle_started\"",
+            "\"event\":\"battle_ended\",\"hp\":80,\"left\":true",
+            "\"event\":\"to_title\",\"from_map\":48",
+        };
+        char line[1024], answer[64];
+        unsigned n = 0, seq;
+        Combatant *aya = (Combatant *)g_PlayerEntity->state;
+        s_free = 1;
+        frame();                                  /* settle: the state as it is now */
+        remove(DIR "/events.jsonl");
+        assert(sscanf(ask("events"), "ok events %u", &seq) == 1);
+        frame();
+        assert(!fopen(DIR "/events.jsonl", "r"));  /* nothing changed: nothing written */
+        g_TextboxEntries[2].state = 1; g_TextboxEntries[2].page_id = 7; g_TextboxEntries[2].message = hi;
+        g_TextboxEntries[2].control.flags = 0x200000 | (2 << 0x16);
+        g_MenuEquipSlotIndex = -1;
+        frame(); frame();                         /* opened once, not twice */
+        g_TextboxEntries[2].state = 2; frame();
+        g_TextboxEntries[2].message = hi_more;              /* a mod adds a row */
+        g_TextboxEntries[2].control.flags = 0x200000 | (3 << 0x16);
+        frame(); frame();
+        g_MenuEquipSlotIndex = 1; g_TextboxEntries[2].state = 0; frame();
+        g_SceneDispatchToken = (int)0xA8005148u; frame();
+        g_GameStateFlags |= 2; frame();
+        aya->curHP = 0; frame(); frame();
+        g_GameStateFlags &= ~2u; frame();
+        g_GameStateFlags |= 4; frame();
+        s_free = 0; frame();
+        fire(PE_HOOK_TITLE_FRAME); fire(PE_HOOK_TITLE_FRAME);
+        fire(PE_HOOK_SAVE_READ);
+        frame();
+        fire(PE_HOOK_SCENE_START); fire(PE_HOOK_NEW_GAME); fire(TEST_SAVE_EVENT);
+        /* A game over: Aya down in a battle, the field loop ends for the title. Its last frame's
+         * FRAME_DRAWN sees the title token; no field frame follows. */
+        aya->curHP = 80;
+        g_GameStateFlags |= 2; frame();
+        g_SceneDispatchToken = (int)0xA9400048u;
+        fire(PE_HOOK_FRAME_DRAWN); fire(PE_HOOK_FRAME_DRAWN);
+        g_GameStateFlags &= ~6u; aya->curHP = 80; s_free = 1;
+        g_SceneDispatchToken = (int)0xA8005148u;
+        f = fopen(DIR "/events.jsonl", "r");
+        assert(f);
+        while (fgets(line, sizeof line, f)) {
+            char want[32];
+            assert(n < sizeof expected / sizeof *expected);
+            snprintf(want, sizeof want, "{\"seq\":%u,", seq + n + 1);
+            assert(starts(line, want));
+            assert(strstr(line, expected[n]));
+            ++n;
+        }
+        fclose(f);
+        assert(n == sizeof expected / sizeof *expected);
+        snprintf(answer, sizeof answer, "ok events %u", seq + n);
+        assert(!strcmp(ask("events"), answer));
+    }
+    puts("Debug control: room ids, warp, variables, actors, bounded find-script, floor refresh, save-block, queued commands, ui-state, snapshot, live mod state and the event log");
     return 0;
 }

@@ -16,6 +16,7 @@ void pe_junk_counter_register(const char *mod_id);
 void pe_smoke_register(const char *mod_id);
 void pe_costume_rules_register(const char *mod_id); /* pe_costume_rules.c: the Wardrobe's unlock rules */
 void pe_smoke_shutdown(void);
+void pe_econ_state_register(void);  /* pe_econ_state.c: live state for test tools */
 
 static int economy_init(void) {
     pe_econ_store_register(MOD_ID);
@@ -24,6 +25,7 @@ static int economy_init(void) {
     pe_junk_counter_register(MOD_ID);
     pe_costume_rules_register(MOD_ID);
     pe_smoke_register(MOD_ID);
+    pe_econ_state_register();
     return 0;
 }
 

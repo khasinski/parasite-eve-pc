@@ -262,6 +262,42 @@ int main(int argc,char **argv) {
         assert(s_junk.junk == 0 && s_keys[0] == 0);
     }
 
+    /* Admission (the card load asks pe_save_peek for the companion link, then pe_save_prepare_load):
+     * a partly overwritten container is admitted and recovered, not refused. A record still there
+     * peeks fine; one absent from it is unknown (it may have been lost), not "none". A damaged or
+     * newer header is refused. */
+    {
+        unsigned char link[8], got[16];
+        unsigned gv = 0, gn = 0;
+        memset(link, 0x5A, sizeof link);
+        tail_begin(other);
+        tail_add(other, fnv("pe_qol.keys"), 1, "\xC8\0\0\0\0\0\0\0", 8);
+        tail_add(other, fnv("pe_economy.loot"), 2, "\x2A\0\0\0\0\0\0\0", 8);
+        tail_add(other, fnv("pe_host.extlink"), 1, link, sizeof link);
+        tail_end(other);
+        assert(pe_save_peek(other, "pe_host.extlink", &gv, got, sizeof got, &gn) == 1 && gv == 1 && gn == 8);
+        assert(pe_save_peek(other, "nobody.here", &gv, got, sizeof got, &gn) == 0);
+        assert(pe_save_prepare_load(other) == 0);
+        p = find(other, "pe_economy.loot", NULL, NULL);
+        other[p - other] ^= 1;                                         /* another build wrote over it */
+        assert(pe_save_peek(other, "pe_host.extlink", &gv, got, sizeof got, &gn) == 1 && got[0] == 0x5A);
+        assert(pe_save_peek(other, "pe_economy.loot", &gv, got, sizeof got, &gn) == -1);   /* lost */
+        assert(pe_save_peek(other, "nobody.here", &gv, got, sizeof got, &gn) == -1);       /* unknown */
+        assert(pe_save_prepare_load(other) == 0);                      /* admitted, not "unreadable" */
+        s_junk.junk = 6; s_keys[0] = 0;
+        game_load(other);
+        assert(s_junk.junk == 0 && s_junk.pity == 7 && s_keys[0] == 0xC8);   /* lost reset, kept loaded */
+        memcpy(crash, other, sizeof crash);
+        crash[0x1C90 + 4] = 2;                                         /* a newer container format */
+        assert(pe_save_peek(crash, "pe_host.extlink", &gv, got, sizeof got, &gn) == -1);
+        assert(pe_save_prepare_load(crash) == -1);
+        crash[0x1C90 + 4] = 1;
+        crash[0x1C90 + 6] = 0xFF; crash[0x1C90 + 7] = 0xFF;            /* a damaged header */
+        assert(pe_save_peek(crash, "pe_host.extlink", &gv, got, sizeof got, &gn) == -1);
+        assert(pe_save_prepare_load(crash) == -1);
+        s_keys[0] = 0;
+    }
+
     /* New Game: everything resets and nothing carries over. */
     s_junk.junk = 300; s_keys[0] = 0xC9;
     game_save();
