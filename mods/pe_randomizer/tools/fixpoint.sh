@@ -6,7 +6,9 @@
 # Usage: fixpoint.sh [dir=rwin]   (in build-mods/mods, PE_TEST_DISC set)
 set -e
 T=$(dirname "$0")
-EXE=./test-mod-randomizer-run.exe
+EXE=./test-mod-randomizer-run
+[ -x "$EXE" ] || EXE="$EXE.exe"
+[ -x "$EXE" ] || { echo "Missing randomizer run executable" >&2; exit 1; }
 D=${1:-rwin}
 zones=$(cat "$D/zones.list")
 [ -f "$D/base-fix.txt" ] || { cp "$D/randomizer-run.txt" "$D/base-fix.txt"; cp runs-win.txt "$D/base-fix-runs.txt"; }

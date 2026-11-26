@@ -7,7 +7,9 @@
 # Usage: storyruns.sh [dir=rwin]   (in build-mods/mods, PE_TEST_DISC set, test-mod-randomizer-run built)
 set -e
 T=$(dirname "$0")
-EXE=./test-mod-randomizer-run.exe
+EXE=./test-mod-randomizer-run
+[ -x "$EXE" ] || EXE="$EXE.exe"
+[ -x "$EXE" ] || { echo "Missing randomizer run executable" >&2; exit 1; }
 D=${1:-rwin}
 mkdir -p "$D"
 # giveruns.py pairs runs lines with outputs line by line: a crashed run must be fixed in the test first.
