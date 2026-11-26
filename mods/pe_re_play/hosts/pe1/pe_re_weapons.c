@@ -43,7 +43,7 @@ static const ReWeapon weapons[] = {
     {"re2", 0x09, 0x18, ITEM_M203_5, NULL, PE_RE_WEAPON_GRENADE_SPLASH, k_re2_launcher_rounds,
      sizeof k_re2_launcher_rounds / sizeof *k_re2_launcher_rounds},
     {"re2", 0x0C, 0x1D, ITEM_MP5K, "re2.bolts", PE_RE_WEAPON_DEFAULT, NULL, 0},
-    {"re2", 0x0E, 0x1C, ITEM_MP5A5, "re2.spark", PE_RE_WEAPON_DEFAULT, NULL, 0},
+    {"re2", 0x0E, 0x1C, ITEM_MP5A5, "re2.spark", PE_RE_WEAPON_SPARK_BEAM, NULL, 0},
     {"re2", 0x0F, 0x1B, ITEM_MP5K, NULL, PE_RE_WEAPON_DEFAULT, NULL, 0},
 };
 static PeReProgress *progress;

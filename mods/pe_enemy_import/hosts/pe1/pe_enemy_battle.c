@@ -1530,17 +1530,21 @@ typedef struct {
     const char *name;
     double range;          /* the aimed foe: at most this far from Aya (0: any distance) */
     double reach;          /* extra foes: at most this far from Aya (cone) or from the aimed foe (blast) */
-    int cone;              /* 1: extras inside a 45-degree half-cone from Aya; 0: a blast around the aimed foe */
+    int cone;              /* 1: extras inside a half-cone from Aya (cos^2 of its half-angle below); 0: a blast around the aimed foe */
+    double cone_cos2;
     int zombies_only;      /* only zombie kinds take part (aimed and extra) */
     int kill;              /* 1: the aimed and extra foes take their remaining HP */
     int share_pct;         /* otherwise extras take this share of the aimed hit's damage */
 } AreaRule;
 static const AreaRule k_area_rules[] = {
     /* RE2: a close shell can kill up to three zombies (retail reference, "Shotgun"). */
-    {PE_RE_WEAPON_CLOSE_SHOTGUN, "close shotgun spread", 1800.0, 1800.0, 1, 1, 1, 0},
+    {PE_RE_WEAPON_CLOSE_SHOTGUN, "close shotgun spread", 1800.0, 1800.0, 1, 0.5, 1, 1, 0},
     /* RE2 explosive rounds: full damage to the aimed foe, half to up to two neighbours. The radius and
      * share are provisional (the simulation's assumption), pending a retail measurement. */
-    {PE_RE_WEAPON_GRENADE_SPLASH, "grenade splash", 0.0, 1500.0, 0, 0, 0, 50},
+    {PE_RE_WEAPON_GRENADE_SPLASH, "grenade splash", 0.0, 1500.0, 0, 0.0, 0, 0, 50},
+    /* RE2's Sparkshot: a short electric beam; the aimed foe within reach and up to two more in a
+     * narrow 20-degree half-cone take the full hit (provisional, pending bio2-ds's own range). */
+    {PE_RE_WEAPON_SPARK_BEAM, "sparkshot beam", 2600.0, 2600.0, 1, 0.883, 0, 0, 100},
 };
 
 /* One shell is one shot: PE's shotguns already hit several foes per command, natively, within a few
@@ -1576,6 +1580,12 @@ static void area_hit(PeHookEnemyDamage *hit) {
     const double dx = ((double)primary->actor->pos_x - g_PlayerEntity->pos_x) * scale;
     const double dz = ((double)primary->actor->pos_z - g_PlayerEntity->pos_z) * scale;
     const double distance2 = dx * dx + dz * dz;
+    /* the Sparkshot's arc to the aimed foe, also when the beam can't reach it */
+    const int bolts = rule->role == PE_RE_WEAPON_SPARK_BEAM &&
+                      api->struct_size >= offsetof(PeRePlayApi, battle_bolt) + sizeof api->battle_bolt && api->battle_bolt;
+    if (bolts)
+        api->battle_bolt(g_PlayerEntity->pos_x / 65536.0, g_PlayerEntity->pos_z / 65536.0,
+                         primary->actor->pos_x / 65536.0, primary->actor->pos_z / 65536.0, 18);
     if (rule->range > 0 && distance2 > rule->range * rule->range) {
         pe_mod_log(MOD_ID, "battle: %s: foe %d at %.0f, out of range", rule->name, (int)(primary - s.foe), sqrt(distance2));
         return;
@@ -1595,7 +1605,7 @@ static void area_hit(PeHookEnemyDamage *hit) {
             /* from Aya, inside a 45-degree half-cone around the aimed foe */
             const double dot = dx * x + dz * z;
             d2 = x * x + z * z;
-            if (distance2 <= 0 || dot <= 0 || dot * dot < 0.5 * distance2 * d2) continue;
+            if (distance2 <= 0 || dot <= 0 || dot * dot < rule->cone_cos2 * distance2 * d2) continue;
         } else {
             d2 = (x - dx) * (x - dx) + (z - dz) * (z - dz);   /* from the aimed foe */
         }
@@ -1613,6 +1623,10 @@ static void area_hit(PeHookEnemyDamage *hit) {
     for (int i = 0; i < s.foes; i++)
         for (int k = 0; k < 2; k++)
             if (hit->spread[k].target && hit->spread[k].target == s.foe[i].actor) extra[k] = i;
+    for (int k = 0; bolts && k < 2; k++)      /* the beam's arcs to the extra foes */
+        if (extra[k] >= 0)
+            api->battle_bolt(g_PlayerEntity->pos_x / 65536.0, g_PlayerEntity->pos_z / 65536.0,
+                             s.foe[extra[k]].actor->pos_x / 65536.0, s.foe[extra[k]].actor->pos_z / 65536.0, 18);
     pe_mod_log(MOD_ID, "battle: %s hit %d foes (foe %d at %.0f, hp %d, damage %d; extra foes %d, %d for %d, %d)",
                rule->name, 1 + (hit->spread[0].target != NULL) + (hit->spread[1].target != NULL),
                (int)(primary - s.foe), sqrt(distance2), core->hpAlive, *hit->damage, extra[0], extra[1],

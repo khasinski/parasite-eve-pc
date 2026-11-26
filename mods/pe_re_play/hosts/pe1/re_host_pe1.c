@@ -213,6 +213,7 @@ const ReHost *re_host(void) {
         .weapon_role = pe_re_weapon_role,
         .round_entries = pe_re_weapon_round_entries,
         .load_round = pe_re_weapon_load_round,
+        .battle_bolt = pe_re_stage_battle_bolt,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,
         .player_scale = pe_re_stage_scale,

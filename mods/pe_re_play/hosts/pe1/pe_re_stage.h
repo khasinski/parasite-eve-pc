@@ -59,6 +59,8 @@ int pe_re_stage_battle_point(int to_room, double x, double z, double *out_x, dou
 #define PE_RE_MARK_CUE 2      /* a joining enemy (D19) */
 #endif
 void pe_re_stage_battle_mark(int id, int kind, double x, double z);
+/* An electric bolt over the battle between two host-unit floor points, for `frames` frames. */
+void pe_re_stage_battle_bolt(double x0, double z0, double x1, double z1, int frames);
 int pe_re_stage_in_view(double x, double y, double z);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned last_frame, int silent);

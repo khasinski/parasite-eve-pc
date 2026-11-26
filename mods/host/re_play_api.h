@@ -45,7 +45,7 @@ typedef struct PeReRoomEvent {
 } PeReRoomEvent;
 
 enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
-enum { PE_RE_WEAPON_DEFAULT, PE_RE_WEAPON_CLOSE_SHOTGUN, PE_RE_WEAPON_GRENADE_SPLASH };
+enum { PE_RE_WEAPON_DEFAULT, PE_RE_WEAPON_CLOSE_SHOTGUN, PE_RE_WEAPON_GRENADE_SPLASH, PE_RE_WEAPON_SPARK_BEAM };
 
 /* Native combat reports source-room slots, independent of the host's actor IDs.
  * A loss with no defeated slots needs only resume_after_battle(). */
@@ -132,6 +132,9 @@ typedef struct PeRePlayApi {
     int (*weapon_role)(const void *weapon);
     /* Placement kind while the field is paused for battle, or -1 if absent. */
     int (*battle_foe_kind)(uint8_t slot);
+    /* Optional. An electric bolt drawn over the battle from one host-unit floor point to another, for
+     * `frames` frames (the Sparkshot). */
+    void (*battle_bolt)(double x0, double z0, double x1, double z1, int frames);
 } PeRePlayApi;
 
 #define PE_RE_MARK_TARGET 1

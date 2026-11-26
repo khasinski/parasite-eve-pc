@@ -113,6 +113,11 @@ static struct {
 } s_backdrop;
 static struct { int kind; double x, z; } s_marks[PE_RE_STAGE_MARKS];   /* draw_marks */
 static RenderColorTrianglePacket s_mark_packets[2][PE_RE_STAGE_MARKS];
+/* Electric bolts over the battle (the Sparkshot): host-unit ends, frames left, a jitter seed. */
+enum { BOLTS = 4, BOLT_SEGMENTS = 10 };
+static struct { double x0, z0, x1, z1; int left; unsigned seed; } s_bolts[BOLTS];
+static RenderColorTrianglePacket s_bolt_packets[2][BOLTS][BOLT_SEGMENTS][4];
+static unsigned s_bolt_frame;
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
 static uint8_t s_mask_groups[16];
@@ -2128,6 +2133,71 @@ static void draw_marks(RenderNativeTag *ordering, int slot) {
     }
 }
 
+/* A jagged arc from Aya to a foe, chest high: a white core over a blue glow, its kinks re-rolled every
+ * two frames and largest mid-way, as RE2's Sparkshot crackles. Drawn over the battle like the marks. */
+static void draw_bolts(RenderNativeTag *ordering, int slot) {
+    const double k = RE_UNITS_PER_PE_UNIT;
+    s_bolt_frame++;
+    for (int b = 0; b < BOLTS; b++) {
+        if (s_bolts[b].left <= 0) continue;
+        s_bolts[b].left--;
+        double end[2][3];
+        const double hx[2] = {s_bolts[b].x0, s_bolts[b].x1}, hz[2] = {s_bolts[b].z0, s_bolts[b].z1};
+        int ok = 1;
+        for (int e = 0; e < 2 && ok; e++)
+            ok = project_field_point(s_backdrop.room[0] + (hx[e] - s_backdrop.anchor[0]) * k, s_backdrop.room[1] - 1500.0,
+                                     s_backdrop.room[2] + (hz[e] - s_backdrop.anchor[2]) * k, end[e]);
+        if (!ok) continue;
+        const double dx = end[1][0] - end[0][0], dy = end[1][1] - end[0][1];
+        const double len = sqrt(dx * dx + dy * dy);
+        if (len < 2) continue;
+        const double px = -dy / len, py = dx / len;            /* across the bolt, on screen */
+        unsigned rng = s_bolts[b].seed * 2654435761u + (s_bolt_frame / 2) * 40503u;
+        double pts[BOLT_SEGMENTS + 1][2];
+        for (int s = 0; s <= BOLT_SEGMENTS; s++) {
+            const double t = (double)s / BOLT_SEGMENTS;
+            rng = rng * 1664525u + 1013904223u;
+            const double jitter = (s == 0 || s == BOLT_SEGMENTS) ? 0 : ((rng >> 8) % 1000 / 500.0 - 1.0) * 9.0 * sin(t * 3.14159265);
+            pts[s][0] = end[0][0] + dx * t + px * jitter;
+            pts[s][1] = end[0][1] + dy * t + py * jitter;
+        }
+        for (int s = 0; s < BOLT_SEGMENTS; s++) {
+            for (int layer = 0; layer < 2; layer++) {             /* 0 the core, 1 the glow */
+                const double w = layer ? 3.5 : 1.2;
+                RenderColorTrianglePacket *q = s_bolt_packets[slot][b][s] + layer * 2;
+                const double ax = pts[s][0], ay = pts[s][1], bx = pts[s + 1][0], by = pts[s + 1][1];
+                for (int h = 0; h < 2; h++) {
+                    q[h] = (RenderColorTrianglePacket){0};
+                    q[h].color.bytes.r = layer ? 90 : 230;
+                    q[h].color.bytes.g = layer ? 150 : 240;
+                    q[h].color.bytes.b = 255;
+                    q[h].color.bytes.code = layer ? 0x22 : 0x20;   /* the glow semi-transparent */
+                }
+                q[0].x0 = (u16)lround(ax + px * w), q[0].y0 = (u16)lround(ay + py * w);
+                q[0].x1 = (u16)lround(ax - px * w), q[0].y1 = (u16)lround(ay - py * w);
+                q[0].x2 = (u16)lround(bx + px * w), q[0].y2 = (u16)lround(by + py * w);
+                q[1].x0 = (u16)lround(ax - px * w), q[1].y0 = (u16)lround(ay - py * w);
+                q[1].x1 = (u16)lround(bx + px * w), q[1].y1 = (u16)lround(by + py * w);
+                q[1].x2 = (u16)lround(bx - px * w), q[1].y2 = (u16)lround(by - py * w);
+            }
+            /* linked core first: the list draws from its head, so the glow lands under the core */
+            for (int h = 0; h < 2; h++) link_field_triangle(&ordering[FIELD_UI_OT_LAST + 1], &s_bolt_packets[slot][b][s][h]);
+            for (int h = 2; h < 4; h++) link_field_triangle(&ordering[FIELD_UI_OT_LAST + 1], &s_bolt_packets[slot][b][s][h]);
+        }
+    }
+}
+
+void pe_re_stage_battle_bolt(double x0, double z0, double x1, double z1, int frames) {
+    static unsigned seed;
+    if (!s_backdrop.on) return;
+    int at = 0;
+    for (int b = 1; b < BOLTS; b++)
+        if (s_bolts[b].left < s_bolts[at].left) at = b;          /* a free one, or the oldest */
+    s_bolts[at].x0 = x0, s_bolts[at].z0 = z0, s_bolts[at].x1 = x1, s_bolts[at].z1 = z1;
+    s_bolts[at].left = frames > 0 ? frames : 1;
+    s_bolts[at].seed = ++seed;
+}
+
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
@@ -2150,6 +2220,7 @@ static int on_background(void *ctx, void *user) {
                 link_quad(&((RenderNativeTag *)b->ordering)[s_masks[i].depth], m);
             }
         draw_marks((RenderNativeTag *)b->ordering, b->slot);
+        draw_bolts((RenderNativeTag *)b->ordering, b->slot);
         return 1;
     }
     if (!s_show && !s_movie.asset) return 0;

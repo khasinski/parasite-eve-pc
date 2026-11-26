@@ -134,6 +134,8 @@ typedef struct ReHost {
     int (*round_entries)(const char *game, ReRoundEntry *out, int max);
     /* Optional. Load that kind of rounds; 1 loaded, 0 not (say holds why, for the player). */
     int (*load_round)(const char *game, uint16_t item, char *say, size_t n);
+    /* Optional. Draw an electric bolt over the battle between two host-unit floor points. */
+    void (*battle_bolt)(double x0, double z0, double x1, double z1, int frames);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

@@ -304,6 +304,10 @@ static int api_weapon_role(const void *weapon) {
     const ReHost *host = re_host();
     return s_playing && RE_HOST_HAS(host, weapon_role) ? host->weapon_role(weapon) : PE_RE_WEAPON_DEFAULT;
 }
+static void api_battle_bolt(double x0, double z0, double x1, double z1, int frames) {
+    const ReHost *host = re_host();
+    if (s_playing && RE_HOST_HAS(host, battle_bolt) && host->battle_bolt) host->battle_bolt(x0, z0, x1, z1, frames);
+}
 static int api_battle_foe_kind(uint8_t slot) {
     for (int i = 0; s_playing && i < s_nenemies; i++)
         if (s_enemies[i].slot == slot) return s_enemies[i].kind;
@@ -317,7 +321,8 @@ static const PeRePlayApi s_api = {
     api_battle_result, api_units_per_pe_unit, api_in_view, api_room_extent, api_vram_reserved,
     api_battle_begin, api_battle_step, api_battle_foe_moved, api_battle_foe_died, api_battle_end,
     api_battle_target_order, api_battle_encounter_allowed_for, api_battle_settings, api_battle_point,
-    api_battle_mark, api_enemy_walk_speed, api_games_started, api_playing_game, api_weapon_role, api_battle_foe_kind
+    api_battle_mark, api_enemy_walk_speed, api_games_started, api_playing_game, api_weapon_role, api_battle_foe_kind,
+    api_battle_bolt
 };
 
 static void report_enemies(void) {
