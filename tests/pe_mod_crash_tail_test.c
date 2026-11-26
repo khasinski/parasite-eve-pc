@@ -69,6 +69,7 @@ int pe_menu_top_page(const char *page, const char *description, int order) {
 }
 void pe_panel_install(void) {}
 void pe_toast(const char *text) { (void)text; }
+void pe_debug_control_install(void) {}
 int pe_free_field(void) { return 1; }
 void pe_pages_describe(void) {}
 

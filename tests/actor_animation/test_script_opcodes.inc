@@ -3240,6 +3240,10 @@ static int native_task_relocation_safety(void) {
     RelocBlock *resolved = Script_RelocBlock(task, 32);
     if (!resolved || resolved->count != 2 || resolved->u0.base != task + 16 ||
         resolved->offsets[0] != task + 20 || resolved->offsets[1] != task + 28) return 0;
+    if (Script_TaskBytesAvailable(task + 20) != 8 ||
+        Script_TaskBytesAvailable(task + 28) != 4 ||
+        Script_TaskBytesAvailable(task + 31) != 1 ||
+        Script_TaskBytesAvailable(task + 32) != 0 || Script_TaskBytesAvailable(NULL)) return 0;
     for (unsigned fault = 0; fault < 6; ++fault) {
         memcpy(task, words, sizeof(words));
         u32 invalid = fault == 1 ? UINT32_MAX : 32;
@@ -3249,7 +3253,7 @@ static int native_task_relocation_safety(void) {
         if (fault == 3) memcpy(task + 8, &invalid, 4);
         if (fault == 4) { invalid = UINT32_MAX; memcpy(task + 12, &invalid, 4); }
         if (Script_RelocBlock(task, bytes) || g_SceneDataTable1 != resolved ||
-            resolved->offsets[0] != task + 20) return 0;
+            resolved->offsets[0] != task + 20 || Script_TaskBytesAvailable(task + 28) != 4) return 0;
     }
     g_SceneDataTable1 = old_tasks;
     puts("Task relocation bounds: unaligned valid block, truncated headers/tables, oversized counts and out-of-range offsets passed");

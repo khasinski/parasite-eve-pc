@@ -92,8 +92,22 @@ typedef enum PeHookId {
                            * appended, previous hook IDs unchanged */
     PE_HOOK_SPELL_DONE,  /* PeHookSpellDone: Battle_ApplySpellEffect after the power's effect,
                           * before the HP clamp and the PE drain; *drain may change; appended */
+    PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
+    PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
+                            * tries the medicines in may change; appended */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookStealResult {
+    int item, success;
+} PeHookStealResult;
+
+/* The medicines Auto Medicine tries, first to last (item ids); natively Full Recover, then
+ * Medicine 4 down to Medicine 1. Ids other than those five are skipped. */
+typedef struct PeHookAutoMedicine {
+    int *order;
+    int count;
+} PeHookAutoMedicine;
 
 typedef struct PeHookPeRecovery {
     const void *actor;

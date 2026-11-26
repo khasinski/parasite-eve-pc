@@ -3251,7 +3251,7 @@
     },
     {
       "path": "include/pe1/reloc_block.h",
-      "sha256": "ed13b86ed5f35e38e6521b75d0f56d8656a738a5ce13e4bf157cde49a61291b8"
+      "sha256": "061db0bf1d4276bf6c8ebc41e16646a96c7af3ecb9f54430e5e804a150de48bf"
     },
     {
       "path": "include/pe1/render_anim_position.h",
@@ -3387,7 +3387,7 @@
     },
     {
       "path": "include/pe1/room_grab_attack.h",
-      "sha256": "ed0a9c05ba0636f39c9a717ea7baaa03fef4d0b7ead4b4e07da37ab76f0fb256"
+      "sha256": "4450df004a58eda7894f34a3a329158a1819678131634c78fd4e1dac079ff2f9"
     },
     {
       "path": "include/pe1/room_ground_eruption.h",
@@ -3395,7 +3395,7 @@
     },
     {
       "path": "include/pe1/room_ground_sweep.h",
-      "sha256": "6865cc6208b40e7b260fa37f479a79993bf968f57e044ee49b53c65920a1a552"
+      "sha256": "f119ec417adb0f376a98e705952db82f449d39a2d6608bcb51d9e3b749e4f957"
     },
     {
       "path": "include/pe1/room_homing_flash.h",
@@ -3579,7 +3579,7 @@
     },
     {
       "path": "include/pe1/room_rising_spray.h",
-      "sha256": "c8f8c7a6e13f7e4cc8482b646acfd2917ecff38db4d43ce9474f608ff1d302fc"
+      "sha256": "c1fd7f9f9e190bacb626cd0a0ed4ffde2661780271871c5e0948917b1192fb0a"
     },
     {
       "path": "include/pe1/room_script_record.h",
@@ -3599,7 +3599,7 @@
     },
     {
       "path": "include/pe1/room_spark.h",
-      "sha256": "e08f5483ab6732a8131e5bc8c7dcad303c2438f037809a91a78ec1215ba43e9b"
+      "sha256": "c151b5a09bd4357be71e930977d020b27b4ad40acec5e379212101af47b8872b"
     },
     {
       "path": "include/pe1/room_spark_attacks.h",
@@ -3843,7 +3843,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "9e7174ff393c8841345343916ee4befe4118da4975b30c416fc0c755936ca886"
+      "sha256": "3777a0663dd8e8f3fd246b544c8f252acda9b7f457c734ad64631a1134e92fc8"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -3851,7 +3851,51 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "41e7aefa2792963d26f91c90bee306563c4ca629f573500848a428b02051822a"
+      "sha256": "675315089e05f7d367b55e688cb05835e5b332e9d4c2fe1fc632bed0ec8424c6"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_battle.c",
+      "sha256": "709229b287b2aaea1cfbd7fbc6f05ebeda65270c7dda31d34542f044519b446b"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_events.c",
+      "sha256": "6d9f4606cb035f09a967e8b8e5a201847a759ef388867bce21fd73332863a35c"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_field.c",
+      "sha256": "1155bdf6ceb59e6ebcafbbe9a765f5b6dc99d2551ad34cac750320992d007518"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_internal.h",
+      "sha256": "e45161b02fcf5faa613b199e5f4b4404561e07f4805723e59b343cebd63d2830"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_rng.c",
+      "sha256": "16925218cbc297b5fc71100ed6ad6cef5d05775bcf10a2b9341d720e52f7501a"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_save.c",
+      "sha256": "4dff3f5e5fe235784ccaa044dd7e97dd06d21bf0221e42205406b3c9d74a617c"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_settings.c",
+      "sha256": "3d85753d24139b842935b45f7c8844bfee3e778ed5871fbeefe5566878777dc5"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_setup.c",
+      "sha256": "44fd8f2d52926d13b31a93e3b6b5d41202471689db6d10da1e40c47cc3a4116f"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_snapshot.c",
+      "sha256": "0375a0f595cc4378045ee0c50a8d5c0ff1c151fa2e8b0d9c5277c285be1e42a4"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_trace.c",
+      "sha256": "9843192f929b01e06d20decb3bd275ba569fe2bb87bc7b1232cf0110f2e95313"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_ui.c",
+      "sha256": "f40f8cfbc13a80c07bc1b85fa0cc5e0e931c2c875fab796526842d28a918451d"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3908,6 +3952,10 @@
     {
       "path": "mods/host/pe_content_api.h",
       "sha256": "c241b0c551c927bb34f9101e9eb0eea47887d6a7c8700ffaff1be6940e5d4156"
+    },
+    {
+      "path": "mods/host/pe_debug_control.c",
+      "sha256": "99264891640ec77e9315e718bd1105fed18dece6a8edcc0caff395d0445cd4d4"
     },
     {
       "path": "mods/host/pe_disc_assets.c",
@@ -3999,7 +4047,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "7c6c30dff432b1c3b922f902e4b1c31c54526dc57969836384e0b651453bbda9"
+      "sha256": "31ffd8ca953cfab50507f7bf9efafbfbfa89f34801ce0c23dfdb2e563f8903f6"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4016,6 +4064,14 @@
     {
       "path": "mods/host/pe_mod_panel.c",
       "sha256": "c23e99a986f14d952928abbfe450753e0a2b07fc3a997e31a1be818cd2654cec"
+    },
+    {
+      "path": "mods/host/pe_mod_state.c",
+      "sha256": "a7af85d89221654a253bf0f6380c240102beddaf655965994341c410dbc94258"
+    },
+    {
+      "path": "mods/host/pe_mod_state.h",
+      "sha256": "02264329ee7f23d92ab8c1a75449cae1b91f1b66ea007c1a7825ee7d6ef3f05c"
     },
     {
       "path": "mods/host/pe_model.c",
@@ -4087,11 +4143,11 @@
     },
     {
       "path": "mods/host/pe_save.c",
-      "sha256": "1c7506a1e885a58da068da760f1c853bac92bdc2ad25ae28c45d60976104d31f"
+      "sha256": "eb3d320b18fc1f3124ac5363d0237333f3da4e666e2f4f4e755b6e608186f214"
     },
     {
       "path": "mods/host/pe_save.h",
-      "sha256": "7c9fe2d9646fec279b8d9461db010d7f8c51674c693cbe58193fecbed7647aa2"
+      "sha256": "dcfe63729aa46b8c2dc98c35c10cad452bbdae8fa021f76512e2e2d8355065fc"
     },
     {
       "path": "mods/host/pe_save_admission.h",
@@ -4282,6 +4338,10 @@
       "sha256": "c6507479678944467cb53cc3d5c83656a0a93dce00a956c673db22de365c79d7"
     },
     {
+      "path": "mods/pe_economy/pe_econ_state.c",
+      "sha256": "f2911c7d7b28bea9eb19f9db22b09c49aba21e7d4d9e4673331d87afa4499ffa"
+    },
+    {
       "path": "mods/pe_economy/pe_econ_store.c",
       "sha256": "4c81a63fa45508b956425c53136f22e92e7ef9cf9d1d8f9174911a8fae859253"
     },
@@ -4291,7 +4351,7 @@
     },
     {
       "path": "mods/pe_economy/pe_economy.c",
-      "sha256": "6590583f099f1c58c990ade8086beb386e10a4fc47eb1ebee23b48ff79cdaf8a"
+      "sha256": "b75cfb68275d972931ebb5f915dfd8b4ecee4507f32da24d2fea1636201b189a"
     },
     {
       "path": "mods/pe_economy/pe_economy.h",
@@ -4303,7 +4363,7 @@
     },
     {
       "path": "mods/pe_economy/pe_loot.c",
-      "sha256": "972aa85a4b66b2b49016682b775f5a20a08421591e53f8a2c2f1e2f07e1471f7"
+      "sha256": "b6deb421f29c23610fba10e8bef08f790431bd7d79d1702e5b2f3841c0d900e9"
     },
     {
       "path": "mods/pe_economy/pe_smoke.c",
@@ -4314,12 +4374,20 @@
       "sha256": "f22efda77813208cfc72cd69c39efc9f45ce665334db630131e7368e7bc3a2fb"
     },
     {
+      "path": "mods/pe_qol/pe_auto_medicine.c",
+      "sha256": "09f9e8c1b69b78b14939c52221e6109fe6b8c3496c3711fa0d018290665fc145"
+    },
+    {
       "path": "mods/pe_qol/pe_bag_sort.c",
       "sha256": "d15f7d70024354c275c139dcbd08c44937e9deab481bfe99441b6472faa5c14d"
     },
     {
       "path": "mods/pe_qol/pe_battle_frequency.c",
       "sha256": "e1a6a78032d957f4a61bf21983a759f97d8a67804f702d312c5df18c260d9c0f"
+    },
+    {
+      "path": "mods/pe_qol/pe_dialogue_skip.c",
+      "sha256": "2d33cc3f56dec4915a4e464fb382a0e081605530cbbf6578ab9bb89647d7ba82"
     },
     {
       "path": "mods/pe_qol/pe_encounters.c",
@@ -4347,7 +4415,7 @@
     },
     {
       "path": "mods/pe_qol/pe_qol.c",
-      "sha256": "eeb922f3c8a28898dc542aa9409f175352c0019df263644f8daa87e194e9ec59"
+      "sha256": "b03c89b21469ab98167aef95d386163ac85e0b01a4edadc9d3190f0aa6689532"
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
@@ -4423,7 +4491,11 @@
     },
     {
       "path": "mods/pe_shops/pe_shops_mod.c",
-      "sha256": "ad52504593b0a975c6b0357bac492f6bd8c5664e60f9b6fca7a5f4819e121a8f"
+      "sha256": "67d096a6d03ebede7308939197e8692066f745b2d4ac6d5a2dcada61cb3d23e7"
+    },
+    {
+      "path": "mods/pe_shops/pe_shops_state.c",
+      "sha256": "34fbfa601e4f654445fb1c848be2a6d3a83a326f909ea23e06990609955bad7b"
     },
     {
       "path": "mods/pe_shops/pe_shops_wallet.c",
@@ -4451,7 +4523,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "e2445ae0d84a1c742378da1d7ffc6aef3c5c0a533729d14756d354041ab8a1c7"
+      "sha256": "8a758147a939d83e94e74cc98bf8e21c20bafee60c4b626434032375c91781a7"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
@@ -4508,6 +4580,10 @@
     {
       "path": "mods/pe_warp/pe_warp.c",
       "sha256": "713b53a975484f5d55abbf83d20624dabb94a2fe9d13e974c6287b22fcb937ed"
+    },
+    {
+      "path": "src/main/battle/attack.c",
+      "sha256": "a4f27944524036846a77781e093280ac92a0e575f709fd612bb570ab7955fb60"
     },
     {
       "path": "src/main/boot/state_ui.h",

@@ -17,7 +17,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
-project(parasite-eve-pc VERSION 0.12.0 LANGUAGES C)
+project(parasite-eve-pc VERSION 0.15.0 LANGUAGES C)
 if(PE_PS5_GAME)
     include(cmake/ps5/game.cmake)
 endif()
@@ -170,7 +170,7 @@ endif()
 add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
-set(PE_BUILD_ID "0.12-source")
+set(PE_BUILD_ID "0.15-source")
 execute_process(COMMAND git rev-parse --short=12 HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     OUTPUT_VARIABLE PE_GIT_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -797,6 +797,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-french-evidence french)
             set_tests_properties(original-game-text-renderer-french PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the Czech pack from the USA-disc fan patch: the patch's own style of the game's
+            # letters and its Czech ones in its pictures and widths, its pictures, on Disc 1 and Disc 2.
+            # PE_TEST_CS_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-czech COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-czech-evidence czech)
+            set_tests_properties(original-game-text-renderer-czech PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
             # The English pack (the game's own text as a pack, made here from the disc: where a new
             # language starts) chosen in the game: every frame of a New Game through the name entry
             # to the status panel, and of the Disc 2 route, is the game's own. PE_TEST_DISC2 adds
@@ -1038,6 +1046,20 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_fr_matches_patch.py)
         set_tests_properties(localization-french-matches-patch PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 600 LABELS "game-assets;localization")
+        # The Czech pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_CS_PACK, else skipped.
+        add_test(NAME localization-czech-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cs_box_fit.py)
+        set_tests_properties(localization-czech-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Czech pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row, every letter the patch draws and every picture piece as the patched PS1
+        # game has them. Needs PE_TEST_CS_PATCH_DIR (the folder with CD1_pv3.ppf and CD2_pv3.ppf),
+        # PE_TEST_CS_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds Disc 2), else skipped.
+        add_test(NAME localization-czech-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cs_matches_patch.py)
+        set_tests_properties(localization-czech-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
@@ -1181,9 +1203,12 @@ if(BUILD_TESTING)
     add_test(NAME original-widescreen-rooms COMMAND test-original-actor-animation --widescreen-rooms)
     set_tests_properties(original-widescreen-rooms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
         LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy")
+    add_test(NAME original-widescreen-camera-grid COMMAND test-original-actor-animation --widescreen-rooms)
+    set_tests_properties(original-widescreen-camera-grid PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_CAMERA_GRID=1")
     add_test(NAME original-widescreen-animations COMMAND test-original-actor-animation --widescreen-rooms)
     set_tests_properties(original-widescreen-animations PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
-        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_ANIMATIONS=1")
+        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_ANIMATIONS=1;PE_WS_CAMERA_GRID=1")
     add_test(NAME original-m417-chrysler-load COMMAND test-original-actor-animation --m417-load)
     set_tests_properties(original-m417-chrysler-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy")
@@ -1213,6 +1238,9 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
     add_test(NAME original-m221-spark-ring-burst-load COMMAND test-original-actor-animation --m221-load)
     set_tests_properties(original-m221-spark-ring-burst-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
+    add_test(NAME original-grab-attack-hits COMMAND test-original-actor-animation --grab-attack-hits)
+    set_tests_properties(original-grab-attack-hits PROPERTIES TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
     add_test(NAME original-m269-grab-load COMMAND test-original-actor-animation --m269-load)
     set_tests_properties(original-m269-grab-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
@@ -1344,6 +1372,12 @@ if(BUILD_TESTING)
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-native-coverage COMMAND test-psyz-interpolation --filter=gpu::native_polygon*)
         set_tests_properties(original-gpu-native-coverage PROPERTIES TIMEOUT 30 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-untextured-interpolation COMMAND test-psyz-interpolation
+            --filter=gpu::untextured_geometry_keeps_interpolation_with_textured_neighbors)
+        set_tests_properties(original-gpu-untextured-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")

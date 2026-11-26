@@ -1,9 +1,36 @@
 # Changelog
 
-## Unreleased
+## 0.15
+
+- Added **Hold to skip dialogue** under Movement: hold Square, R1 or L1 to turn dialogue pages quickly. Questions still wait for your answer. Off by default.
+- Added **Auto Medicine order** under Combat: the Auto Medicine armor effect can use the weakest medicine first instead of Full Recover.
+- Added **Departure Mono** and **Plain Sans** to **F1 → Font**, beside Original and Pixel Sans.
+- Fixed the warehouse Crab's bubbles and eye beams doing no damage to Aya.
+- Fixed a save whose mods' data another build partly overwrote being refused as unreadable. It now loads, and only the lost mod records start over.
+- An update to the optional HD background pack fixes the restaurant and hanging signs in Chinatown, which were drawn over the street with black dots along their edges. Update the pack through **Escape → Mods → Background pack**.
+- Added more diagnostics to the opt-in debug controls and a headless test harness for automated gameplay checks.
+
+## 0.14
+
+- Fixed opened chest interiors shifting out of sync with the rest of the chest at 60 Hz.
+- Added **Quick hand-in** under Economy: Wayne can count Junk in batches of 100. Turn it off for the original pace.
+- Added opt-in headless debug controls for automated gameplay tests, save export, RNG and battle tracing.
+- An update to the optional HD background pack fixes the open passage and landing upstairs at the NYPD. Update the pack through **Escape → Mods → Background pack**.
+
+## 0.13
+
+- Improved HD widescreen layer alignment and filtering. Adding side artwork no longer changes the scale of the original picture. Coverage still depends on the installed background pack.
 
 - Added the **Japanese release**: select your own Japanese discs (SLPS-01230/01231) and the game plays as it does there, in Japanese with its own font, kana name entry and balance (its weapon, enemy and boss numbers come from the disc), Circle to confirm, and its own memory card files. Disc 1 and Disc 2 must come from the same release. Language packs are for the USA discs and stay off with the Japanese ones.
 - Fixed **Always run** (`pe_qol`) making Aya walk while the action button (Cross / A) is held, which slowed her down whenever **Repeat interact** was used. Only the run button walks now, with the d-pad and the stick, and examining works while running. With the stick, holding the run button now also walks on diagonals, and with Always run off the stick is left exactly as the original reads it.
+
+- Improved HD background layer edges and widescreen sampling, keeping the original 4:3 picture stable and preserving foreground depth. Newer background packs are offered only to clients that support their layer format.
+- Reduced vertical camera jitter with widescreen and 60 Hz interpolation.
+- Fixed missing or displaced parts of Aya's dress when Wardrobe animations use a different skeleton.
+- Fixed dropped armor upgrades and stacked Tools / Mod Permits being counted incorrectly by economy mods.
+- Added optional mouse controls, a VSync setting and an Original / Pixel Sans font choice.
+- Expanded optional costume styles, challenge settings and the BP overhaul; improved Bestiary details and phone-call cancellation.
+- Added the Translator desktop tool, with headless batch editing and automated checks that do not open windows.
 
 ## 0.12
 

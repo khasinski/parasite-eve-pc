@@ -1,9 +1,9 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,czech,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
+chinese, spanish, italian, german, french, czech and english-pack, original-game-text-renderer-chinese,
 -spanish, ...)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
@@ -131,6 +131,10 @@ Checks, each from pe_mods.log and frame dumps:
              Italian), adds its own, and draws its menus' spaces 5 px wide, which the pack's space is in
              the menus: on Disc 2, the load screen's help line (sys/080) must light exactly the pack's
              letters with those spaces. test_fr_matches_patch.py checks the text against the patched game.
+  czech      The same for the Czech pack (PE_TEST_CS_PACK): the patch redraws most of the game's letters
+             and adds its own; the letters it leaves alone are the game's. It leaves the name grid as the
+             game has it (its {g4D} cell empty, as with every pack). test_cs_matches_patch.py checks the
+             text against the patched game.
   english-pack  The game's own English as a pack (pelang.py english, made here from the player's discs: the
              pack a new language starts from). With it chosen the game must be the game: a New Game
              through the first boxes, the name entry, the boxes up to the free field and the status panel
@@ -829,6 +833,11 @@ GERMAN = FanPack('german', 'PE_TEST_DE_PACK', ITALIAN_STEPS, 80, 'ÄÖÜäöüß
 # the load screen's help line on the Disc 2 route).
 FRENCH = FanPack('french', 'PE_TEST_FR_PACK', ITALIAN_STEPS, 17, 'çéèêëàâäîïôöùûü', True, None, 'day-card',
                  menu_space=True)
+# The Czech patch redraws most of the game's letters in its own style and adds Á Č Ď É Ě Í Ň Ó Ř Š Ť Ú Ů
+# Ý Ž and the same small, each with its own width; the letters it leaves alone (t & . , / ...) are the
+# game's. It leaves the name grid as it is (the game's letters in its own style). Its first pages
+# are as many screens as English's; its first box is short ("Muž: Copak je? ...").
+CZECH = FanPack('czech', 'PE_TEST_CS_PACK', ITALIAN_STEPS, 90, '', True, None, 'day-card', 40)
 
 
 def run_disc2(game, discs, work, pack):
@@ -1012,6 +1021,10 @@ def german_patch(game, discs, out, localization):
 
 def french_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, FRENCH)
+
+
+def czech_patch(game, discs, out, localization):
+    return fan_patch(game, discs, out, localization, CZECH)
 
 
 def same_frames(plain, packed, labels, what):
@@ -2888,7 +2901,15 @@ def fan_patch(game, discs, out, localization, fan):
 
     # The name entry's grid (sys/117): every cell the pack's letter, two-byte name letters (Ñ ñ Ü ü
     # Á É Í Ó Ú á é í ó ú ¿ ¡) as the pack's pictures of them; {g0D} is the game's own icon.
-    raw = entries[pelang.fnv1a('sys/117')]
+    raw = entries.get(pelang.fnv1a('sys/117'))
+    if raw is None:                            # the patch leaves the grid alone: the game's, its {g4D}
+        from extract_text import table_entries  # cell kept empty by pe_lang with every pack
+        from petext.disc import Game
+        disc = Game(discs[0])
+        try:
+            raw = dict(table_entries(disc.resident_pack()))['sys/117'].replace(b'M', b'')
+        finally:
+            disc.disc.f.close()
     names = name_letters(plain)
     by_char = {}
     at, count = struct.unpack_from('<II', text, 80)
@@ -3361,7 +3382,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
+                              ('german', german_patch), ('french', french_patch), ('czech', czech_patch),
+                              ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
                               ('translator-map', translator_map), ('translator-place-title', translator_place_title),
                               ('translator-battle', translator_battle),

@@ -16,7 +16,9 @@
  *     an empty steal banks a little Junk.
  *   - Wayne's "Discard junk" (PE_HOOK_ITEM_COUNT on the script's count, PE_HOOK_INV_COMMAND on
  *     each removal): the count reads a list of N Junk and each removal gets one Junk from the
- *     counter placed just in time, so only one free bag slot is needed.
+ *     counter placed just in time, so only one free bag slot is needed. Quick hand-in (on by
+ *     default) lets each step of his loop take up to 100 Junk instead of one, from the counter or
+ *     from the bag (economy off, Stacked items) (issue #247).
  *   - A sweep (free field only) moves Junk, Super Junk (75) and Duper Junk (150) from the bag
  *     and Wayne's storage into the counter.
  *   - The stolen item's name in the steal message is wrapped in the textbox's red highlight.
@@ -40,8 +42,11 @@
 #include "pe_save.h"
 #include "pe1/battle.h"
 #include "pe1/draw_state.h"
+#include "pe1/field_actor.h"
 #include "pe1/game_timers.h"
 #include "pe1/inventory_state.h"
+#include "pe1/script_state.h"
+#include "pe1/reloc_block.h"
 #include "pe1/text.h"
 
 #define MOD_ID "pe_economy"
@@ -57,6 +62,7 @@
 #define PE_TAIL_MAGIC       0x544C4550u /* "PELT" */
 #define PE_HANDIN_GUARD_FRAMES 120u
 #define PE_HANDIN_MAX       999u
+#define PE_HANDIN_BUNDLE    100u
 #define PE_ENEMY_SLOTS      7
 
 static struct PeLootPersistent {
@@ -77,6 +83,7 @@ _Static_assert(sizeof s_st == 36, "pe_economy.loot v1 holds these 36 bytes: rais
 
 static int s_enabled = 1;
 static int s_handin_mode;       /* 0 = up to Wayne's next gun, 1 = all */
+static int s_quick_handin = 1;  /* each step of Wayne's loop takes up to PE_HANDIN_BUNDLE Junk */
 static int s_tune_empty_steal = 2;
 
 static const char *const s_preset_names[] = { "Relaxed", "Normal", "Grind" };
@@ -313,18 +320,85 @@ static int pe_on_item_count(void *ctx, void *user) {
     return 0;
 }
 
+/* Wayne's Discard junk, in all four versions of his script (retail, read from the disc): count the
+ * Junk into a local L once, then per Junk: his count (variable 48) +1, a sound, a wait of 10 to 30
+ * frames, remove one Junk, L -= 1, until L is 0. Only then does he check for 300 and make a gun,
+ * so the end is the same however the Junk is counted. During the remove, the script cursor is on
+ * "L = L - 1" (EvalExpr sub into operand 0, then Assign L = operand 0): returns L's index into
+ * Wayne's locals, or -1 when the remove came from anything else. */
+static int pe_handin_local(void) {
+    const u32 *c = g_ScriptCursor;
+    if (!c || !g_CurrentEntity || Script_TaskBytesAvailable(c) < 10 * sizeof(*c)) return -1;
+    if (c[0] != 0x00B08009u || c[1] != 0 || c[2] != 1u || c[3] != 0 || c[5] != 1u ||
+        c[6] != 0x0032400Au || c[7] != 0 || c[8] != c[4] || c[9] != 0 || c[4] >= 0x38u)
+        return -1;
+    return (int)c[4];
+}
+
+/* Quick hand-in: this step takes up to PE_HANDIN_BUNDLE Junk. The extra Junk leaves the counter
+ * and goes to Wayne's count, and his loop has that many fewer steps to go. */
+static void pe_handin_bundle(void) {
+    const int local = pe_handin_local();
+    uint32_t left, extra;
+    if (local < 0) return;
+    left = g_CurrentEntity->pad_0AC[local];      /* steps left, this one included */
+    if (left < 2 || left > PE_HANDIN_MAX) return;
+    extra = left - 1;
+    if (extra > PE_HANDIN_BUNDLE - 1) extra = PE_HANDIN_BUNDLE - 1;
+    if (extra > s_handin_left) extra = s_handin_left;
+    if (extra > s_st.junk) extra = s_st.junk;
+    if (!extra) return;
+    s_st.junk -= extra;
+    s_handin_left -= extra;
+    g_CurrentEntity->pad_0AC[local] = left - extra;
+    pe_set_wayne_count(pe_wayne_count() + extra);
+}
+
+/* Quick hand-in for Junk in the bag (Junk economy off, or Junk kept as items; with Stacked items a
+ * slot can hold up to 99): this step takes up to PE_HANDIN_BUNDLE Junk. The extra copies leave the
+ * bag the way the game's remove takes one (the first Junk slot; through Stacked items when it
+ * runs), always leaving one for the game's own remove that follows. */
+static void pe_handin_bundle_bag(void) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    const int local = pe_handin_local(), limit = pe_bag_limit();
+    uint32_t left, extra, held, done;
+    if (local < 0) return;
+    left = g_CurrentEntity->pad_0AC[local];      /* steps left, this one included */
+    if (left < 2 || left > PE_HANDIN_MAX) return;
+    held = stacks ? (uint32_t)stacks->total(0, PE_ITEM_JUNK) : pe_bag_count_of(PE_ITEM_JUNK);
+    if (held < 2) return;
+    extra = left - 1;
+    if (extra > PE_HANDIN_BUNDLE - 1) extra = PE_HANDIN_BUNDLE - 1;
+    if (extra > held - 1) extra = held - 1;
+    for (done = 0; done < extra; ++done) {
+        int slot;
+        for (slot = 0; slot < limit && g_AyaSaveState.inventory_items[slot] != PE_ITEM_JUNK; ++slot) {}
+        if (slot >= limit) break;
+        if (stacks) { if (!stacks->take(0, slot)) break; }
+        else g_AyaSaveState.inventory_items[slot] = 0;
+    }
+    if (!done) return;
+    g_CurrentEntity->pad_0AC[local] = left - done;
+    pe_set_wayne_count(pe_wayne_count() + done);
+}
+
 static int pe_on_inv_command(void *ctx, void *user) {
     const PeHookInvCommand *c = (const PeHookInvCommand *)ctx;
     int slot;
     (void)user;
     if (c->command != PE_INV_CMD_REMOVE_ITEM || c->value != PE_ITEM_JUNK) return 0;
     pe_restore_active_list();
-    if (!s_handin_left || !s_st.junk) return 0;
+    if (!s_handin_left) {                       /* Junk from the bag, not the counter */
+        if (s_quick_handin) pe_handin_bundle_bag();
+        return 0;
+    }
+    if (!s_st.junk) return 0;
     slot = pe_free_bag_slot(s_saved_limit ? s_saved_limit : g_InvSlotLimit);
     if (slot < 0) return 0;
     g_AyaSaveState.inventory_items[slot] = PE_ITEM_JUNK;
     --s_st.junk;
     --s_handin_left;
+    if (s_quick_handin) pe_handin_bundle();
     s_last_count_frame = s_frames;
     return 0;
 }
@@ -679,6 +753,8 @@ void pe_loot_register(const char *mod_id) {
                                  s_preset_names, 3, pe_get_preset, pe_set_preset);
     pe_menu_register_choice(PE_PAGE_ECONOMY, "Wayne hand-in", "How much Junk Wayne's Discard junk gives him.",
                             &s_handin_mode, s_handin_names, 2);
+    pe_menu_register_toggle(PE_PAGE_ECONOMY, "Quick hand-in", "Wayne counts Junk 100 at a time, not one by one.",
+                            &s_quick_handin, NULL);
     pe_menu_register_toggle(PE_PAGE_ECONOMY, "Junk economy", "Off: Junk goes back in the bag, as in the original game.",
                             &s_enabled, pe_loot_tick);
     pe_menu_register_action(PE_PAGE_ECONOMY, "Take out Junk", "With the economy off: move counter Junk to the bag and trunk.",

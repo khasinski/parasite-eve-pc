@@ -12,5 +12,7 @@ typedef struct RelocBlock {
 PE1_STATIC_ASSERT(offsetof(RelocBlock, offsets) == 2 * sizeof(void *), reloc_pointer_table_offset);
 extern RelocBlock *g_SceneDataTable1;
 RelocBlock *Script_RelocBlock(void *block, size_t bytes);
+/* Bytes remaining in the current relocated task payload, capped at the next task. */
+size_t Script_TaskBytesAvailable(const void *address);
 void Script_DrawSyncAndFlush(void);
 #endif

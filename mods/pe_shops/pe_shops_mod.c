@@ -14,6 +14,7 @@ void pe_wayne_refund_register(const char *mod_id);     /* pe_wayne_refund.c: fai
 void pe_workshop_screen_register(const char *mod_id);  /* pe_workshop_screen.c: the Workshop as a menu screen */
 void pe_wayne_menu_register(const char *mod_id);       /* pe_wayne_menu.c: the Workshop in Wayne's menu */
 void pe_field_wayne_register(const char *mod_id);      /* pe_field_wayne.c: Warner's services */
+void pe_shops_state_register(void);                    /* pe_shops_state.c: live state for test tools */
 
 static int shops_init(void) {
     pe_requisition_register(MOD_ID);
@@ -22,6 +23,7 @@ static int shops_init(void) {
     pe_workshop_screen_register(MOD_ID);
     pe_wayne_menu_register(MOD_ID);
     pe_field_wayne_register(MOD_ID);
+    pe_shops_state_register();       /* pe_shops_state.c: live state for test tools */
     return 0;
 }
 

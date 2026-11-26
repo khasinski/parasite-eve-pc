@@ -42,6 +42,21 @@ if("pe_fonts" IN_LIST PE_MOD_LIST)
     add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
+set(pe_debug_sources
+    host/pe_debug_control.c
+    host/debug/pe_debug_field.c
+    host/debug/pe_debug_save.c
+    host/debug/pe_debug_battle.c
+    host/debug/pe_debug_rng.c
+    host/debug/pe_debug_setup.c
+    host/debug/pe_debug_settings.c
+    host/debug/pe_debug_trace.c
+    host/debug/pe_debug_ui.c
+    host/debug/pe_debug_snapshot.c
+    host/debug/pe_debug_events.c
+    host/pe_mod_state.c          # mods' live-state providers (registered always, read only by debug control)
+)
+
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
@@ -66,6 +81,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
@@ -138,6 +154,18 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1 PE_NATIVE_STATE_CPU_COMPONENTS=1)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
+endif()
+if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
+    # Hold to skip dialogue (issue 246) and the Auto Medicine order (issue 238).
+    add_executable(pe-mod-qol-skip-medicine
+        ${PROJECT_SOURCE_DIR}/tests/pe_mod_qol_skip_medicine_test.c
+        pe_qol/pe_dialogue_skip.c
+        pe_qol/pe_auto_medicine.c)
+    target_include_directories(pe-mod-qol-skip-medicine PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(pe-mod-qol-skip-medicine PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(pe-mod-qol-skip-medicine PRIVATE psyz)
+    add_test(NAME pe-mod-qol-skip-medicine COMMAND pe-mod-qol-skip-medicine)
 endif()
 
 # Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
@@ -279,6 +307,7 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(econ-config ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_config_test.c pe_economy/pe_econ_config.c)
     pe_feature_test(econ-engine ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_engine_test.c pe_economy/pe_econ_engine.c pe_economy/pe_econ_config.c)
+    pe_feature_test(wayne-handin ${PROJECT_SOURCE_DIR}/tests/pe_mod_wayne_handin_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(junk-counter ${PROJECT_SOURCE_DIR}/tests/pe_mod_junk_counter_test.c pe_economy/pe_junk_counter.c)
     pe_feature_test(armor-effect-display ${PROJECT_SOURCE_DIR}/tests/pe_mod_armor_effect_display_test.c pe_catalog/pe_armor_effect_display.c)
     pe_feature_test(catalog-rules ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_rules_test.c pe_catalog/pe_catalog.c pe_catalog/pe_dismantle.c host/pe_legacy_guard.c host/pe_game_facts.c)
@@ -290,6 +319,7 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+    pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
     pe_feature_test(combat-presets ${PROJECT_SOURCE_DIR}/tests/pe_combat_presets_test.c host/pe_combat_presets.c)
     target_compile_definitions(test-mod-combat-presets PRIVATE PE_COMBAT_PRESETS=1)
 endif()
@@ -304,7 +334,7 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(title-choice ${PROJECT_SOURCE_DIR}/tests/pe_mod_title_choice_test.c)
 endif()
-if(BUILD_TESTING AND "pe_challenges" IN_LIST PE_MOD_LIST)
+if(BUILD_TESTING AND "pe_challenges" IN_LIST pe_enabled_mods)   # opt-in: usually via PE_EXTRA_MODS
     pe_feature_test(challenge-start ${PROJECT_SOURCE_DIR}/tests/pe_mod_challenge_start_test.c)
 endif()
 if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)

@@ -113,6 +113,8 @@ const PeMod *const g_pe_mods[] = {&econ_mod, &provider_b, &provider_a, NULL};
 void pe_main_menu_init(void) {}
 void pe_equip_sync_init(void) {}
 void pe_present_install(void) {}
+/* Debug transport is outside this economy/host test. */
+void pe_debug_control_install(void) {}
 void pe_menu_begin(const char *page) { (void)page; }
 void pe_menu_load_settings(void) {}
 void pe_menu_alias_setting(const char *key, const char *legacy) { (void)key; (void)legacy; }

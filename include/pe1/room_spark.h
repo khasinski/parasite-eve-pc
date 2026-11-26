@@ -121,19 +121,6 @@ typedef struct RoomCometSparkAnchor {
     s16 count;                    /* 0x08 */
 } RoomCometSparkAnchor;
 
-typedef struct RoomSparkEventState {
-    u8 reserved[0xD];
-    u8 active;                    /* 0x0D */
-    u8 reserved0E[4];
-    u16 trailSlot;                /* 0x12: history slot of the next trail */
-} RoomSparkEventState;
-
-/* First node of the primary channel's pool: its state byte. */
-typedef struct RoomSparkNode {
-    u8 reserved[0x18];
-    u8 *state;
-} RoomSparkNode;
-
 /* The active battle entity: a spark that reaches it flags its actor. */
 typedef struct RoomSparkActor {
     u8 reserved[0x4C];
