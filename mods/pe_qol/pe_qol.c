@@ -9,6 +9,8 @@
 void pe_move_register(const char *mod_id);
 void pe_encounters_register(const char *mod_id);
 void pe_battle_frequency_register(const char *mod_id);
+void pe_auto_medicine_register(const char *mod_id);
+void pe_dialogue_skip_register(const char *mod_id);
 
 static int qol_init(void) {
     pe_move_register(MOD_ID);
@@ -18,6 +20,8 @@ static int qol_init(void) {
     pe_inventory_menu_register(MOD_ID);
     pe_encounters_register(MOD_ID);
     pe_battle_frequency_register(MOD_ID);
+    pe_auto_medicine_register(MOD_ID);
+    pe_dialogue_skip_register(MOD_ID);
     return 0;
 }
 

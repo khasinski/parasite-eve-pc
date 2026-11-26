@@ -63,11 +63,15 @@ Manage mods name: **PE Enhancements: quality of life**.
 - **Combat speed**: Normal by default.
 - **Battle start speed**: speeds up the battle-entry sequence. Normal by default, up to 4x.
 - **Repeat interact**: off by default. When on, holding the action button keeps interacting.
+- **Hold to skip dialogue**: Off by default, or Square, R1 or L1. Holding that button turns
+  dialogue pages quickly. Pages with a question still wait for you to answer.
 
 **Combat** page:
 - **Battle frequency**: Normal, More (2x), Lots (4x) or Every check. Story battles and room rules
   still apply. This changes how often fights happen, not how big they are.
 - **No random battles**: this switch is saved with your game, not in `pe_mods.ini`.
+- **Auto Medicine order**: Strongest first (the original) or Weakest first. Sets which medicine
+  the Auto Medicine armor effect uses first when Aya drops below a fifth of her HP.
 
 **Inventory** page:
 - **Key item pocket**: on by default. Story keys and the Chrysler elevator keys leave the bag but

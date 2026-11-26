@@ -9,17 +9,12 @@
 
 #define PE_ACTORS_MAX 64
 
-static void pe_ctl_battle_state(const char *args) {
-    (void)args;
-    char path[1100];
-    FILE *f;
+void pe_debug_battle_write(FILE *f) {
     FieldActor *a;
     Combatant *p = g_PlayerEntity ? (Combatant *)g_PlayerEntity->state : NULL;
     ItemDataRecord *w = pe_equipped(0);
     int i, comma = 0, active = !!(g_GameStateFlags & 2);
-    pe_debug_path(path, sizeof path, "out");
-    if (!(f = fopen(path, "a"))) return;
-    fprintf(f, "ok battle-state {\"active\":%s,\"frame\":%d,\"mode\":%d,\"target_index\":%d,"
+    fprintf(f, "{\"active\":%s,\"frame\":%d,\"mode\":%d,\"target_index\":%d,"
             "\"queue_count\":%u,\"player\":", active ? "true" : "false", g_BattleFrameCounter,
             g_BattleModeState, g_BattleTargetIndex, g_BattleActionQueueCount);
     if (p) fprintf(f, "{\"hp\":%u,\"max_hp\":%u,\"atb\":%u,\"pe_raw\":%d,\"max_pe_raw\":%d,"
@@ -49,7 +44,18 @@ static void pe_ctl_battle_state(const char *args) {
                 comma++ ? "," : "", i, a->type_id, a->sub_id, (unsigned)(u16)e->field04.fieldId04,
                 e->hp, e->maxHp, e->stateFlags, e->statusFlags2, a->pos_x, a->pos_y, a->pos_z, e->stealItemId);
     }
-    fputs("]}\n", f);
+    fputs("]}", f);
+}
+
+static void pe_ctl_battle_state(const char *args) {
+    char path[1100];
+    FILE *f;
+    (void)args;
+    pe_debug_path(path, sizeof path, "out");
+    if (!(f = fopen(path, "a"))) return;
+    fputs("ok battle-state ", f);
+    pe_debug_battle_write(f);
+    fputc('\n', f);
     fclose(f);
 }
 
