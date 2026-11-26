@@ -25,7 +25,7 @@ Keep each CUE file next to its BIN file. A CHD is a single file (its first track
 
 **HD backgrounds:** open **Escape → Mods → Background pack** to download or update the optional artwork.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
-You can also [download the pack manually](https://pe.polanka.ovh/).
+You can also [download the pack manually](https://pe.polanka.ovh/). Widescreen uses the artwork available for each room; some rooms still have black borders.
 
 **Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. Choose **Fast forward** there to assign a key or controller button: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Fast-forward button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
@@ -40,7 +40,9 @@ Translators can try the [Simplified Chinese rendering pilot](localization/pilots
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
-**Escape → Graphics → VSync** chooses how frames reach the display. **Auto** (the default) syncs to displays running at about 60 Hz and uses the game's own frame limiter on others, such as 120 Hz or 144 Hz monitors. **On** always waits for the display's refresh, which avoids tearing at any refresh rate. **Off** always uses the frame limiter; like Auto on a high-refresh display, it can tear. Game speed stays the same in every mode, and the change applies immediately. It is saved as `vsync` in the `[graphics]` section of `parasite-eve.toml` (`0` Auto, `1` On, `2` Off).
+**Escape → Graphics → VSync** offers Auto, On and Off. Auto synchronizes near 60 Hz and uses a frame limiter on other displays; On prevents tearing at any refresh rate. Game speed stays the same.
+
+For text, **F1 → Font** offers Original, Pixel Sans, Departure Mono and Plain Sans. The separate [Translator](localization/translator/README.md) can create and edit language packs.
 
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
@@ -57,7 +59,7 @@ guide. See [the mod guide](mods/README.md) for writing a mod.
 
 Open **F1 → PE Enhancements** to configure them.
 
-- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, Always Run and configurable walk, run, combat and battle-entry speeds
+- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, hold a button to skip dialogue, Always Run and configurable walk, run, combat and battle-entry speeds
   (walking and running default to 1.75×).
 - **Encounters** (`pe_qol`): no random battles, or Normal, 2×, 4× or Every Check frequency. Story
   and room rules still apply; this changes how often fights happen, not their size.
@@ -90,8 +92,7 @@ Open **F1 → PE Enhancements** to configure them.
   register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
-  are kept beside the preferences as `quicksave_<slot>.pec`; loading restarts the saved room the
-  way a loaded save does. Works in the free field, outside battles, movies and room changes.
+  are kept beside the preferences as `quicksave_<slot>.pec`; quick load also works from the title screen. Quick saves work during battles, events and movies.
 - **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
   and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
   writes nothing to the game state.

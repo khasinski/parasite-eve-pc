@@ -63,11 +63,15 @@ Manage mods name: **PE Enhancements: quality of life**.
 - **Combat speed**: Normal by default.
 - **Battle start speed**: speeds up the battle-entry sequence. Normal by default, up to 4x.
 - **Repeat interact**: off by default. When on, holding the action button keeps interacting.
+- **Hold to skip dialogue**: Off by default, or Square, R1 or L1. Holding that button turns
+  dialogue pages quickly. Pages with a question still wait for you to answer.
 
 **Combat** page:
 - **Battle frequency**: Normal, More (2x), Lots (4x) or Every check. Story battles and room rules
   still apply. This changes how often fights happen, not how big they are.
 - **No random battles**: this switch is saved with your game, not in `pe_mods.ini`.
+- **Auto Medicine order**: Strongest first (the original) or Weakest first. Sets which medicine
+  the Auto Medicine armor effect uses first when Aya drops below a fifth of her HP.
 
 **Inventory** page:
 - **Key item pocket**: on by default. Story keys and the Chrysler elevator keys leave the bag but
@@ -121,7 +125,11 @@ shared counter that holds up to 99999.
 - Turning Junk economy off puts Junk back in the bag, as in the original game.
 
 **Wayne hand-in** sets what Wayne's Discard junk gives him: **Next gun** (the default) gives only
-what the next gun needs, **All Junk** gives everything.
+what the next gun needs, **All Junk** gives everything. **Quick hand-in**, on by default, has
+Wayne count Junk 100 at a time instead of one by one, so 300 Junk takes three of his steps
+(a few seconds) rather than well over a minute. His count, the Junk spent and the gun at 300 come out
+the same. It works for counter Junk and for Junk in the bag (Junk economy off, or stacked with
+Stacked items); turn it off for the original pace.
 
 **Choose playstyle** and **Apply playstyle** pick how generous the economy is. Applying only works
 in the field.

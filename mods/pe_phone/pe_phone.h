@@ -45,6 +45,8 @@ int pe_phone_condition_holds(const char *name);   /* a condition another mod off
 int pe_phone_condition_known(const char *name);   /* some mod offered it */
 void pe_phone_calls_played(const PePhoneCall *call);   /* into this save's heard record */
 unsigned pe_phone_heard_count(void);
+const PePhoneRecord *pe_phone_heard_record(void);    /* read only (pe_phone_state.c) */
+void pe_phone_state_register(void);                   /* pe_phone_state.c: live state for test tools */
 int pe_phone_story_day(unsigned story);                /* the save screen's Day (1..6) for variable 74 */
 
 /* ---- spotting (pe_phone_spot.c) ---- */

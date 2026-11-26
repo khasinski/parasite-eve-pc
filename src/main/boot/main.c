@@ -55,6 +55,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/game_timers.h"
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
+#include "pe1/mouse_input.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/memcard.h"
 #include "pe1/save.h"
@@ -367,7 +368,7 @@ static int HdProgress(void *opaque,curl_off_t total,curl_off_t now,curl_off_t up
 static int HdRequest(const char *url,HdTransfer *transfer,const char *download_id){
     CURL *curl=curl_easy_init();if(!curl)return 0;char ua[160],version[100],platform[100],id[128],build[100];snprintf(ua,sizeof(ua),"ParasiteEve/%s (%s; WebP; build %s)",PE_VERSION,SDL_GetPlatform(),PE_BUILD_ID);snprintf(version,sizeof(version),"X-PE-Version: %s",PE_VERSION);snprintf(platform,sizeof(platform),"X-PE-Platform: %s",SDL_GetPlatform());snprintf(id,sizeof(id),"X-PE-Download-ID: %s",download_id);
     snprintf(build,sizeof(build),"X-PE-Build: %s",PE_BUILD_ID);
-    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1");
+    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1,widescreen-layers-v2");
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
@@ -387,7 +388,7 @@ static int HdWorker(void *unused){
     const cJSON *features=cJSON_GetObjectItemCaseSensitive(catalog,"required_features");
     if(features&&!cJSON_IsArray(features)){SDL_strlcpy(host_hd.result_message,"Invalid background pack requirements. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
     const cJSON *feature=NULL;cJSON_ArrayForEach(feature,features){
-        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1")&&strcmp(feature->valuestring,"selective-matte-v1"))){
+        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1")&&strcmp(feature->valuestring,"selective-matte-v1")&&strcmp(feature->valuestring,"widescreen-layers-v2"))){
             SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build. Previous pack kept.",sizeof(host_hd.result_message));goto end;
         }
     }
@@ -2656,7 +2657,8 @@ static void Host_ProcessSettingsEvent(
     }
 
     if (state->capturing_binding) {
-        if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) {
+        if ((event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) ||
+            (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && event->button.button == SDL_BUTTON_RIGHT)) {
             state->capturing_binding = 0;
             state->dirty = 1;
             return;
@@ -2840,6 +2842,12 @@ static void Host_ProcessSettingsEvent(
                 state->dirty = 1;
             }
         }
+    } else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && event->button.button == SDL_BUTTON_RIGHT) {
+        /* Right click: as Escape, back a level or close. */
+#ifdef PE_PS5_GPU_NATIVE
+        if (!Host_SettingsBack(state))
+#endif
+        state->open = 0;
     } else if (event->type == SDL_EVENT_MOUSE_MOTION) {
         Host_ProcessSettingsPointer(state, event->motion.x, event->motion.y, 0, game, fallbackWindow);
     } else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -4089,9 +4097,18 @@ static int Host_TestSave(void) {
     int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
     if (io && !SDL_CloseIO(io)) ok = 0;
     if (ok) {
+#ifdef PE_MODS
+        ok = pe_mod_save_publish(temporary, target);
+        if (ok) pe_mod_save_committed(target);
+#else
         SDL_RemovePath(target);
         ok = SDL_RenamePath(temporary, target);
+#endif
     }
+#ifdef PE_MODS
+    /* As the save menu does: a failed save must not leave a staged companion behind. */
+    if (!ok) pe_mod_save_cancelled();
+#endif
     if (!ok) SDL_RemovePath(temporary);
     fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
             target, (unsigned)g_BootHostVBlankCount);
@@ -4212,7 +4229,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
     printf("Headless editor capture: lighting-export PATH writes the original posed Aya mesh and PATH.vram (requires --dump-vram).\n");
-    printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
+    printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, mouse X Y move|left|right|middle|up|down FRAMES (at a 320x224 screen point), graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
     printf("--test-ignore-hit-reactions lands every hit as a plain hit (no criticals or grazes), for route replays recorded that way.\n");

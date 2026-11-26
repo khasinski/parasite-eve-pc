@@ -675,6 +675,54 @@
         g_FieldFxOwner=NULL;g_FieldFxTaskContext=NULL;g_FieldFxActiveTaskSlot=NULL;
         puts("Original M205/M243/M406/M410 complete modules, descriptors, script, reloads and guarded native action-state pointer passed");return 0;
     }
+    if(argc==2 && !strcmp(argv[1],"--grab-attack-hits")){
+        /* The crab's eye beams (ground sweep) and bubbles (rising spray) hit
+         * the player through the native task, owner and Combatant records.
+         * Issue #266: the PS1 offsets they used read a pointer byte for the
+         * hit gate and wrote the player's flag four bytes short. */
+        FieldActor actor={0},player={0};FieldActorState actor_state={0};Combatant player_state={0};
+        struct {u64 before;u8 value;u8 padding[7];u64 after;} marker={UINT64_C(0x1234567887654321),1,{0},UINT64_C(0x1234567887654321)};
+        FieldFxObjectPrefix owner={0};FieldFxTaskContext context={0};FieldFxTaskSlot task={0};_Alignas(void *) char arena[8192];
+        RoomFloorY old_floor=*g_RoomFloorY;g_RoomFloorY->y=0;
+        /* A square floor around the player for the spray's floor check. */
+        PolygonVertex floor_square[4]={0};
+        floor_square[0].x=-1000;floor_square[0].z=-1000;floor_square[1].x=1000;floor_square[1].z=-1000;
+        floor_square[2].x=1000;floor_square[2].z=1000;floor_square[3].x=-1000;floor_square[3].z=1000;
+        PolygonVertex *old_vertices=g_FloorPolygonVertices;u16 old_vertex_count=g_FloorPolygonVertexCount;
+        g_FloorPolygonVertices=floor_square;g_FloorPolygonVertexCount=4;
+        /* The beam's heading maths restores the view matrix afterwards. */
+        GteMatrix view={0};view.m[0][0]=view.m[1][1]=view.m[2][2]=4096;
+        GteMatrix *old_view=g_ViewMatrixSlot.value;g_ViewMatrixSlot.value=&view;
+        actor.state=&actor_state;actor_state.action_state=&marker.value;owner.actor=&actor;
+        player.state=(FieldActorState *)&player_state;task.end=arena;
+        g_FieldFxOwner=&owner;g_FieldFxTaskContext=&context;g_FieldFxActiveTaskSlot=&task;g_PlayerEntity=&player;
+        /* Never the cue: every other byte of the task context is nonzero. */
+        for(unsigned enabled=0;enabled<2;++enabled){
+            memset(&context,0xff,sizeof(context));context.flags=enabled;
+            marker.value=1;
+            if(RoomEffect_RisingSprayController(0,arena,0)<=0 || marker.value!=(enabled?2:1))return 1;
+            /* A bubble that reaches the player pops whether or not it hits. */
+            actor_state.core_flags=0x01000000;player_state.stateFlags=0;
+            RoomSpraySpark spark={0};
+            if(RoomEffect_RisingSprayParticle(1,&spark,0)<0 || spark.state!=1)return 1;
+            if(!!(player_state.stateFlags&0x4000)!=enabled ||
+               actor_state.core_flags!=(enabled?0x99000000u:0x01000000u))return 1;
+            /* The beam hits once per attack: a marked owner is not hit again. */
+            actor_state.core_flags=0x01000000;player_state.stateFlags=0;
+            if(FieldFx_InitCallbackList(task.end,sizeof(RoomGroundSweepMark),16,
+                   (FieldFxCallbackListCallback)RoomEffect_GroundSweepMark)<=0)return 1;
+            RoomGroundSweep sweep={0};RoomGroundSweepParams params={0};sweep.phase=1;
+            if(RoomEffect_GroundSweepController(1,&sweep,(intptr_t)&params))return 1;
+            if(!!(player_state.stateFlags&0x4000)!=enabled ||
+               actor_state.core_flags!=(enabled?0xBD000000u:0x01000000u))return 1;
+            player_state.stateFlags=0;sweep.phase=2;sweep.timer=0;
+            if(RoomEffect_GroundSweepController(1,&sweep,(intptr_t)&params) || player_state.stateFlags)return 1;
+            if(marker.before!=UINT64_C(0x1234567887654321) || marker.after!=marker.before)return 1;
+        }
+        *g_RoomFloorY=old_floor;g_FloorPolygonVertices=old_vertices;g_FloorPolygonVertexCount=old_vertex_count;g_ViewMatrixSlot.value=old_view;
+        g_FieldFxOwner=NULL;g_FieldFxTaskContext=NULL;g_FieldFxActiveTaskSlot=NULL;g_PlayerEntity=NULL;
+        puts("M269/E01 grab attacks: rising spray and ground sweep hit the player through the native records");return 0;
+    }
     if(argc==2 && (!strcmp(argv[1],"--m269-load") || !strcmp(argv[1],"--m411-load"))){
         const unsigned room=!strcmp(argv[1],"--m411-load")?411:269;
         const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;

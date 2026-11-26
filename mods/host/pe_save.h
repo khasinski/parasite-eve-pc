@@ -86,12 +86,15 @@ int pe_save_register(const PeSaveRecord *record);
 const PeSaveRecord *pe_save_host_stack_record(void);
 void pe_save_refill_legacy_stacks(short *lists[3], const unsigned sizes[3]);
 
-/* Read-only extraction for outer admission. 1 found, 0 absent, -1 unreadable; no callbacks. */
+/* Read-only extraction for outer admission. 1 found, 0 absent, -1 unreadable (a newer or damaged
+ * header, or absent from a partly overwritten container, where it may have been lost); no callbacks. */
 int pe_save_peek(const uint8_t *block,const char *name,unsigned *version,void *out,unsigned capacity,unsigned *size);
 
 /* Host internals: the mod host calls these. */
 void pe_save_install(void);
 int pe_save_owner_available(const char *);
+/* 0: admitted (prepared, or a partly overwritten container left to pe_save_on_read's recovery);
+ * -1: a damaged or newer container header. */
 int pe_save_prepare_load(const uint8_t *block);
 void pe_save_on_read(const uint8_t *block);     /* PE_HOOK_SAVE_READ, before any mod */
 /* The mod whose record in this save asks to play alone (wants_alone), else NULL. */

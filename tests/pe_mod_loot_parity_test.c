@@ -14,6 +14,7 @@
 #include "../mods/pe_economy/pe_loot.c"
 #include "../mods/pe_rewards/pe_rewards.c"
 #include "pe_econ_test_host.inc"
+size_t Script_TaskBytesAvailable(const void *address) { (void)address; return 0; }
 
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
@@ -337,6 +338,32 @@ static void test_econ_drop_with_permit_stack(void) {
     s_test_loaded = 0;
 }
 
+/* Two Mod Permits folded into one bag slot by pe_stacks are two held: the cascade stops offering
+ * Permits (and stops their guarantee counter), as it does for two Permits in two slots. Tools
+ * stacked to the cap of 5 likewise count as 5. */
+static void test_held_counts_stacks(void) {
+    uint32_t pct;
+    memset(&g_AyaSaveState, 0, sizeof g_AyaSaveState);
+    memset(g_WayneStorageItems, 0, sizeof g_WayneStorageItems);
+    memset(s_stack_extra, 0, sizeof s_stack_extra);
+    g_AyaSaveState.inventory_slot_count = 10;
+    g_AyaSaveState.inventory_items[0] = PE_ITEM_MOD_PERMIT;
+    s_test_stacks = NULL;
+    assert(pe_rw_held(PE_ITEM_MOD_PERMIT) == 1u && !pe_rw_cascade_skip(RC_PERMIT, 0, &pct));
+    s_test_stacks = &s_stacks;
+    s_stack_extra[PE_ITEM_MOD_PERMIT] = 1;   /* one slot, two Permits */
+    assert(pe_rw_held(PE_ITEM_MOD_PERMIT) == 2u && pe_rw_cascade_skip(RC_PERMIT, 0, &pct));
+    s_rw.permit_since = 7;
+    (void)pe_rw_pick_rare(10);
+    assert(s_rw.permit_since == 7);          /* held two: no progress toward a third */
+    g_AyaSaveState.inventory_items[1] = 0x16;
+    s_stack_extra[0x16] = 4;                  /* five Tools in one slot */
+    assert(pe_rw_held(0x16) == 5u && pe_rw_cascade_skip(RC_TOOL, 0, &pct));
+    memset(&g_AyaSaveState, 0, sizeof g_AyaSaveState);
+    memset(s_stack_extra, 0, sizeof s_stack_extra);
+    s_test_stacks = NULL;
+}
+
 #define PINNED 0xA31B4CD7B0A66B68ull  /* the economy mod before D10 step 1, and after it: identical */
 
 static uint64_t s_hash = 1469598103934665603ull;
@@ -437,6 +464,7 @@ int main(void) {
     assert(s_hash == PINNED);
     test_policy_path();
     test_econ_drop_with_permit_stack();
+    test_held_counts_stacks();
     puts("Loot parity: 400 scripted battles match the pinned record, lists and Junk; wallet copy in / out, battle_junk, rewards-off and the opt-in path passed");
     return 0;
 }

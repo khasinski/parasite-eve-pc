@@ -1,4 +1,5 @@
 #include "pe1/hp_loss_hook.h"
+#include "pe1/enemy_effect_hook.h"
 #include "common.h"
 #include "pe1/battle.h"
 #include "pe1/battle_entity_anim.h"
@@ -37,6 +38,7 @@ void Battle_SubActionStep(void) {
 void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
     s32 *ps = &g_ActiveActor->stateFlags;
 
+    if (Pe_EnemyEffectCancelled(ent->effect->effectType, 0, g_ActiveActor)) return;
     switch (ent->effect->effectType) {
     case ENEMY_EFFECT_POISON:
         if ((*ps & AYA_POISON_MASK) == AYA_POISON) {
@@ -47,6 +49,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
                 break;
             }
         }
+        if (Pe_EnemyEffectCancelled(ENEMY_EFFECT_POISON, 1, g_ActiveActor)) break;
         {
             s32 f = *ps;
             if ((f & AYA_POISON_MASK) == AYA_POISON_IMMUNE) {
@@ -93,6 +96,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
                 break;
             }
         }
+        if (Pe_EnemyEffectCancelled(ENEMY_EFFECT_CONFUSION, 1, g_ActiveActor)) break;
         {
             s32 f = *ps;
             s32 r;
@@ -125,6 +129,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
                 break;
             }
         }
+        if (Pe_EnemyEffectCancelled(ENEMY_EFFECT_DARKNESS, 1, g_ActiveActor)) break;
         {
             s32 f = *ps;
             Combatant *pD;
@@ -146,6 +151,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
                 break;
             }
         }
+        if (Pe_EnemyEffectCancelled(ENEMY_EFFECT_STIFFNESS_LOCK, 1, g_ActiveActor)) break;
         {
             s32 f = *ps;
             if ((f & AYA_STIFFNESS_MASK) == AYA_STIFFNESS_IMMUNE) {
@@ -178,6 +184,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
                 break;
             }
         }
+        if (Pe_EnemyEffectCancelled(ENEMY_EFFECT_STIFFNESS_SLOW, 1, g_ActiveActor)) break;
         {
             s32 f = *ps;
             if ((f & AYA_STIFFNESS_MASK) == AYA_STIFFNESS_IMMUNE) {

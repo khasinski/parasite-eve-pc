@@ -19,8 +19,8 @@ Two switches, so a modded build is safe to hand out:
   A mod can ask in its init to run alone (`pe_mod_run_alone`): while it runs, no other mod starts,
   and Manage mods says which one runs alone. The randomizer does, when Randomize new games is on.
   A handler added with `pe_hook_add_beside` goes on beside it (only Always run has any).
-  The one exception is **Language packs**: a language the player picked is no gameplay change, so
-  it runs with All mods off too (its own toggle turns it off).
+  The exceptions are **Language packs** and **Font**: a language or font the player picked is no
+  gameplay change, so they run with All mods off too (their own toggles turn them off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
@@ -40,6 +40,7 @@ mods/
     pe_game_facts.c      those facts as tables: mod effect names and groups, power tags
     pe_main_menu.*       extra rows in Aya's main menu, screens from the game's own widgets, Yes / No
     pe_equip_sync.c      edited equipment reaches the next battle
+    pe_debug_control.c   commands from a test script, off unless PE_DEBUG_CONTROL is set (docs/DEBUG_CONTROL.md)
     pe_gametext.h        text in the game's glyph code; pe_item_table.h the game's item names
     pe_image.h           the picture type the image code shares (RGBA, straight alpha)
     pe_present.*         image presenter: the only code that puts pictures into the game's frame
@@ -80,6 +81,17 @@ gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
 Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
+
+## Font (pe_fonts)
+
+F1 > Font: Original keeps the game's own letters; Pixel Sans (shipped in `mods/fonts/`) swaps in a
+bolder set, drawn from Pixeloid Sans Bold by GGBotNet (SIL OFL 1.1, see `mods/fonts/README.txt`).
+The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
+Every `.png` in `mods/fonts/` beside the game or in the user folder is a choice, named after its
+file, with no code to add; `mods/fonts/README.txt` describes the picture. The letters go into the
+dialogue font page as it goes to VRAM (PE_HOOK_TIM_UPLOAD, before pe_lang adds its accents) and
+their widths into the dialogue and menu tables. US and European discs only; the Japanese discs keep
+their own letters.
 
 ## Warp (pe_warp)
 
@@ -150,7 +162,9 @@ screen). Nothing in the game's scripts is patched.
 - Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
   mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
   never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
-  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park.
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park;
+  `phone.crossovers` (Phone Calls itself: F1 > Phone Calls > Crossover calls, on by default),
+  used by the Raccoon City and Final Fantasy calls in `pe1.txt`.
 - Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
   that fit, leaving out the last five played.
 - Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).
@@ -517,6 +531,24 @@ not the number of enemies in a fight.
 pe_qol/pe_battle_frequency.c owns matching and settings. A single SCRIPT_RANDOM
 hook supplies local RNG bounds; loaded scripts and save data are not patched.
 
+## Hold to skip dialogue
+
+Movement / Hold to skip dialogue (Off, Square, R1, L1; Off by default). A dialogue
+box draws its whole page at once and waits for the cooked action edge (field bit
+0x100) to turn the page or close. While the chosen button is held (decoded pad
+bits from PE_HOOK_PAD_MAP), PE_HOOK_TEXTBOXES sets that edge every third frame,
+so each page is drawn, and its choice flag set, before the next press. It never
+presses while any box is opening (state 1), drew choices (control flag 0x200000)
+or shows a page with the choice command (FB 09), or a page it can't read to its
+end. pe_qol/pe_dialogue_skip.c.
+
+## Auto Medicine order
+
+Combat / Auto Medicine order: Strongest first (native) or Weakest first. The
+Auto Medicine effect in Entity_UpdateTimers asks PE_HOOK_AUTO_MEDICINE once per
+heal for the order it tries Full Recover and Medicine 4..1 in; it still uses as
+many as it needs to get above a fifth of max HP. pe_qol/pe_auto_medicine.c.
+
 ## Panacea and medicine combining
 
 Panacea (item 0x19) restores 400 HP and cures ailments in battle or the field,
@@ -741,6 +773,9 @@ In pe_wardrobe/:
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
   in (29, 31 or 23 parts), so the evening dress worn on a jacket day gets them retargeted to its own.
+  A room row with no copy (no pack installed, or none for that row) is fitted to the outfit's part
+  count instead: missing bones hold the outfit's idle pose, extra bones are dropped. Otherwise the
+  undecoded gown parts compound into a flickering, stretched shape in cutscenes (issue #220).
   When rebuilding packs for Day 1 long-dress scenes, the generator must accept the shortest
   23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
   `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the

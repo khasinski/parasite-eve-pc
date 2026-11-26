@@ -1,0 +1,28 @@
+{
+  "baseline_version": "0.4",
+  "candidate_version": "0.5.1",
+  "changed_atlases": 8,
+  "changed_keys": [
+    "6cc6ab8eea25247d",
+    "2cd1537e3db9ab5b",
+    "8cd6a775e783eeca",
+    "6cf14b4c38773ff5",
+    "ccf69f43e2418364",
+    "ace6a35ce4e2b917",
+    "0cebf7548eacfc86",
+    "ed069b2adfa04db1"
+  ],
+  "changed_files": [
+    "ccf69f43e2418364.webp",
+    "ace6a35ce4e2b917.webp",
+    "ed069b2adfa04db1.webp",
+    "0cebf7548eacfc86.webp",
+    "2cd1537e3db9ab5b.webp",
+    "8cd6a775e783eeca.webp",
+    "6cf14b4c38773ff5.webp",
+    "6cc6ab8eea25247d.webp"
+  ],
+  "all_other_files_byte_identical": true,
+  "baseline_manifest_sha256": "c667f9e40fe834ad2efb1a44d92929d4dc7c2b17864d161060b4ba2eae1b2bec",
+  "candidate_manifest_sha256": "f80eba01f743bf90a07dfe636a52227b614a59fe0e277c35c33165d8836913c7"
+}

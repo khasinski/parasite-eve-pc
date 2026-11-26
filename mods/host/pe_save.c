@@ -382,7 +382,11 @@ int pe_save_prepare_load(const uint8_t *block) {
     s_prepared_valid=0;
     if(!block)return -1;
     int count=pe_parse(block+PE_SAVE_TAIL_OFFSET,linear,entries,&info);
-    if(count<0||info.damaged)return -1;
+    if(count<0)return -1;
+    /* Partly overwritten (another build wrote over part of the container): every record left
+     * passed its own CRC. Not refused; pe_save_on_read's recovery reads it unprepared (the lost
+     * records reset, the rest load, as its log says). */
+    if(info.damaged)return 0;
     ++s_lifecycle_dispatch;
     for(int i=0;i<s_reg_count;i++) {
         const PeSaveRecord *r=s_reg[i].record;const PeSaveEntry *e=NULL;
@@ -772,13 +776,15 @@ int pe_save_peek(const uint8_t *block,const char *name,unsigned *version,void *o
     uint8_t lin[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
     if(!block||!name||!out)return -1;
     int n=pe_parse(block+PE_SAVE_TAIL_OFFSET,lin,entries,&info);
-    if(n<0||info.damaged)return -1;
+    if(n<0)return -1;
     uint32_t id=pe_fnv(name);
+    /* In a partly overwritten container every record found passed its own CRC; one not found may
+     * have been lost to the damage, so its absence is unknown (-1), not "none" (0). */
     for(int i=0;i<n;++i)if(entries[i].id==id){
         if(entries[i].size>capacity)return -1;
         memcpy(out,entries[i].bytes,entries[i].size);
         if(version)*version=entries[i].version;if(size)*size=entries[i].size;return 1;
-    }return 0;
+    }return info.damaged?-1:0;
 }
 
 void pe_save_abort_write(void){s_write_dispatch=0;}

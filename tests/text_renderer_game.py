@@ -1,9 +1,9 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,czech,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
+chinese, spanish, italian, german, french, czech and english-pack, original-game-text-renderer-chinese,
 -spanish, ...)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
@@ -131,6 +131,10 @@ Checks, each from pe_mods.log and frame dumps:
              Italian), adds its own, and draws its menus' spaces 5 px wide, which the pack's space is in
              the menus: on Disc 2, the load screen's help line (sys/080) must light exactly the pack's
              letters with those spaces. test_fr_matches_patch.py checks the text against the patched game.
+  czech      The same for the Czech pack (PE_TEST_CS_PACK): the patch redraws most of the game's letters
+             and adds its own; the letters it leaves alone are the game's. It leaves the name grid as the
+             game has it (its {g4D} cell empty, as with every pack). test_cs_matches_patch.py checks the
+             text against the patched game.
   english-pack  The game's own English as a pack (pelang.py english, made here from the player's discs: the
              pack a new language starts from). With it chosen the game must be the game: a New Game
              through the first boxes, the name entry, the boxes up to the free field and the status panel
@@ -829,6 +833,11 @@ GERMAN = FanPack('german', 'PE_TEST_DE_PACK', ITALIAN_STEPS, 80, 'ÄÖÜäöüß
 # the load screen's help line on the Disc 2 route).
 FRENCH = FanPack('french', 'PE_TEST_FR_PACK', ITALIAN_STEPS, 17, 'çéèêëàâäîïôöùûü', True, None, 'day-card',
                  menu_space=True)
+# The Czech patch redraws most of the game's letters in its own style and adds Á Č Ď É Ě Í Ň Ó Ř Š Ť Ú Ů
+# Ý Ž and the same small, each with its own width; the letters it leaves alone (t & . , / ...) are the
+# game's. It leaves the name grid as it is (the game's letters in its own style). Its first pages
+# are as many screens as English's; its first box is short ("Muž: Copak je? ...").
+CZECH = FanPack('czech', 'PE_TEST_CS_PACK', ITALIAN_STEPS, 90, '', True, None, 'day-card', 40)
 
 
 def run_disc2(game, discs, work, pack):
@@ -1014,6 +1023,10 @@ def french_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, FRENCH)
 
 
+def czech_patch(game, discs, out, localization):
+    return fan_patch(game, discs, out, localization, CZECH)
+
+
 def same_frames(plain, packed, labels, what):
     """Every kept frame of the run with the pack is, whole and pixel for pixel, the run's without."""
     for label in labels:
@@ -1159,7 +1172,7 @@ def translator_pictures(game, discs, out, localization):
         img.save(saved)
         loads += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-pictures.pelang', out / 'translator-pictures-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Pictures test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *loads], capture_output=True, text=True, timeout=300)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1246,7 +1259,7 @@ def translator_map(game, discs, out, localization):
     img.convert('RGB').save(saved)
     expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
     path, report = out / 'translator-map.pelang', out / 'translator-map-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Map test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=300)
@@ -1355,7 +1368,7 @@ def translator_place_title(game, discs, out, localization):
     check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
     # The Translator: a new translation with the place title typed as words only.
     path, report = out / 'translator-place-title.pelang', out / 'translator-place-title-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Place test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--select', PLACE_KEY, '--type', PLACE_WORDS], capture_output=True, text=True, timeout=300)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1443,7 +1456,7 @@ def translator_battle(game, discs, out, localization):
     img.convert('RGB').save(saved)
     expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
     path, report = out / 'translator-battle.pelang', out / 'translator-battle-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Battle test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=300)
@@ -1540,7 +1553,7 @@ def translator_cards(game, discs, out, localization):
               f'no square of {pid} took another colour set: {expected[pid].notes}')
         args += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-cards.pelang', out / 'translator-cards-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Cards test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *args], capture_output=True, text=True, timeout=600)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1710,7 +1723,7 @@ def translator_tutorial(game, discs, out, localization):
                   f"About Icons 8's PNG did not keep 7's Tune-up screenshot: {loaded.notes}")
         expected = artwork.put(disc, pic, expected, loaded.tim)
     path, report = out / 'translator-tutorial.pelang', out / 'translator-tutorial-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Tutorial test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *args], capture_output=True, text=True, timeout=1200)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1826,7 +1839,7 @@ def translator_game_over(game, discs, out, localization):
     expected = artwork.from_png(pic, english, saved.read_bytes())
     check(any('not one of the picture' in n for n in expected.notes), f'no colour was fitted: {expected.notes}')
     path, report = out / 'translator-game-over.pelang', out / 'translator-game-over-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Game Over test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=600)
@@ -1952,7 +1965,7 @@ def translator_menu_words(game, discs, out, localization):
         check(expected[pid] != english and expected[pid][-32:] == english[-32:], f'{pid}: not redrawn, or its colours changed')
         loads += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-menu-words.pelang', out / 'translator-menu-words-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Menu words test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0]] + loads, capture_output=True, text=True, timeout=600)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -2733,7 +2746,7 @@ def translator_letters(game, discs, out, localization):
         def window(*args):
             report = out / f'letters-{lang}-report.json'
             report.unlink(missing_ok=True)
-            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--english',
+            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--english',
                                   str(english), '--settings', str(out / 'translator-settings.json'), '--report',
                                   str(report), '--disc', discs[0], *args], capture_output=True, text=True, timeout=300)
             said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -2888,7 +2901,15 @@ def fan_patch(game, discs, out, localization, fan):
 
     # The name entry's grid (sys/117): every cell the pack's letter, two-byte name letters (Ñ ñ Ü ü
     # Á É Í Ó Ú á é í ó ú ¿ ¡) as the pack's pictures of them; {g0D} is the game's own icon.
-    raw = entries[pelang.fnv1a('sys/117')]
+    raw = entries.get(pelang.fnv1a('sys/117'))
+    if raw is None:                            # the patch leaves the grid alone: the game's, its {g4D}
+        from extract_text import table_entries  # cell kept empty by pe_lang with every pack
+        from petext.disc import Game
+        disc = Game(discs[0])
+        try:
+            raw = dict(table_entries(disc.resident_pack()))['sys/117'].replace(b'M', b'')
+        finally:
+            disc.disc.f.close()
     names = name_letters(plain)
     by_char = {}
     at, count = struct.unpack_from('<II', text, 80)
@@ -3361,7 +3382,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
+                              ('german', german_patch), ('french', french_patch), ('czech', czech_patch),
+                              ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
                               ('translator-map', translator_map), ('translator-place-title', translator_place_title),
                               ('translator-battle', translator_battle),
@@ -3416,7 +3438,9 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         log = mods_log(work)
         check('All mods off' in log, f'All mods is not off in this run: {work}')
         check('pe_lang: started' in log, f'the language mod did not start with All mods off: {work}')
-        started = [line for line in log.splitlines() if ': started ' in line and not line.startswith('pe_lang:')]
+        # Font runs with All mods off too; with Original picked (the default here) it changes nothing.
+        started = [line for line in log.splitlines()
+                   if ': started ' in line and not line.startswith(('pe_lang:', 'pe_fonts:'))]
         check(not started, f'another mod started with All mods off: {started}: {work}')
         check(f'pe_lang: language: {greek[1]} ({greek[0]})' in log, f'the saved language is not the one in use: {work}')
         check(crop(work, 'first', BOX) == crop(out / 'pack-el', 'first', BOX),

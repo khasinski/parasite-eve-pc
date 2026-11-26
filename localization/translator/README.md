@@ -255,3 +255,29 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   Arabic files, paints every square with a made-up letter, loads it back, and checks the pack holds
   each letter as painted and that the first box (Disc 1) and the five boxes on the ship (Disc 2) are,
   pixel for pixel, the "As in the game" drawing, right to left for Hebrew and Arabic.
+
+### Headless editor and tests
+
+Batch editing uses the same translation, picture and font operations as the desktop editor,
+without importing Tk or creating any windows:
+
+```sh
+python -I localization/translate.py translation.pelang --headless --new fr French \
+  --select sys/004 --type " sera jeté" --report report.json
+```
+
+An existing file can be opened by leaving out `--new`. `--english`, `--disc`,
+`--picture ID=PNG`, `--letters` and `--save-letters` also work in headless mode.
+The JSON report describes the saved pack and validation errors; failures return a nonzero status.
+Headless runs do not read or change desktop preferences. Window screenshots require GUI mode.
+
+The default source test suite is headless and rejects Tk imports. Visual window/layout tests
+are a separate `--gui` suite, retained in CI on all platforms. On a development machine run them
+on a remote virtual display, for example:
+
+```sh
+xvfb-run -a python -I localization/tests/test_translator.py --gui WindowTest PictureWindowTest PictureFitTest GameLookWindowTest LettersWindowTest
+```
+
+Game integration tests invoke the actual editor with `--headless`; they do not skip editing or
+replace it with fixtures.

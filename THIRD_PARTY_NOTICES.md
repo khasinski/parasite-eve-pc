@@ -37,6 +37,32 @@ texts; consult each source file for any additional attribution.
 Copyright (c) 2017 IBM Corp., licensed under the SIL Open Font License, Version 1.1.
 The full license text is included at `src/main/boot/fonts/OFL-IBMPlex.txt`.
 
+## Pixeloid Sans (Pixel Sans)
+
+`mods/fonts/Pixel_Sans.png`, the F1 > Font choice "Pixel Sans", is Pixeloid Sans Bold
+version 1.0 by GGBotNet ([ggbot.itch.io/pixeloid-font](https://ggbot.itch.io/pixeloid-font)),
+drawn at its 9-pixel size into the game's font layout with a one-pixel drop shadow added.
+Copyright (c) 2020-2025 GGBotNet (https://ggbot.net/fonts/), with Reserved Font Name
+"Pixeloid". Licensed under the SIL Open Font License, Version 1.1; the full license text is
+included at `mods/fonts/OFL.txt` and ships beside the picture. As a modified version it does
+not use the Reserved Font Name.
+
+## Departure Mono
+
+`mods/fonts/Departure_Mono.png`, the F1 > Font choice "Departure Mono", is Departure Mono
+version 1.500 by Helena Zhang ([departuremono.com](https://departuremono.com)), drawn at 11 pixels
+into the game's font layout with `tools/fonts/font_sheet.py` and a one-pixel drop shadow added.
+Copyright 2022-2024 Helena Zhang. Licensed under the SIL Open Font License, Version 1.1; the full
+license text is included at `mods/fonts/OFL-DepartureMono.txt` and ships beside the picture.
+
+## IBM Plex Sans (Plain Sans)
+
+`mods/fonts/Plain_Sans.png`, the F1 > Font choice "Plain Sans", is IBM Plex Sans Regular drawn at
+11 pixels into the game's font layout with `tools/fonts/font_sheet.py` and a one-pixel drop shadow
+added. Copyright 2017 IBM Corp., with Reserved Font Name "Plex". Licensed under the SIL Open Font
+License, Version 1.1; the full license text is included at `mods/fonts/OFL-IBMPlex.txt` and ships
+beside the picture. As a modified version it does not use the Reserved Font Name.
+
 ## stb_truetype.h
 
 `src/main/boot/stb_truetype.h` is from Sean Barrett's `stb` single-file public domain /

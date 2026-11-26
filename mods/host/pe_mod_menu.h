@@ -29,6 +29,10 @@ typedef unsigned (*PeMenuChoiceCount)(void);
 typedef const char *(*PeMenuChoiceName)(unsigned index);
 
 void pe_menu_begin(const char *page);
+/* Applied profile values without an editable row; restored at registration, saved with F1. */
+int pe_menu_bind_setting(const char *key, int *value, int minimum, int maximum);
+/* Existing F1 question renderer, Yes/No with No selected. Returns 1/0/-1. */
+int pe_menu_confirm(const char *title, const char *help);
 
 int pe_menu_register_toggle(const char *sub, const char *label, const char *description,
                             int *flag, PeMenuPerFrame per_frame);

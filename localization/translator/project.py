@@ -24,6 +24,8 @@ needs for that is in the pack itself: its letter table and CJK dictionary hold t
 """
 from __future__ import annotations
 
+import argparse
+
 import contextlib
 import csv
 import hashlib
@@ -713,6 +715,7 @@ class Translation:
         self.lang, self.name = lang, name
         self.texts: dict[str, str] = {}      # key -> the translator's text ("" or missing: not translated)
         self.notes: dict[str, str] = {}
+        self.picture_files: dict[str, str] = {}
         self.parts: dict[str, bytes] = {}    # the file's other parts, kept as they are
         self.pack: bytes | None = None       # the compiled pack of the file it was opened from
         self.path: Path | None = None
@@ -804,6 +807,56 @@ class Translation:
                 else:
                     self.from_patch, self.patch_text = False, {}
         return self
+
+    def letters_png(self, look_disc=None) -> bytes:
+        """The letters PNG of the open translation: its letters as drawn so far, the game's own
+        letters as a style guide when a disc is chosen."""
+        tr = self
+        from . import letterart as LA
+        rows = tr.letters_to_draw()
+        drawn = {s.char: tr.letter(s.char) for s in LA.every_shape(rows) if tr.letter(s.char)}
+        style = LA.style_letters(look_disc.page, look_disc.font.palettes[0]) if look_disc else None
+        language = alphabets.BY_CODE[tr.lang].name if tr.lang in alphabets.BY_CODE else tr.name
+        return LA.png(rows, language, drawn, style)
+
+    def load_letters(self, png: bytes):
+        """A painted letters PNG into the translation (saved with it): each painted square draws its
+        letter, an empty one gives the letter back its question mark."""
+        tr = self
+        if tr.locked:
+            raise ValueError("open a translation you can save first")
+        from . import letterart as LA
+        loaded = LA.from_png(png, tr.letters_to_draw())
+        for ch, rows in loaded.drawn.items():
+            tr.set_letter(ch, rows)
+        return loaded
+
+    def load_picture(self, disc, pic, png: bytes | None, name: str = "your PNG"):
+        """A PNG as the translation's picture (None: back to the game's). Saved with the translation.
+        `name`: the PNG's file name, to name it if it disagrees with another screen's (the Tune-up
+        screenshot, shown on two Tutorial screens)."""
+        from . import artwork as A
+        tr = self
+        if disc is None or tr.locked:
+            raise ValueError("open a translation you can save and choose your disc first")
+        pieces = A.read_pieces(tr.parts)
+        if png is None:
+            loaded = A.Loaded(disc.english[pic.id], [])
+            new = A.put(disc, pic, pieces, None)
+            self.picture_files.pop(pic.id, None)
+        else:
+            try:
+                loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces),
+                                    getattr(disc, "layout", {}).get(pic.id))
+            except A.Disagree as e:
+                other = self.picture_files.get(e.other.id)
+                raise ValueError(f"{e} The two PNGs that disagree: {name} (for this screen) and "
+                                 + (f"{other} (loaded for \"{e.other.label}\")." if other else
+                                    f"the one already in the translation for \"{e.other.label}\".")) from e
+            new = A.put(disc, pic, pieces, loaded.tim)
+            self.picture_files[pic.id] = name
+        A.write_pieces(tr.parts, new)
+        return loaded
 
     def untouched_changes(self) -> dict[str, str]:
         """key -> why, for each row the compiler would not write back as the opened pack has it
@@ -1024,3 +1077,107 @@ def pelang_entries(pack: bytes) -> dict[int, bytes]:
         path = Path(tmp) / "pack.bin"
         path.write_bytes(pack)
         return pelang.read_pack(path)[2]
+
+
+def arguments(argv=None):
+    ap = argparse.ArgumentParser(description="The Parasite Eve Translator")
+    ap.add_argument("translation", nargs="?", help="a .pelang translation to open")
+    ap.add_argument("--english", help="the English pack (remembered after the first time)")
+    ap.add_argument("--select", help=argparse.SUPPRESS)       # for tests: the row to show first,
+    ap.add_argument("--type", help=argparse.SUPPRESS)         # and text to type into it
+    # For the checks (tests, the download's build): start a new translation with no dialog, keep the
+    # settings in another file than the person's own, and save, quit and report (see App).
+    ap.add_argument("--new", nargs=2, metavar=("LANG", "NAME"), help=argparse.SUPPRESS)
+    ap.add_argument("--settings", help=argparse.SUPPRESS)
+    ap.add_argument("--report", help=argparse.SUPPRESS)
+    ap.add_argument("--screenshot", help=argparse.SUPPRESS)
+    ap.add_argument("--disc", help="your Parasite Eve (USA) disc, for the pictures (remembered)")
+    ap.add_argument("--picture", action="append", default=[], metavar="ID=PNG", help=argparse.SUPPRESS)
+    ap.add_argument("--letters", help=argparse.SUPPRESS)       # a letters PNG to load before saving
+    ap.add_argument("--save-letters", help=argparse.SUPPRESS)  # where to save the letters PNG first
+    ap.add_argument("--headless", action="store_true", help="edit and report without opening a window")
+    a = ap.parse_args(argv)
+    if a.new and not a.translation:
+        ap.error("--new needs the file to save the new translation as")
+    pictures = []
+    for item in a.picture:
+        pid, sep, path = item.partition("=")
+        if not sep:
+            ap.error("--picture takes ID=PNG")
+        pictures.append((pid, path))
+    a.picture_pairs = pictures
+    return a
+
+
+def headless_main(argv=None) -> int:
+    """Run the editor's real model operations without importing or initializing Tk."""
+    import sys
+    import time
+    started = time.monotonic()
+    a = arguments(argv)
+    out = dict(ok=False, error=None, headless=True, frozen=bool(getattr(sys, "frozen", False)),
+               english_rows=0, english_error=None, pictures=[], letters={})
+    tr = None
+    try:
+        if not a.translation:
+            raise ValueError("headless mode needs a translation file")
+        if a.screenshot:
+            raise ValueError("a window screenshot requires GUI mode on a dedicated display")
+        game = Game()
+        if a.english:
+            try:
+                english, wrong = read_english(a.english, game)
+                if wrong:
+                    raise ValueError(f"{wrong} English rows do not match this game")
+                out["english_rows"] = len(english)
+            except Exception as e:
+                out["english_error"] = str(e)
+                raise ValueError(f"the English pack did not load: {e}") from e
+        tr = Translation(game, *a.new) if a.new else Translation.open(a.translation, game)
+        tr.path = Path(a.translation)
+        if a.select and a.type is not None:
+            tr.set_text(a.select, a.type.replace("\n", ""))
+            row = tr.check_row(a.select)
+            out.update(row=a.select, text_in_row=tr.text(a.select),
+                       row_state="error" if row.errors else "warning" if row.warnings else "ok")
+        disc = look_disc = None
+        if a.picture_pairs:
+            if not a.disc:
+                raise ValueError("pictures require your disc (--disc)")
+            from . import artwork
+            disc = artwork.Disc(a.disc)
+            for pid, path in a.picture_pairs:
+                if pid not in artwork.BY_ID:
+                    raise ValueError(f"no picture {pid}")
+                loaded = tr.load_picture(disc, artwork.BY_ID[pid], Path(path).read_bytes(), Path(path).name)
+                out["pictures"].append(dict(id=pid, notes=loaded.notes))
+        if a.save_letters:
+            if a.disc:
+                from . import gamelook
+                look_disc = gamelook.DiscLook(a.disc)
+            Path(a.save_letters).write_bytes(tr.letters_png(look_disc))
+            out["letters"]["saved"] = a.save_letters
+        if a.letters:
+            loaded = tr.load_letters(Path(a.letters).read_bytes())
+            out["letters"].update(drawn=sorted(ch for ch, rows in loaded.drawn.items() if rows),
+                                   empty=sorted(ch for ch, rows in loaded.drawn.items() if not rows),
+                                   notes=loaded.notes)
+        saved = tr.save()
+        out.update(ok=True, file=str(saved.path), file_sha256=hashlib.sha256(saved.path.read_bytes()).hexdigest(),
+                   in_pack=saved.in_pack, left_out=saved.left_out, warnings=saved.warnings, whole=saved.whole)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    if tr is not None:
+        out.update(lang=tr.lang, name=tr.name, translated=tr.translated(), from_patch=tr.from_patch,
+                   locked=len(tr.locked), fonts=list(tr.cjk_fonts), map_as_bytes=tr.map_as_bytes,
+                   letters_drawn=sorted(tr.drawn))
+    out["seconds"] = round(time.monotonic() - started, 2)
+    if a.report:
+        try:
+            Path(a.report).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError as e:
+            print(f"Could not write headless report: {e}", file=sys.stderr)
+            return 2
+    else:
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0 if out["ok"] else 1

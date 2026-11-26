@@ -1,5 +1,9 @@
 # Native build products and local environments
 build/
+/build-bp-ui-preview/
+/build-bp-ui-headless/
+/build-bp-battle/
+/build-bp-ui-headless-*.log
 .venv/
 .cache/
 *.o
@@ -68,3 +72,19 @@ test_regex*.py
 
 # Local compatibility validation build
 /build-compat/
+
+/BP-UI-Preview/
+/build-mods/
+/build.log
+/build-modular.log
+/configure.log
+/test-debug-control.exe
+/prototypes/bp-ui/userdata/
+/prototypes/bp-ui/preview.html
+
+# headless harness (harness/README.md): local config, runs and your own saves
+/harness/harness.json
+/harness/runs/
+/harness/fixtures/cards/
+/harness/fixtures/scenarios/
+/build-harness/

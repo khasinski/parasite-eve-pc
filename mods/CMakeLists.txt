@@ -2,9 +2,10 @@
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
+# pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone pe_randomizer)
 if(NOT PE_PS5_GAME)
-    list(APPEND pe_default_mods pe_lang)
+    list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -26,6 +27,35 @@ if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIS
         VERBATIM)
     add_dependencies(parasite-eve-pc pe-language-packs)
 endif()
+
+# F1 > Font reads mods/fonts/ beside the game; copy the shipped pictures there.
+if("pe_fonts" IN_LIST PE_MOD_LIST)
+    if(APPLE AND PE_MACOS_BUNDLE)
+        set(pe_font_dir "$<TARGET_BUNDLE_CONTENT_DIR:parasite-eve-pc>/Resources/mods/fonts")
+    else()
+        set(pe_font_dir "$<TARGET_FILE_DIR:parasite-eve-pc>/mods/fonts")
+    endif()
+    add_custom_target(pe-font-files
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/fonts" "${pe_font_dir}"
+        COMMENT "Copy the font pictures beside the game"
+        VERBATIM)
+    add_dependencies(parasite-eve-pc pe-font-files)
+endif()
+
+set(pe_debug_sources
+    host/pe_debug_control.c
+    host/debug/pe_debug_field.c
+    host/debug/pe_debug_save.c
+    host/debug/pe_debug_battle.c
+    host/debug/pe_debug_rng.c
+    host/debug/pe_debug_setup.c
+    host/debug/pe_debug_settings.c
+    host/debug/pe_debug_trace.c
+    host/debug/pe_debug_ui.c
+    host/debug/pe_debug_snapshot.c
+    host/debug/pe_debug_events.c
+    host/pe_mod_state.c          # mods' live-state providers (registered always, read only by debug control)
+)
 
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
@@ -50,6 +80,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
@@ -64,10 +95,13 @@ if(PE_PS5_PLUGINS AND NOT PE_PS5_GPU_NATIVE)
     list(REMOVE_ITEM pe_host_sources host/ui/pe_ui_gpu.c)
     list(APPEND pe_host_sources host/ui/pe_ui_ps5_cpu.c)
 endif()
+set(PE_EXTRA_MODS "" CACHE STRING "Additional mods appended to the configured suite")
+set(pe_enabled_mods ${PE_MOD_LIST} ${PE_EXTRA_MODS})
+list(REMOVE_DUPLICATES pe_enabled_mods)
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")
-foreach(mod IN LISTS PE_MOD_LIST)
+foreach(mod IN LISTS pe_enabled_mods)
     file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
     list(APPEND pe_mod_sources ${mod_files})
     string(APPEND pe_mod_decls "extern const PeMod pe_mod_${mod};\n")
@@ -111,6 +145,27 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1 PE_NATIVE_STATE_CPU_COMPONENTS=1)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
+endif()
+if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
+    # Hold to skip dialogue (issue 246) and the Auto Medicine order (issue 238).
+    add_executable(pe-mod-qol-skip-medicine
+        ${PROJECT_SOURCE_DIR}/tests/pe_mod_qol_skip_medicine_test.c
+        pe_qol/pe_dialogue_skip.c
+        pe_qol/pe_auto_medicine.c)
+    target_include_directories(pe-mod-qol-skip-medicine PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(pe-mod-qol-skip-medicine PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(pe-mod-qol-skip-medicine PRIVATE psyz)
+    add_test(NAME pe-mod-qol-skip-medicine COMMAND pe-mod-qol-skip-medicine)
+endif()
+
+# Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
+if(BUILD_TESTING AND "pe_fonts" IN_LIST PE_MOD_LIST)
+    add_executable(test-mod-fonts ${PROJECT_SOURCE_DIR}/tests/pe_mod_fonts_test.c pe_fonts/pe_fonts_sheet.c)
+    target_include_directories(test-mod-fonts PRIVATE pe_fonts)
+    target_compile_options(test-mod-fonts PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
+    target_link_libraries(test-mod-fonts PRIVATE SDL3::SDL3)
+    add_test(NAME mod-fonts COMMAND test-mod-fonts "${PROJECT_SOURCE_DIR}/mods/fonts")
 endif()
 
 if(BUILD_TESTING)
@@ -494,6 +549,7 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(econ-config ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_config_test.c pe_economy/pe_econ_config.c)
     pe_feature_test(econ-engine ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_engine_test.c pe_economy/pe_econ_engine.c pe_economy/pe_econ_config.c)
+    pe_feature_test(wayne-handin ${PROJECT_SOURCE_DIR}/tests/pe_mod_wayne_handin_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(junk-counter ${PROJECT_SOURCE_DIR}/tests/pe_mod_junk_counter_test.c pe_economy/pe_junk_counter.c)
     pe_feature_test(armor-effect-display ${PROJECT_SOURCE_DIR}/tests/pe_mod_armor_effect_display_test.c pe_catalog/pe_armor_effect_display.c)
     pe_feature_test(catalog-rules ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_rules_test.c pe_catalog/pe_catalog.c pe_catalog/pe_dismantle.c host/pe_legacy_guard.c host/pe_game_facts.c)
@@ -505,10 +561,12 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+    pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's
     # scenarios/phone_calls.py.
+    pe_feature_test(phone-cancel ${PROJECT_SOURCE_DIR}/tests/pe_mod_phone_cancel_test.c)
     pe_feature_test(phone ${PROJECT_SOURCE_DIR}/tests/pe_mod_phone_test.c pe_phone/pe_phone_text.c
         pe_phone/pe_phone_record.c pe_phone/pe_phone_pick.c pe_phone/pe_phone_file.c)
     target_compile_definitions(test-mod-phone PRIVATE PE_PHONE_CALLS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt")
@@ -516,7 +574,7 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(title-choice ${PROJECT_SOURCE_DIR}/tests/pe_mod_title_choice_test.c)
 endif()
-if(BUILD_TESTING AND "pe_challenges" IN_LIST PE_MOD_LIST)
+if(BUILD_TESTING AND "pe_challenges" IN_LIST pe_enabled_mods)   # opt-in: usually via PE_EXTRA_MODS
     pe_feature_test(challenge-start ${PROJECT_SOURCE_DIR}/tests/pe_mod_challenge_start_test.c)
 endif()
 if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)

@@ -8,6 +8,8 @@
 #include "pe_mod_menu.h"
 #include "pe_save.h"
 
+void pe_debug_control_install(void) {}
+
 static int frames_other, frames_beside, frames_broken, frames_keeper, shutdowns;
 static const int api = 1;
 static struct { int on; } s_run;
