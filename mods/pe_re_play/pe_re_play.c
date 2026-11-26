@@ -397,7 +397,7 @@ static void text_enemy_movement(char *out, unsigned size) {
 
 /* ---- the pocket and the item box ---- */
 enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER, PICK_ALLIGATOR,
-       PICK_STATUS, PICK_STATUS_ACT, PICK_COMBINE, PICK_PAUSE };
+       PICK_STATUS, PICK_STATUS_ACT, PICK_COMBINE, PICK_PAUSE, PICK_ROUND_ACT };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
  * ribbon back once the room is up again. */
@@ -505,6 +505,19 @@ static void open_pocket(void) {
  * As RE2's own (bio2-ds GAME.C opens it on KEY_STATUS): Use, Combine (Mix) and Check. Equip is left
  * out: the fights are Parasite Eve's. */
 static int s_status_slot;
+static uint16_t s_status_round;                 /* the rounds chosen on the status screen */
+enum { STATUS_ROUNDS = 1000 };                  /* s_pick_slot for a weapon's rounds: STATUS_ROUNDS + k */
+static int round_entries(ReRoundEntry *out, int max) {
+    const ReHost *host = re_host();
+    if (!s_session.game || !RE_HOST_HAS(host, round_entries) || !host->round_entries) return 0;
+    const int n = host->round_entries(s_session.game->game, out, max);
+    return n < 0 ? 0 : n > max ? max : n;
+}
+static void round_label(const ReRoundEntry *e, char *out, size_t n) {
+    char name[48];
+    pe_re_item_name(s_session.items, e->item, name, sizeof name);
+    snprintf(out, n, "%s x%u%s", name, e->count, e->loaded ? " (loaded)" : "");
+}
 static const char *who_plays(void) {
     if (s_session.player_id == 12) return "HUNK";
     return s_session.player ? "Claire" : "Leon";
@@ -518,6 +531,14 @@ static void open_status(int at) {
         held_label(&p->pocket[i], "", text[n], sizeof text[n]);
         labels[n] = text[n], s_pick_item[n] = p->pocket[i].item, s_pick_slot[n] = i;
     }
+    {   /* a carried weapon's rounds (RE2's launcher), after the pocket */
+        ReRoundEntry rounds[8];
+        const int k = round_entries(rounds, 8);
+        for (int r = 0; r < k && n < RE_HOST_DIALOGUE_CHOICES; r++, n++) {
+            round_label(&rounds[r], text[n], sizeof text[n]);
+            labels[n] = text[n], s_pick_item[n] = rounds[r].item, s_pick_slot[n] = STATUS_ROUNDS + r;
+        }
+    }
     snprintf(title, sizeof title, "Status: %s  %d/%d", who_plays(), p->held, PE_RE_POCKET_SLOTS);
     if (!n) { say("Status: nothing carried."); return; }
     if (re_host()->choose(title, labels, n, at >= 0 && at < n ? at : 0)) s_pick = PICK_STATUS;
@@ -529,6 +550,17 @@ static void open_status_actions(void) {
     if (s_status_slot >= p->held) { open_status(0); return; }
     held_label(&p->pocket[s_status_slot], "", title, sizeof title);
     if (re_host()->choose(title, actions, 4, 0)) s_pick = PICK_STATUS_ACT;
+}
+static void open_round_actions(void) {
+    static const char *const actions[] = {"Use", "Check", "Back"};
+    static char title[64];
+    ReRoundEntry rounds[8];
+    const int k = round_entries(rounds, 8);
+    title[0] = 0;
+    for (int r = 0; r < k; r++)
+        if (rounds[r].item == s_status_round) round_label(&rounds[r], title, sizeof title);
+    if (!title[0]) { open_status(0); return; }
+    if (re_host()->choose(title, actions, 3, 0)) s_pick = PICK_ROUND_ACT;
 }
 static void open_combine(void) {
     static char text[RE_HOST_DIALOGUE_CHOICES][41];
@@ -638,7 +670,25 @@ static void picked(void) {
         return;
     }
     if (mode == PICK_STATUS) {
-        if (c >= 0) s_status_slot = s_pick_slot[c], open_status_actions();
+        if (c >= 0 && s_pick_slot[c] >= STATUS_ROUNDS) s_status_round = s_pick_item[c], open_round_actions();
+        else if (c >= 0) s_status_slot = s_pick_slot[c], open_status_actions();
+        return;
+    }
+    if (mode == PICK_ROUND_ACT) {
+        if (c == -2 || c == 2) { open_status(0); return; }   /* Back: the status screen again */
+        char text[160], name[48];
+        pe_re_item_name(s_session.items, s_status_round, name, sizeof name);
+        if (c == 0) {
+            const ReHost *host = re_host();
+            text[0] = 0;
+            if (RE_HOST_HAS(host, load_round) && host->load_round &&
+                host->load_round(s_session.game->game, s_status_round, text, sizeof text))
+                snprintf(text, sizeof text, "Loaded the %s.", name);
+            say(text[0] ? text : "Those can't be loaded.");
+        } else if (c == 1) {
+            snprintf(text, sizeof text, "%s, for the Grenade Launcher.", name);
+            say(text);
+        }
         return;
     }
     if (mode == PICK_STATUS_ACT) {
@@ -1484,6 +1534,21 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
 }
 static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
 static void to_that_door(void) { s_door_start = s_door_pick; to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
+/* Testing: the next kind of rounds after the loaded one that has any, through the host's load_round. */
+static void next_round(void) {
+    ReRoundEntry rounds[8];
+    const int n = round_entries(rounds, 8);
+    int at = 0;
+    char text[160];
+    const ReHost *host = re_host();
+    if (!n || !RE_HOST_HAS(host, load_round) || !host->load_round) return;
+    for (int k = 0; k < n; k++) if (rounds[k].loaded) at = k;
+    for (int step = 1; step < n; step++) {
+        const ReRoundEntry *e = &rounds[(at + step) % n];
+        if (e->loaded || !e->count) continue;
+        if (host->load_round(s_session.game->game, e->item, text, sizeof text)) return;
+    }
+}
 static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, 0, "pickup"); }
 static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_SCE_MESSAGE, "message"); }
 static void to_event(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_EVENT, "event zone"); }
@@ -1720,6 +1785,7 @@ const PeRePlayControls *pe_re_play_controls(void)
         .to_room = to_room,
         .door_pick = &s_door_pick,
         .to_that_door = to_that_door,
+        .next_round = next_round,
         .refresh = refresh,
         .text_scene = text_scene,
         .text_status = text_status,

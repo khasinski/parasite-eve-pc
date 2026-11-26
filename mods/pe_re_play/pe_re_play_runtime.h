@@ -32,6 +32,7 @@ typedef struct PeRePlayControls {
     void (*to_room)(void);
     int *door_pick;
     void (*to_that_door)(void);
+    void (*next_round)(void);           /* Testing: the carried launcher loads its next kind of rounds */
     void (*refresh)(void);
     void (*text_scene)(char *, unsigned);
     void (*text_status)(char *, unsigned);

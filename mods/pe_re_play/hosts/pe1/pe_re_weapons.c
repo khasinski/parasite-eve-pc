@@ -1,4 +1,5 @@
 #include "../../pe_re_rules.h"
+#include "../../re_host.h"
 #include "pe_re_stage.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
@@ -11,6 +12,7 @@
 #include "pe1/inventory_slots.h"
 #include "pe1/item_ids.h"
 #include "pe1/weapon_list_output.h"
+#include <stdio.h>
 #include <string.h>
 
 /* Rounds a weapon can load (RE2's launcher): the source ammo item, its ammo type and the native PE
@@ -213,31 +215,33 @@ int pe_re_weapon_pickup(const char *game, uint16_t item, unsigned count) {
     return 1;
 }
 
-/* Load the equipped weapon's next kind of rounds that has any in reserve (RE2's launcher: explosive,
- * flame, acid). The loaded rounds go back to their own reserve first. With per-type ammo off every
- * kind shares Bullets, so only the kind and its effect change. Returns 1 when the kind changed. */
-static int pe_re_weapon_next_round(void) {
-    if (!progress) return 0;
-    const int value = selected();
-    int i = -1;
-    for (unsigned k = 0; k < PE_RE_OWNED_WEAPONS; k++)
-        if (mounted[k] && mounted[k] == value) i = (int)k;
-    const ReWeapon *rule = i < 0 ? NULL : lookup(game_id, progress->weapons[i].item);
-    if (!rule || rule->nrounds < 2) return 0;
-    ItemDataRecord *record = &g_InventoryRuntime.equipment[mounted[i] - 0x100];
+/* The ammo service when it holds per-type reserves (F1 > Ammo on): rounds can be counted and taken. */
+static const PeAmmoTypesApi *typed_ammo(const ReWeapon *rule) {
     const PeAmmoTypesApi *api = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
-    const int typed = api && api->struct_size >= offsetof(PeAmmoTypesApi, take) + sizeof api->take && api->take &&
-                      api->rounds && api->rounds(rule->rounds[0].type) >= 0;
-    const ReRound *now = loaded_round(rule, (unsigned)i);
-    const unsigned at = (unsigned)(now - rule->rounds);
-    const ReRound *next = NULL;
-    for (unsigned step = 1; step < rule->nrounds && !next; step++) {
-        const ReRound *r = &rule->rounds[(at + step) % rule->nrounds];
-        if (!typed || api->rounds(r->type) > 0) next = r;
+    const int ok = api && api->struct_size >= offsetof(PeAmmoTypesApi, take) + sizeof api->take && api->take &&
+                   api->rounds && api->add && api->rounds(rule->rounds[0].type) >= 0;
+    return ok ? api : NULL;
+}
+
+/* The owned, carried weapon that loads several kinds of rounds (RE2's launcher), or -1. */
+static int round_weapon(void) {
+    for (unsigned k = 0; progress && k < PE_RE_OWNED_WEAPONS; k++) {
+        const ReWeapon *rule = mounted[k] ? lookup(game_id, progress->weapons[k].item) : NULL;
+        if (rule && rule->nrounds > 1) return (int)k;
     }
-    if (!next) return 0;
-    if (typed) {
+    return -1;
+}
+
+/* Load kind `next` into owned weapon i. The loaded rounds go back to their own reserve first. With
+ * per-type ammo off every kind shares Bullets, so only the kind and its effect change. */
+static int load_kind(unsigned i, const ReWeapon *rule, const ReRound *next) {
+    ItemDataRecord *record = &g_InventoryRuntime.equipment[mounted[i] - 0x100];
+    const PeAmmoTypesApi *api = typed_ammo(rule);
+    const ReRound *now = loaded_round(rule, i);
+    if (now == next) return 0;
+    if (api) {
         const int capacity = record->baseStats[2] + record->bonusStats[2];
+        if (api->rounds(next->type) <= 0) return 0;
         const int back = record->ammo ? api->add(now->type, record->ammo) : 0;
         record->ammo = (u16)(record->ammo - (back > 0 ? back : 0));
         if (record->ammo) return 0;   /* the old kind's reserve is full: keep it loaded */
@@ -245,15 +249,49 @@ static int pe_re_weapon_next_round(void) {
     }
     progress->weapons[i].ammo_item = next->item;
     progress->weapons[i].loaded = record->ammo;
-    apply_round_effect((unsigned)i, rule);
+    apply_round_effect(i, rule);
     Inv_RecalcSlotStats();
-    Inv_BuildWeaponList(0, &g_SavedBattleStateTail.weapon);
+    if (mounted[i] == selected()) Inv_BuildWeaponList(0, &g_SavedBattleStateTail.weapon);
     pe_mod_log("pe_re_play", "launcher: loaded %u rounds of %s (effect %u)", (unsigned)record->ammo, next->type,
                (unsigned)next->effect);
     return 1;
 }
 
-void pe_re_weapon_next_round_action(void) { pe_re_weapon_next_round(); }
+/* The status screen: the carried launcher's kinds of rounds, those with rounds and the loaded one. */
+int pe_re_weapon_round_entries(const char *game, ReRoundEntry *out, int max) {
+    const int i = round_weapon();
+    if (i < 0 || !game || !game_id || strcmp(game, game_id)) return 0;
+    const ReWeapon *rule = lookup(game_id, progress->weapons[i].item);
+    const PeAmmoTypesApi *api = typed_ammo(rule);
+    const ReRound *now = loaded_round(rule, (unsigned)i);
+    int n = 0;
+    for (unsigned k = 0; k < rule->nrounds && n < max; k++) {
+        const ReRound *r = &rule->rounds[k];
+        const int count = api ? api->rounds(r->type) : (int)g_KeyItemRecords[0].ammo;
+        if (r != now && count <= 0) continue;
+        out[n++] = (ReRoundEntry){r->item, (uint16_t)(r == now), (unsigned)(count > 0 ? count : 0)};
+    }
+    return n;
+}
+
+/* The status screen's Use on rounds: load that kind into the carried launcher. */
+int pe_re_weapon_load_round(const char *game, uint16_t item, char *say, size_t n) {
+    const int i = round_weapon();
+    if (i < 0 || !game || !game_id || strcmp(game, game_id)) {
+        snprintf(say, n, "There's no weapon to load them into.");
+        return 0;
+    }
+    const ReWeapon *rule = lookup(game_id, progress->weapons[i].item);
+    const ReRound *r = NULL;
+    for (unsigned k = 0; k < rule->nrounds; k++)
+        if (rule->rounds[k].item == item) r = &rule->rounds[k];
+    if (!r) { snprintf(say, n, "Those don't fit the Grenade Launcher."); return 0; }
+    if (r == loaded_round(rule, (unsigned)i)) { snprintf(say, n, "The Grenade Launcher already has those loaded."); return 0; }
+    const PeAmmoTypesApi *api = typed_ammo(rule);
+    if (api && api->rounds(r->type) <= 0) { snprintf(say, n, "You have none of those."); return 0; }
+    if (!load_kind((unsigned)i, rule, r)) { snprintf(say, n, "There's no room for the rounds in the Grenade Launcher now."); return 0; }
+    return 1;
+}
 
 static int save_inventory(void *ctx, void *user) {
     (void)user;

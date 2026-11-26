@@ -32,6 +32,12 @@ typedef struct ReHostProgress {
 #define RE_HOST_HAS(host, member) \
     ((host)->struct_size >= offsetof(ReHost, member) + sizeof (host)->member && (host)->member)
 
+typedef struct ReRoundEntry {
+    uint16_t item;            /* the source game's ammo item (RE2 0x18 explosive, 0x19 flame, 0x1A acid) */
+    uint16_t loaded;          /* nonzero: the kind in the weapon now */
+    unsigned count;           /* rounds in reserve */
+} ReRoundEntry;
+
 typedef struct ReHost {
     uint32_t struct_size;
     void (*init)(const char *mod_id, const char *store);
@@ -122,6 +128,12 @@ typedef struct ReHost {
     void (*weapon_loadout)(const char *game, struct PeReProgress *progress);
     void (*weapon_unload)(int inventory_replaced);
     int (*weapon_role)(const void *weapon);
+    /* Optional. Rounds a carried weapon of this game can load (RE2's launcher: explosive, flame and
+     * acid), for the status screen: the ammo item, the rounds in reserve and whether it is loaded.
+     * How many were written (at most max). */
+    int (*round_entries)(const char *game, ReRoundEntry *out, int max);
+    /* Optional. Load that kind of rounds; 1 loaded, 0 not (say holds why, for the player). */
+    int (*load_round)(const char *game, uint16_t item, char *say, size_t n);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */
