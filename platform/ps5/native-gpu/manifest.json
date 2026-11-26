@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "2c88b911dedd3fb4fd2ea56b9f239568aca6cd71f2b9cf1b354ae76d6a323290"
+      "sha256": "2e313435eee96627f65566a514b4f8fb6c5b7a94ca156710060cadee004b3b4c"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4839,7 +4839,7 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_play.c",
-      "sha256": "6eec4246231c00806c58cc2c6d819ce61b9c174f14a630167455b4036bab3d13"
+      "sha256": "4b27d15ce6ee0098eb0c258cc962c61fd301fc2455b8780b6d69f48aa978d4a4"
     },
     {
       "path": "mods/pe_re_play/pe_re_save.c",
@@ -4859,11 +4859,11 @@
     },
     {
       "path": "mods/pe_re_play/re_host.h",
-      "sha256": "9b95ebc07c24359a9a1d012b1e71450c22191986b49bc37242268c070dc32b8b"
+      "sha256": "30c27802c0016bd2803978191989afdbef61ab108ff44f23a2875d62af337af8"
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/re_host_pe1.c",
-      "sha256": "b1384170d253ea39ad1da21fdbf8e0f0e329a7344e0e7f8a371955606cd708c7"
+      "sha256": "fc0c7e45e8c52a72f955fcb4a199600bdabf99f78832574f14d0f5acef90b249"
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/pe_re_box.h",
@@ -4871,7 +4871,7 @@
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/pe_re_stage.h",
-      "sha256": "cce6ee450bdae30b47902ebca5fed84dc894f9bb25e89dcccb9d5d1900abacd7"
+      "sha256": "24accbe18df3fab7efd723fcb0479984506d454ced24a2c5333c0498f05ac840"
     },
     {
       "path": "mods/host/pe_extension_section.h",
@@ -4903,7 +4903,7 @@
     },
     {
       "path": "mods/host/re_play_api.h",
-      "sha256": "94c372024e0fa182875987b3d56320287316620d7605e074da215772a04cc5cd"
+      "sha256": "9502d9d6f085c6792eebafa997a0d0e1cf2e21972e2b0d4046bfd2251fddc511"
     },
     {
       "path": "mods/import/core/pe_imp.h",
@@ -5103,7 +5103,7 @@
     },
     {
       "path": "mods/pe_enemy_import/hosts/pe1/pe_enemy_battle.c",
-      "sha256": "2a273b124f4deee7b032e8f74f35f87890e12aee1ab8d04ccbd13d8d47c233a3"
+      "sha256": "3dac11c68a9b5d4aaaeb501010a604732ad9827520df5ad86974c7f5ce8ee3c9"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",
