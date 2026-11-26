@@ -60,6 +60,7 @@ typedef struct PeAmmoTypesApi {
     int (*add)(const char *type_id, int rounds);         /* rounds added (capped at 999); -1 not in force */
     void (*fill)(int rounds);                            /* add to every type in force (or PE's pools) */
     int (*register_weapon_scheme)(const PeAmmoScheme *scheme, PeAmmoWeaponType weapon_type);
+    int (*take)(const char *type_id, int rounds);         /* rounds taken from its reserve; -1 not in force */
 } PeAmmoTypesApi;
 
 #endif

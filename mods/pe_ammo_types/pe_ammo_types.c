@@ -470,6 +470,14 @@ static int api_add(const char *type_id, int rounds) {
     const int i = live_index(type_id);
     return i < 0 ? -1 : add_to_type(i, rounds);
 }
+static int api_take(const char *type_id, int rounds) {
+    const int i = live_index(type_id);
+    if (i < 0) return -1;
+    const unsigned have = count_of(i);
+    const unsigned n = rounds <= 0 ? 0 : (unsigned)rounds > have ? have : (unsigned)rounds;
+    set_count(i, have - n);
+    return (int)n;
+}
 static void api_fill(int rounds) {
     if (wanted() != s_live || s_settle) { s_fill_due += rounds; return; }   /* after the pending switch */
     if (s_live) for (int i = 0; i < s_live->count; ++i) add_to_type(i, rounds);
@@ -481,7 +489,7 @@ static void api_fill(int rounds) {
     }
 }
 static const PeAmmoTypesApi s_api = {sizeof s_api, api_register, api_request, api_active,
-                                   api_rounds, api_add, api_fill, api_register_weapon_scheme};
+                                   api_rounds, api_add, api_fill, api_register_weapon_scheme, api_take};
 
 /* ---- F1 > Ammo ---- */
 static void text_in_force(char *out, unsigned size) {

@@ -21,8 +21,8 @@ static const PeAmmoType k_re2_types[] = {
     {"re2.rocket", "Rockets", PE_AMMO_POOL_ROCKETS, PE_AMMO_KIND_ROCKET},
     {"re2.bolts", "Bowgun Bolts", PE_AMMO_POOL_BULLETS, 0},
     {"re2.spark", "Sparkshot Charges", PE_AMMO_POOL_BULLETS, 0},
-    /* Appended (never reorder: the saved split follows this order). Not routed until their
-     * weapons are: the Flamethrower and the launcher's round selection. */
+    /* Appended (never reorder: the saved split follows this order). Fuel waits for the Flamethrower;
+     * flame and acid rounds load in the launcher (pe_re_weapon_next_round). */
     {"re2.fuel", "Fuel", PE_AMMO_POOL_BULLETS, 0},
     {"re2.flame", "Flame Rounds", PE_AMMO_POOL_BULLETS, 0},
     {"re2.acid", "Acid Rounds", PE_AMMO_POOL_BULLETS, 0},
@@ -32,7 +32,7 @@ static const PeAmmoScheme k_re2 = {"re2", "Resident Evil 2", sizeof k_re2_types 
 int pe_re_ammo_pickup(const char *game, uint16_t item, unsigned count) {
     static const char *const types[] = {
         [0x14] = "re2.handgun", [0x15] = "re2.shotgun", [0x16] = "re2.magnum",
-        [0x18] = "re2.grenade", [0x19] = "re2.grenade", [0x1A] = "re2.grenade",
+        [0x18] = "re2.grenade", [0x19] = "re2.flame", [0x1A] = "re2.acid",
         [0x1B] = "re2.smg", [0x1C] = "re2.spark", [0x1D] = "re2.bolts"
     };
     if (!game || strcmp(game, k_re2.id) || item >= sizeof types / sizeof *types || !types[item]) return 0;

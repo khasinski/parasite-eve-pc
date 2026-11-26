@@ -3,6 +3,8 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "re_play_api.h"
+#include "ammo_types_api.h"
+#include "pe_mod_api.h"
 #include "pe1/aya.h"
 #include "pe1/battle_modifiers.h"
 #include "pe1/battle_saved_state.h"
@@ -11,21 +13,36 @@
 #include "pe1/weapon_list_output.h"
 #include <string.h>
 
+/* Rounds a weapon can load (RE2's launcher): the source ammo item, its ammo type and the native PE
+ * weapon effect the loaded rounds add (0 none, 9 Heat Bullets, 12 Acid Bullets). The loaded kind is
+ * the owned weapon's saved ammo_item. */
+typedef struct {
+    uint16_t item;
+    const char *type;
+    uint8_t effect;
+} ReRound;
+static const ReRound k_re2_launcher_rounds[] = {
+    {0x18, "re2.grenade", 0}, {0x19, "re2.flame", 9}, {0x1A, "re2.acid", 12},
+};
+
 typedef struct {
     const char *game;
     uint16_t item, ammo_item;
     unsigned base;
     const char *ammo_type;
     int role;
+    const ReRound *rounds;
+    unsigned nrounds;
 } ReWeapon;
 
 static const ReWeapon weapons[] = {
-    {"re2", 0x05, 0x16, ITEM_SAR, NULL, PE_RE_WEAPON_DEFAULT},
-    {"re2", 0x07, 0x15, ITEM_M870, NULL, PE_RE_WEAPON_CLOSE_SHOTGUN},
-    {"re2", 0x09, 0x18, ITEM_M203_5, NULL, PE_RE_WEAPON_GRENADE_SPLASH},
-    {"re2", 0x0C, 0x1D, ITEM_MP5K, "re2.bolts", PE_RE_WEAPON_DEFAULT},
-    {"re2", 0x0E, 0x1C, ITEM_MP5A5, "re2.spark", PE_RE_WEAPON_DEFAULT},
-    {"re2", 0x0F, 0x1B, ITEM_MP5K, NULL, PE_RE_WEAPON_DEFAULT},
+    {"re2", 0x05, 0x16, ITEM_SAR, NULL, PE_RE_WEAPON_DEFAULT, NULL, 0},
+    {"re2", 0x07, 0x15, ITEM_M870, NULL, PE_RE_WEAPON_CLOSE_SHOTGUN, NULL, 0},
+    {"re2", 0x09, 0x18, ITEM_M203_5, NULL, PE_RE_WEAPON_GRENADE_SPLASH, k_re2_launcher_rounds,
+     sizeof k_re2_launcher_rounds / sizeof *k_re2_launcher_rounds},
+    {"re2", 0x0C, 0x1D, ITEM_MP5K, "re2.bolts", PE_RE_WEAPON_DEFAULT, NULL, 0},
+    {"re2", 0x0E, 0x1C, ITEM_MP5A5, "re2.spark", PE_RE_WEAPON_DEFAULT, NULL, 0},
+    {"re2", 0x0F, 0x1B, ITEM_MP5K, NULL, PE_RE_WEAPON_DEFAULT, NULL, 0},
 };
 static PeReProgress *progress;
 static const char *game_id;
@@ -38,18 +55,46 @@ static const ReWeapon *lookup(const char *game, uint16_t item) {
     return NULL;
 }
 
+static int mounted_index(const void *weapon) {
+    if (!progress) return -1;
+    for (unsigned i = 0; i < PE_RE_OWNED_WEAPONS; i++)
+        if (mounted[i] && weapon == &g_InventoryRuntime.equipment[mounted[i] - 0x100]) return (int)i;
+    return -1;
+}
+
 static const ReWeapon *mounted_rule(const void *weapon) {
-    if (!progress) return NULL;
-    for (unsigned i = 0; i < PE_RE_OWNED_WEAPONS; i++) {
-        if (!mounted[i] || weapon != &g_InventoryRuntime.equipment[mounted[i] - 0x100]) continue;
-        return lookup(game_id, progress->weapons[i].item);
-    }
-    return NULL;
+    const int i = mounted_index(weapon);
+    return i < 0 ? NULL : lookup(game_id, progress->weapons[i].item);
+}
+
+static const ReRound *loaded_round(const ReWeapon *rule, unsigned i) {
+    for (unsigned k = 0; rule && k < rule->nrounds; k++)
+        if (rule->rounds[k].item == progress->weapons[i].ammo_item) return &rule->rounds[k];
+    return rule && rule->nrounds ? &rule->rounds[0] : NULL;
 }
 
 const char *pe_re_weapon_ammo_type(const ItemDataRecord *weapon) {
-    const ReWeapon *rule = mounted_rule(weapon);
+    const int i = mounted_index(weapon);
+    const ReWeapon *rule = i < 0 ? NULL : lookup(game_id, progress->weapons[i].item);
+    if (rule && rule->nrounds) return loaded_round(rule, (unsigned)i)->type;
     return rule ? rule->ammo_type : NULL;
+}
+
+/* The mounted record's effects: its PE base's own, plus the loaded rounds' effect. Rebuilt from
+ * the base, so changing rounds never stacks effects. */
+static void apply_round_effect(unsigned i, const ReWeapon *rule) {
+    if (!mounted[i] || !rule->nrounds) return;
+    ItemDataRecord *record = &g_InventoryRuntime.equipment[mounted[i] - 0x100];
+    const ItemDataRecord *base = pe_base_item(rule->base);
+    if (!base) return;
+    record->tailCount = base->tailCount;
+    memcpy(record->tailData, base->tailData, sizeof record->tailData);
+    const uint8_t effect = loaded_round(rule, i)->effect;
+    if (!effect) return;
+    for (unsigned k = 0; k < record->tailCount && k < 10; k++)
+        if ((record->tailData[k] & 31) == effect) return;
+    if (record->tailCount < 10) record->tailData[record->tailCount++] = effect;
+    else record->tailData[9] = effect;
 }
 
 int pe_re_weapon_role(const void *weapon) {
@@ -80,7 +125,9 @@ static int mount(unsigned i, const ReWeapon *rule, unsigned loaded) {
     Inv_SelectActiveList(override);
     if (!record) return 0;
     record->ammo = (u16)loaded;
-    return mounted[i] = 0x100 + (int)(record - g_InventoryRuntime.equipment);
+    mounted[i] = 0x100 + (int)(record - g_InventoryRuntime.equipment);
+    if (progress && progress->weapons[i].item == rule->item) apply_round_effect(i, rule);
+    return mounted[i];
 }
 
 static void remove_mounted(unsigned i) {
@@ -162,8 +209,51 @@ int pe_re_weapon_pickup(const char *game, uint16_t item, unsigned count) {
         return -1;
     }
     progress->weapons[slot] = (PeReOwnedWeapon){item, (uint16_t)loaded, rule->ammo_item};
+    apply_round_effect(slot, rule);
     return 1;
 }
+
+/* Load the equipped weapon's next kind of rounds that has any in reserve (RE2's launcher: explosive,
+ * flame, acid). The loaded rounds go back to their own reserve first. With per-type ammo off every
+ * kind shares Bullets, so only the kind and its effect change. Returns 1 when the kind changed. */
+static int pe_re_weapon_next_round(void) {
+    if (!progress) return 0;
+    const int value = selected();
+    int i = -1;
+    for (unsigned k = 0; k < PE_RE_OWNED_WEAPONS; k++)
+        if (mounted[k] && mounted[k] == value) i = (int)k;
+    const ReWeapon *rule = i < 0 ? NULL : lookup(game_id, progress->weapons[i].item);
+    if (!rule || rule->nrounds < 2) return 0;
+    ItemDataRecord *record = &g_InventoryRuntime.equipment[mounted[i] - 0x100];
+    const PeAmmoTypesApi *api = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
+    const int typed = api && api->struct_size >= offsetof(PeAmmoTypesApi, take) + sizeof api->take && api->take &&
+                      api->rounds && api->rounds(rule->rounds[0].type) >= 0;
+    const ReRound *now = loaded_round(rule, (unsigned)i);
+    const unsigned at = (unsigned)(now - rule->rounds);
+    const ReRound *next = NULL;
+    for (unsigned step = 1; step < rule->nrounds && !next; step++) {
+        const ReRound *r = &rule->rounds[(at + step) % rule->nrounds];
+        if (!typed || api->rounds(r->type) > 0) next = r;
+    }
+    if (!next) return 0;
+    if (typed) {
+        const int capacity = record->baseStats[2] + record->bonusStats[2];
+        const int back = record->ammo ? api->add(now->type, record->ammo) : 0;
+        record->ammo = (u16)(record->ammo - (back > 0 ? back : 0));
+        if (record->ammo) return 0;   /* the old kind's reserve is full: keep it loaded */
+        record->ammo = (u16)api->take(next->type, capacity > 0 ? capacity : 0);
+    }
+    progress->weapons[i].ammo_item = next->item;
+    progress->weapons[i].loaded = record->ammo;
+    apply_round_effect((unsigned)i, rule);
+    Inv_RecalcSlotStats();
+    Inv_BuildWeaponList(0, &g_SavedBattleStateTail.weapon);
+    pe_mod_log("pe_re_play", "launcher: loaded %u rounds of %s (effect %u)", (unsigned)record->ammo, next->type,
+               (unsigned)next->effect);
+    return 1;
+}
+
+void pe_re_weapon_next_round_action(void) { pe_re_weapon_next_round(); }
 
 static int save_inventory(void *ctx, void *user) {
     (void)user;
