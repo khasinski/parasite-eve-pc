@@ -6,8 +6,9 @@
  * Parasite Eve gives every ordinary gun the same Bullets. A game played through Parasite Eve (an
  * imported Resident Evil, or a mod's own rules) can register a scheme: a list of ammo types, each
  * used by some PE weapon kinds and merging into one of PE's three native pools when the scheme is
- * off. While a scheme is in force, each type has its own pool record (the game's nine ammo records,
- * src/main/item via PE_HOOK_AMMO_POOL), so the HUD, Reload and pickups follow the gun in hand.
+ * off. While a scheme is in force, each type keeps its own count, held in one of the game's nine
+ * ammo records while needed (src/main/item via PE_HOOK_AMMO_POOL: the gun in hand and the bag's guns
+ * first), so the HUD, Reload and pickups follow the gun in hand.
  *
  * The scheme in force follows what is being played: request() sets it, and an imported game being
  * played through RE play asks for the scheme with its game id ("re2"). Switching only happens in
@@ -20,7 +21,7 @@
 #define PE_AMMO_TYPES_SERVICE "ammo_types"
 #define PE_AMMO_TYPES_SERVICE_VERSION 1
 
-enum { PE_AMMO_TYPES_MAX = 9 };
+enum { PE_AMMO_TYPES_MAX = 16 };
 
 /* PE weapon kinds (the item table's kind byte), as bits for PeAmmoType.weapon_kinds. */
 enum {
@@ -41,7 +42,7 @@ typedef struct PeAmmoType {
 typedef struct PeAmmoScheme {
     const char *id;            /* "re2": a game id, or a mod's own */
     const char *name;          /* "Resident Evil 2" */
-    int count;                 /* types, at most 9 and at most 7 merging into one native pool */
+    int count;                 /* types, at most PE_AMMO_TYPES_MAX; more than the six spare records is fine */
     const PeAmmoType *types;   /* must stay valid while the game runs */
 } PeAmmoScheme;
 

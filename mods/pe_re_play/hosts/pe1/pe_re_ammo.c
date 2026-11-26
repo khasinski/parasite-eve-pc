@@ -21,6 +21,11 @@ static const PeAmmoType k_re2_types[] = {
     {"re2.rocket", "Rockets", PE_AMMO_POOL_ROCKETS, PE_AMMO_KIND_ROCKET},
     {"re2.bolts", "Bowgun Bolts", PE_AMMO_POOL_BULLETS, 0},
     {"re2.spark", "Sparkshot Charges", PE_AMMO_POOL_BULLETS, 0},
+    /* Appended (never reorder: the saved split follows this order). Not routed until their
+     * weapons are: the Flamethrower and the launcher's round selection. */
+    {"re2.fuel", "Fuel", PE_AMMO_POOL_BULLETS, 0},
+    {"re2.flame", "Flame Rounds", PE_AMMO_POOL_BULLETS, 0},
+    {"re2.acid", "Acid Rounds", PE_AMMO_POOL_BULLETS, 0},
 };
 static const PeAmmoScheme k_re2 = {"re2", "Resident Evil 2", sizeof k_re2_types / sizeof *k_re2_types, k_re2_types};
 
