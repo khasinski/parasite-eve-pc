@@ -52,6 +52,7 @@ typedef struct {
 static AmmoState s_st;
 static int s_enabled = 1;
 static const PeAmmoScheme *s_schemes[SCHEMES_MAX];
+static PeAmmoWeaponType s_weapon_types[SCHEMES_MAX];
 static int s_scheme_count;
 static const char *s_request;
 static const PeAmmoScheme *s_live;          /* in force now */
@@ -119,7 +120,26 @@ static int api_register(const PeAmmoScheme *s) {
     return 0;
 }
 
-static int live_type_of_kind(unsigned kind) {
+static int api_register_weapon_scheme(const PeAmmoScheme *s, PeAmmoWeaponType weapon_type) {
+    if (!weapon_type || api_register(s)) return -1;
+    for (int i = 0; i < s_scheme_count; ++i) {
+        if (s_schemes[i] != s) continue;
+        s_weapon_types[i] = weapon_type;
+        return 0;
+    }
+    return -1;
+}
+
+static int live_type_of_weapon(const ItemDataRecord *weapon) {
+    if (!s_live || !weapon) return -1;
+    for (int i = 0; i < s_scheme_count; ++i) {
+        if (s_schemes[i] != s_live || !s_weapon_types[i]) continue;
+        const char *id = s_weapon_types[i](weapon);
+        for (int j = 0; id && j < s_live->count; ++j)
+            if (!strcmp(id, s_live->types[j].id)) return j;
+        break;
+    }
+    const unsigned kind = weapon->kind;
     for (int i = 0; s_live && i < s_live->count; ++i)
         if (kind < 8 && (s_live->types[i].weapon_kinds >> kind & 1)) return i;
     return -1;
@@ -129,7 +149,7 @@ static int live_type_of_kind(unsigned kind) {
  * p's first type. */
 static int live_target(int p) {
     const ItemDataRecord *gun = pe_equipped(0);
-    const int held = gun ? live_type_of_kind(gun->kind) : -1;
+    const int held = live_type_of_weapon(gun);
     if (held >= 0 && s_live->types[held].native_pool == p) return held;
     for (int i = 0; i < s_live->count; ++i)
         if (s_live->types[i].native_pool == p) return i;
@@ -168,9 +188,9 @@ static void unpool(void) {
 }
 
 static void pool(const PeAmmoScheme *s) {
-    int remembered = s_st.scheme == hash(s->id) && s_st.count == s->count;
+    int remembered = s_st.scheme == hash(s->id) && s_st.count > 0 && s_st.count <= s->count;
     unsigned rounds[RECORDS] = {0};
-    for (int i = 0; remembered && i < s->count; ++i) remembered = s_st.type[i] == hash(s->types[i].id);
+    for (int i = 0; remembered && i < s_st.count; ++i) remembered = s_st.type[i] == hash(s->types[i].id);
     if (assign_records(s, s_record)) return;
     s_live = s;
     for (int p = 0; p < POOLS; ++p) {
@@ -183,7 +203,7 @@ static void pool(const PeAmmoScheme *s) {
         s_st.overflow[p] = 0;
         if (remembered) {
             unsigned split = 0;
-            for (int i = 0; i < s->count; ++i)
+            for (int i = 0; i < s_st.count; ++i)
                 if (s->types[i].native_pool == p) rounds[i] = s_st.rounds[i], split += s_st.rounds[i];
             if (now >= split) {
                 if (target >= 0) rounds[target] += now - split;       /* picked up while off */
@@ -264,7 +284,7 @@ static int on_ammo_pool(void *ctx, void *user) {
     if (!s_live || !q->item) return 0;
     const unsigned kind = q->item->kind;
     int type = -1;
-    if (kind >= 1 && kind <= 7) type = live_type_of_kind(kind);
+    if (kind >= 1 && kind <= 7) type = live_type_of_weapon(q->item);
     else if (kind >= 16 && kind <= 18) type = live_target((int)kind - 16);
     if (type >= 0) q->pool = s_record[type];
     return 0;
@@ -344,7 +364,8 @@ static void api_fill(int rounds) {
     if (s_live) for (int i = 0; i < s_live->count; ++i) add_to_record(s_record[i], rounds);
     else for (int p = 0; p < POOLS; ++p) add_to_record(p, rounds);
 }
-static const PeAmmoTypesApi s_api = {sizeof s_api, api_register, api_request, api_active, api_rounds, api_add, api_fill};
+static const PeAmmoTypesApi s_api = {sizeof s_api, api_register, api_request, api_active,
+                                   api_rounds, api_add, api_fill, api_register_weapon_scheme};
 
 /* ---- F1 > Ammo ---- */
 static void text_in_force(char *out, unsigned size) {

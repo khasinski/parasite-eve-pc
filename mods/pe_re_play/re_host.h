@@ -121,6 +121,7 @@ typedef struct ReHost {
     int (*pickup_weapon)(const char *game, uint16_t item, unsigned count);
     void (*weapon_loadout)(const char *game, struct PeReProgress *progress);
     void (*weapon_unload)(int inventory_replaced);
+    int (*weapon_role)(const void *weapon);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

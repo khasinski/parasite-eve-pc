@@ -45,6 +45,7 @@ typedef struct PeReRoomEvent {
 } PeReRoomEvent;
 
 enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
+enum { PE_RE_WEAPON_DEFAULT, PE_RE_WEAPON_CLOSE_SHOTGUN, PE_RE_WEAPON_GRENADE_SPLASH };
 
 /* Native combat reports source-room slots, independent of the host's actor IDs.
  * A loss with no defeated slots needs only resume_after_battle(). */
@@ -127,6 +128,10 @@ typedef struct PeRePlayApi {
     /* Optional. The id of the imported game being played ("re2"), battles and scenes included, or
      * NULL when none is. */
     const char *(*playing_game)(void);
+    /* Host equipment record; the return value is the imported weapon's built-in behavior. */
+    int (*weapon_role)(const void *weapon);
+    /* Placement kind while the field is paused for battle, or -1 if absent. */
+    int (*battle_foe_kind)(uint8_t slot);
 } PeRePlayApi;
 
 #define PE_RE_MARK_TARGET 1

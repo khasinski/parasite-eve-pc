@@ -1516,10 +1516,115 @@ static int pe_on_hp_loss(void *ctx, void *user) {
     return 0;
 }
 
+static int room_zombie(const PeRePlayApi *api, const PeFoe *foe) {
+    if (foe->room_slot < 0) return 0;
+    const int kind = api->battle_foe_kind((uint8_t)foe->room_slot);
+    return kind >= 0x10 && kind <= 0x1f;
+}
+
+/* Built-in area damage of an imported weapon (PE_RE_WEAPON_*), applied on the hit Aya aimed. The extra
+ * targets ride on that one native hit (PeHookEnemyDamage.spread): no extra ammo, no extra hit hooks.
+ * Distances are in the imported game's units. RE2 values; other games can add their own rows. */
+typedef struct {
+    int role;
+    const char *name;
+    double range;          /* the aimed foe: at most this far from Aya (0: any distance) */
+    double reach;          /* extra foes: at most this far from Aya (cone) or from the aimed foe (blast) */
+    int cone;              /* 1: extras inside a 45-degree half-cone from Aya; 0: a blast around the aimed foe */
+    int zombies_only;      /* only zombie kinds take part (aimed and extra) */
+    int kill;              /* 1: the aimed and extra foes take their remaining HP */
+    int share_pct;         /* otherwise extras take this share of the aimed hit's damage */
+} AreaRule;
+static const AreaRule k_area_rules[] = {
+    /* RE2: a close shell can kill up to three zombies (retail reference, "Shotgun"). */
+    {PE_RE_WEAPON_CLOSE_SHOTGUN, "close shotgun spread", 1800.0, 1800.0, 1, 1, 1, 0},
+    /* RE2 explosive rounds: full damage to the aimed foe, half to up to two neighbours. The radius and
+     * share are provisional (the simulation's assumption), pending a retail measurement. */
+    {PE_RE_WEAPON_GRENADE_SPLASH, "grenade splash", 0.0, 1500.0, 0, 0, 0, 50},
+};
+
+/* One shell is one shot: PE's shotguns already hit several foes per command, natively, within a few
+ * frames. The command's first hit is the aimed one and alone decides the area; its other native
+ * hits keep their own damage. A new command needs the gauge to refill, far more than this window. */
+enum { SHOT_FRAMES = 10 };
+static const void *s_shot_action;
+static int s_shot_frame = -1000;
+
+static void area_hit(PeHookEnemyDamage *hit) {
+    if (!hit->ordinary || !g_PlayerEntity || hit->source != g_PlayerEntity->state) return;
+    const Combatant *aya = hit->source;
+    const ItemDataRecord *gun = pe_equipped(0);
+    /* a shot from the gun in hand: Aya's action id is the fired weapon's kind (2 shotgun, 5 launcher) */
+    if (!gun || !aya->action || aya->action->actionCode.actionId != gun->kind) return;
+    const PeRePlayApi *api = pe_service_get(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION);
+    if (!api || api->struct_size < offsetof(PeRePlayApi, battle_foe_kind) + sizeof api->battle_foe_kind ||
+        !api->weapon_role || !api->battle_foe_kind || !api->units_per_pe_unit) return;
+    const int role = api->weapon_role(gun);
+    const AreaRule *rule = NULL;
+    for (unsigned i = 0; i < sizeof k_area_rules / sizeof *k_area_rules; i++)
+        if (k_area_rules[i].role == role) rule = &k_area_rules[i];
+    if (!rule) return;
+    const int since = g_BattleFrameCounter - s_shot_frame;
+    if (aya->action == s_shot_action && since >= 0 && since < SHOT_FRAMES) return;
+    s_shot_action = aya->action;
+    s_shot_frame = g_BattleFrameCounter;
+    const PeFoe *primary = pe_foe_of(hit->target);
+    const EnemyCombatant *core = primary ? pe_core(primary) : NULL;
+    if (!core || core->hpAlive <= 0 || (rule->zombies_only && !room_zombie(api, primary))) return;
+    const double scale = api->units_per_pe_unit() / 65536.0;
+    if (scale <= 0) return;
+    const double dx = ((double)primary->actor->pos_x - g_PlayerEntity->pos_x) * scale;
+    const double dz = ((double)primary->actor->pos_z - g_PlayerEntity->pos_z) * scale;
+    const double distance2 = dx * dx + dz * dz;
+    if (rule->range > 0 && distance2 > rule->range * rule->range) {
+        pe_mod_log(MOD_ID, "battle: %s: foe %d at %.0f, out of range", rule->name, (int)(primary - s.foe), sqrt(distance2));
+        return;
+    }
+    if (rule->kill) *hit->damage = core->hpAlive;
+    const int share = rule->kill ? 0 : (*hit->damage * rule->share_pct + 99) / 100;
+    const double reach2 = rule->reach * rule->reach;
+    double nearest[2] = {reach2, reach2};
+    for (int i = 0; i < s.foes; i++) {
+        const PeFoe *foe = &s.foe[i];
+        const EnemyCombatant *enemy = pe_core(foe);
+        if (foe == primary || !enemy || enemy->hpAlive <= 0 || (rule->zombies_only && !room_zombie(api, foe))) continue;
+        const double x = ((double)foe->actor->pos_x - g_PlayerEntity->pos_x) * scale;
+        const double z = ((double)foe->actor->pos_z - g_PlayerEntity->pos_z) * scale;
+        double d2;
+        if (rule->cone) {
+            /* from Aya, inside a 45-degree half-cone around the aimed foe */
+            const double dot = dx * x + dz * z;
+            d2 = x * x + z * z;
+            if (distance2 <= 0 || dot <= 0 || dot * dot < 0.5 * distance2 * d2) continue;
+        } else {
+            d2 = (x - dx) * (x - dx) + (z - dz) * (z - dz);   /* from the aimed foe */
+        }
+        if (d2 > nearest[1]) continue;
+        const int at = d2 < nearest[0] ? 0 : 1;
+        if (!at) {
+            hit->spread[1] = hit->spread[0];
+            nearest[1] = nearest[0];
+        }
+        hit->spread[at].target = foe->actor;
+        hit->spread[at].damage = rule->kill ? enemy->hpAlive : (share > 0 ? share : 1);
+        nearest[at] = d2;
+    }
+    int extra[2] = {-1, -1};
+    for (int i = 0; i < s.foes; i++)
+        for (int k = 0; k < 2; k++)
+            if (hit->spread[k].target && hit->spread[k].target == s.foe[i].actor) extra[k] = i;
+    pe_mod_log(MOD_ID, "battle: %s hit %d foes (foe %d at %.0f, hp %d, damage %d; extra foes %d, %d for %d, %d)",
+               rule->name, 1 + (hit->spread[0].target != NULL) + (hit->spread[1].target != NULL),
+               (int)(primary - s.foe), sqrt(distance2), core->hpAlive, *hit->damage, extra[0], extra[1],
+               hit->spread[0].damage, hit->spread[1].damage);
+}
+
 static int pe_on_enemy_damage(void *ctx, void *user) {
     PeHookEnemyDamage *hit = ctx;
     (void)user;
-    if (!s.active || !s.foes || hit->target != s.foe[0].actor || *hit->damage <= 0) return 0;
+    if (!s.active || !s.foes || *hit->damage <= 0) return 0;
+    area_hit(hit);
+    if (hit->target != s.foe[0].actor) return 0;
     const EnemyCombatant *enemy = pe_core(&s.foe[0]);
     if (!enemy || enemy->hpAlive <= 0) return 0;
     if (s.launcher >= LAUNCHER_WAITING && s.launcher < LAUNCHER_FIRED && *hit->damage >= enemy->hpAlive)

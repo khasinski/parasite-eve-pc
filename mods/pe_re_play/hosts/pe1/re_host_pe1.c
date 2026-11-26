@@ -25,6 +25,7 @@ void pe_re_weapon_hooks(void);
 int pe_re_weapon_pickup(const char *game, uint16_t item, unsigned count);
 void pe_re_weapon_loadout(const char *game, struct PeReProgress *progress);
 void pe_re_weapon_unload(int inventory_replaced);
+int pe_re_weapon_role(const void *weapon);
 
 /* A tester's bug report: bug-reports/re-<date-time>/ beside the preferences, with report.txt, progress.bin,
  * screenshot.bmp (the game frame as it is now) and log-tail.txt (the end of pe_mods.log). */
@@ -207,6 +208,7 @@ const ReHost *re_host(void) {
         .pickup_weapon = pe_re_weapon_pickup,
         .weapon_loadout = pe_re_weapon_loadout,
         .weapon_unload = pe_re_weapon_unload,
+        .weapon_role = pe_re_weapon_role,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,
         .player_scale = pe_re_stage_scale,

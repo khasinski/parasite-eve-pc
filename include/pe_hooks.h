@@ -153,6 +153,11 @@ typedef struct PeHookEnemyDamage {
     const void *source, *target;
     int *damage;
     int ordinary; /* excludes PE and native instant-kill status effects */
+    /* Extra targets carried by this hit. Applied once, with no extra ammo or hit hooks. */
+    struct {
+        void *target;
+        int damage;
+    } spread[2];
 } PeHookEnemyDamage;
 typedef struct PeHookTargetPreview {
     const void *object; /* RenderObjectEntity * of the selected target */

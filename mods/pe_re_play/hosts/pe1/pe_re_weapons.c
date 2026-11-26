@@ -2,6 +2,7 @@
 #include "pe_re_stage.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "re_play_api.h"
 #include "pe1/aya.h"
 #include "pe1/battle_modifiers.h"
 #include "pe1/battle_saved_state.h"
@@ -14,13 +15,17 @@ typedef struct {
     const char *game;
     uint16_t item, ammo_item;
     unsigned base;
+    const char *ammo_type;
+    int role;
 } ReWeapon;
 
 static const ReWeapon weapons[] = {
-    {"re2", 0x05, 0x16, ITEM_SAR},
-    {"re2", 0x07, 0x15, ITEM_M870},
-    {"re2", 0x09, 0x18, ITEM_M203_5},
-    {"re2", 0x0F, 0x1B, ITEM_MP5K},
+    {"re2", 0x05, 0x16, ITEM_SAR, NULL, PE_RE_WEAPON_DEFAULT},
+    {"re2", 0x07, 0x15, ITEM_M870, NULL, PE_RE_WEAPON_CLOSE_SHOTGUN},
+    {"re2", 0x09, 0x18, ITEM_M203_5, NULL, PE_RE_WEAPON_GRENADE_SPLASH},
+    {"re2", 0x0C, 0x1D, ITEM_MP5K, "re2.bolts", PE_RE_WEAPON_DEFAULT},
+    {"re2", 0x0E, 0x1C, ITEM_MP5A5, "re2.spark", PE_RE_WEAPON_DEFAULT},
+    {"re2", 0x0F, 0x1B, ITEM_MP5K, NULL, PE_RE_WEAPON_DEFAULT},
 };
 static PeReProgress *progress;
 static const char *game_id;
@@ -31,6 +36,25 @@ static const ReWeapon *lookup(const char *game, uint16_t item) {
     for (unsigned i = 0; i < sizeof weapons / sizeof *weapons; i++)
         if (weapons[i].item == item && !strcmp(weapons[i].game, game)) return &weapons[i];
     return NULL;
+}
+
+static const ReWeapon *mounted_rule(const void *weapon) {
+    if (!progress) return NULL;
+    for (unsigned i = 0; i < PE_RE_OWNED_WEAPONS; i++) {
+        if (!mounted[i] || weapon != &g_InventoryRuntime.equipment[mounted[i] - 0x100]) continue;
+        return lookup(game_id, progress->weapons[i].item);
+    }
+    return NULL;
+}
+
+const char *pe_re_weapon_ammo_type(const ItemDataRecord *weapon) {
+    const ReWeapon *rule = mounted_rule(weapon);
+    return rule ? rule->ammo_type : NULL;
+}
+
+int pe_re_weapon_role(const void *weapon) {
+    const ReWeapon *rule = mounted_rule(weapon);
+    return rule ? rule->role : PE_RE_WEAPON_DEFAULT;
 }
 
 static int selected(void) {

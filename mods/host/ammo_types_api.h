@@ -45,6 +45,10 @@ typedef struct PeAmmoScheme {
     const PeAmmoType *types;   /* must stay valid while the game runs */
 } PeAmmoScheme;
 
+struct ItemDataRecord;
+/* Return the stable type ID for a specific weapon instance, or NULL to use kind routing. */
+typedef const char *(*PeAmmoWeaponType)(const struct ItemDataRecord *weapon);
+
 typedef struct PeAmmoTypesApi {
     size_t struct_size;
     int (*register_scheme)(const PeAmmoScheme *scheme);   /* 0 registered; -1 refused (logged) */
@@ -54,6 +58,7 @@ typedef struct PeAmmoTypesApi {
     int (*rounds)(const char *type_id);                  /* in its pool; -1 when not in force */
     int (*add)(const char *type_id, int rounds);         /* rounds added (capped at 999); -1 not in force */
     void (*fill)(int rounds);                            /* add to every type in force (or PE's pools) */
+    int (*register_weapon_scheme)(const PeAmmoScheme *scheme, PeAmmoWeaponType weapon_type);
 } PeAmmoTypesApi;
 
 #endif

@@ -19,6 +19,8 @@ static const PeAmmoType k_re2_types[] = {
     {"re2.magnum", "Magnum Rounds", PE_AMMO_POOL_BULLETS, PE_AMMO_KIND_RIFLE},
     {"re2.grenade", "Grenade Rounds", PE_AMMO_POOL_BULLETS, PE_AMMO_KIND_GRENADE},
     {"re2.rocket", "Rockets", PE_AMMO_POOL_ROCKETS, PE_AMMO_KIND_ROCKET},
+    {"re2.bolts", "Bowgun Bolts", PE_AMMO_POOL_BULLETS, 0},
+    {"re2.spark", "Sparkshot Charges", PE_AMMO_POOL_BULLETS, 0},
 };
 static const PeAmmoScheme k_re2 = {"re2", "Resident Evil 2", sizeof k_re2_types / sizeof *k_re2_types, k_re2_types};
 
@@ -26,7 +28,7 @@ int pe_re_ammo_pickup(const char *game, uint16_t item, unsigned count) {
     static const char *const types[] = {
         [0x14] = "re2.handgun", [0x15] = "re2.shotgun", [0x16] = "re2.magnum",
         [0x18] = "re2.grenade", [0x19] = "re2.grenade", [0x1A] = "re2.grenade",
-        [0x1B] = "re2.smg"
+        [0x1B] = "re2.smg", [0x1C] = "re2.spark", [0x1D] = "re2.bolts"
     };
     if (!game || strcmp(game, k_re2.id) || item >= sizeof types / sizeof *types || !types[item]) return 0;
     const PeAmmoTypesApi *api = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
@@ -57,5 +59,6 @@ void pe_re_ammo_register(void) {
     static int registered;
     if (registered) return;
     const PeAmmoTypesApi *api = pe_service_get(PE_AMMO_TYPES_SERVICE, PE_AMMO_TYPES_SERVICE_VERSION);
-    if (api && api->register_scheme && !api->register_scheme(&k_re2)) registered = 1;
+    if (api && api->struct_size >= offsetof(PeAmmoTypesApi, register_weapon_scheme) + sizeof api->register_weapon_scheme &&
+        api->register_weapon_scheme && !api->register_weapon_scheme(&k_re2, pe_re_weapon_ammo_type)) registered = 1;
 }
