@@ -54,6 +54,7 @@ static const PeKeysApi *keys;
 static const PeStacksApi *stacks;
 static struct { int id; PeHookFn fn; } hooks[24];
 static int hook_count;
+int pe_host_init(const PeHookInit *init) { (void)init; return 0; }
 int pe_game_loaded(void) { return loaded; }
 int pe_save_loaded(void) { return loaded; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
@@ -281,6 +282,16 @@ int main(void) {
     assert(g_InventoryRuntime.equipment[1].bonusStats[1]==7 && g_AyaInventoryItems[0]==0x100);
     assert(g_WayneStorageItems[0]==0x0C && stacks->count(1,0)==3 && g_StatBaseTable[3]==3);
     g_MenuLayoutLocked=0;
+    g_AyaInventoryItems[2]=g_AyaInventoryItems[3]=0x0B;
+    g_InvItemArray[0]=g_InvItemArray[1]=0x0B;
+    Inv_RebuildSelectableMask();
+    assert(stacks->count(0,2)==2 && stacks->count(2,0)==2);
+    PeHookNewGame ex={PE_NEW_GAME_EX};
+    pe_hook_dispatch(PE_HOOK_NEW_GAME,&ex);
+    assert(stacks->count(0,2)==1 && stacks->count(1,0)==3 && stacks->count(2,0)==2);
+    PeHookNewGame title={PE_NEW_GAME_TITLE};
+    pe_hook_dispatch(PE_HOOK_NEW_GAME,&title);
+    assert(stacks->count(1,0)==1 && stacks->count(2,0)==1);
     puts("Passed native inventory tests: pocket/full-bag story counts and consumption, disabled-pocket draining, pickup/reward handling, recomp-compatible saves, checksum/ID validation, real native auto-sort, equipped items, manual override, battle/script guards, and stacked Tool/Super Tool consumption.");
     return 0;
 }

@@ -49,7 +49,8 @@
 
 #define MOD_ID "pe_stacks"
 
-enum { PE_STACK_MAX = 99, PE_LIST_BAG, PE_LIST_STORAGE, PE_LIST_SPECIAL, PE_LISTS = 3 };
+enum { PE_STACK_MAX = 99 };
+enum { PE_LIST_BAG, PE_LIST_STORAGE, PE_LIST_SPECIAL, PE_LISTS };
 enum { PE_ITEM_JUNK = 0x14, PE_STACK_PAIRS = 100 };
 
 /* Extra copies (beyond the slot's own) per list and item id. */
@@ -471,9 +472,24 @@ static int pe_on_scene(void *ctx, void *user) {
     return 0;
 }
 static int pe_on_new_game(void *ctx, void *user) {
-    (void)ctx; (void)user;
-    memset(s_extra, 0, sizeof s_extra);
+    const PeHookNewGame *start = ctx;
+    (void)user;
     s_old_live = 0;
+    if (start && start->kind == PE_NEW_GAME_EX) {
+        /* Inv_InitNewGameInventory replaces Aya's bag but retains the storage lists. */
+        memset(s_extra[PE_LIST_BAG], 0, sizeof s_extra[PE_LIST_BAG]);
+        pe_pack();
+        if (pe_counts_any(&s_rec) && !pe_store_ready()) {
+            if (pe_save_enable_record(&s_record) == PE_SAVE_EMISSION_OK) {
+                s_old_live = 1;
+                memcpy(s_old_rec, &s_rec, sizeof s_rec);
+            } else {
+                pe_toast("Cannot save carried item stacks with this save");
+            }
+        }
+    } else {
+        memset(s_extra, 0, sizeof s_extra);
+    }
     return 0;
 }
 
