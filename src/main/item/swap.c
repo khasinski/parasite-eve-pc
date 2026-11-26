@@ -511,6 +511,8 @@ int Inv_RebuildWithSlotLimit(int fromMode, int fromIndex, int toMode, int toInde
         Inv_RebuildSelectableMask();
     } else if (fromMode == 0x34) {
         from = WayneSlot(toIndex);
+        if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,
+                    (&(PeHookEquipmentGuard){.kind = 3, .value = g_InvItemPtr[from]}))) return 0;
         if (Inv_IsSlotEquipped(from) &&
             ((item = Inv_LookupItemRecordScaled(g_InvActiveItemList[fromIndex])) == NULL ||
              item->kind < 19 || item->kind >= 22)) {
@@ -520,6 +522,8 @@ int Inv_RebuildWithSlotLimit(int fromMode, int fromIndex, int toMode, int toInde
         } else success = 0;
     } else {
         from = WayneSlot(fromIndex);
+        if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,
+                    (&(PeHookEquipmentGuard){.kind = 3, .value = g_InvItemPtr[from]}))) return 0;
         if (Inv_IsSlotEquipped(from) &&
             ((item = Inv_LookupItemRecordScaled(g_InvActiveItemList[toIndex])) == NULL ||
              item->kind < 19 || item->kind >= 22)) {

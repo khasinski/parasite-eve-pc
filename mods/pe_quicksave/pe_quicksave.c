@@ -201,7 +201,7 @@ static int pe_on_title(void *ctx, void *user) {
     (void)user;
     pe_keys();
     if (s_pending == PE_SAVE) pe_toast("Quick save: start or load a game first");
-    else if (s_pending == PE_LOAD && pe_load(s_slot, 1)) *loaded = 1;
+    else if (s_pending == PE_LOAD && pe_load(s_slot, 1)) *loaded = PE_TITLE_CONTINUE;
     s_pending = PE_NONE;
     return 0;
 }

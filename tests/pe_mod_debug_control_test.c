@@ -37,6 +37,7 @@
 #include "pe1/game_timers.h"
 #include "pe1/inventory_state.h"
 #include "pe1/inventory_queries.h"
+#include "pe1/inventory.h"
 #include "pe1/memcard.h"
 #include "pe1/player_entity.h"
 #include "pe1/scene_dispatch.h"
@@ -79,6 +80,7 @@ BattleEnemySlot g_BattleEnemySlots[7];
 Combatant *g_ActiveActor;
 s32 g_ItemDropRngIndex;
 u8 g_ItemDropRngTable[521];
+InventoryItemWorkspace g_InventoryItemWorkspace;            /* src/main/item/active_list.c: the ammo pool records */
 TextboxEntry g_TextboxEntries[4];
 u8 g_DialogueChoiceCursor;
 unsigned char g_MenuActiveMode;
@@ -121,6 +123,10 @@ int pe_menu_row_count(void) { return 1; }
 PeMenuRow *pe_menu_row(int i) { (void)i; return &s_row; }
 int pe_menu_row_active(const PeMenuRow *r) { (void)r; return 1; }
 void pe_menu_row_value_text(PeMenuRow *r, char *out, unsigned size) { (void)r; snprintf(out, size, "wallet 12"); }
+void pe_menu_row_accept(PeMenuRow *r) { if (r->kind == PE_ROW_ACTION) r->action(); }
+static int s_pressed;
+static void test_press(void) { ++s_pressed; }
+static unsigned test_three(void) { return 3; }
 u8 g_MemCardFileBuffer[0x2000];
 const char *g_MemCardFilenameFormatPtr = "bu%d0:BASLUS-00662000000%c%c";
 
@@ -260,6 +266,15 @@ int main(void) {
         assert(strstr(ask("mod-state test"), "\"running\":true"));
         assert(!strstr(s_answer, "\"live\""));                  /* no providers yet */
         assert(starts(ask("mod-state unknown"), "err mod-state"));
+        /* A choice whose list comes from the mod (F1 > Fights), and an action row pressed as Enter. */
+        s_row.kind = PE_ROW_DYNAMIC_CHOICE; s_row.label = "Fight"; s_row.count_fn = test_three; s_row.count = 10;
+        assert(!strcmp(ask("ini-set Test/Fight 2"), "ok ini-set Test/Fight=2 restart_required=0") && value == 2);
+        assert(starts(ask("ini-set Test/Fight 3"), "err ini-set") && value == 2);
+        s_row.kind = PE_ROW_ACTION; s_row.label = "Start"; s_row.action = test_press; s_row.value = NULL;
+        assert(starts(ask("ini-set Test/Start 1"), "err ini-set"));
+        assert(!strcmp(ask("mod-action Test/Start"), "ok mod-action Test/Start") && s_pressed == 1);
+        assert(!strcmp(ask("mod-action Test/Other"), "err mod-action unknown action") && s_pressed == 1);
+        s_row.kind = PE_ROW_TOGGLE; s_row.label = "Enabled"; s_row.value = &value;
         {
             static int junk = 12;
             assert(pe_mod_state_provider("wallet", wallet_state, &junk) == -1);   /* outside init */

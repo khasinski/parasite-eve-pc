@@ -91,6 +91,9 @@ void Boot_FlushSceneFast(void) {
 #define MOVIE_SKIP_START 0x0008u
 
 int (*g_BootMovieSkipConfirm)(void);
+static int s_skip_prologue;
+
+void Boot_RequestPrologueSkip(void) { s_skip_prologue = 1; }
 void (*g_BootSceneStarted)(void);
 int (*g_BootTestSave)(void);
 
@@ -130,6 +133,7 @@ int Boot_RunFrame(void)
     int startup=Draw_InitPipeline();
     if (startup < 0) return startup;
     if (g_SceneDispatchCur == g_SceneDispatchToken) {
+        if ((unsigned)g_SceneDispatchToken != 0xA80830C8u) s_skip_prologue = 0;
         scene_flags = &g_GameState.bank_state_12;
         state = &g_GameState;
         fade = (RenderTintTargetView *)&g_ScreenTint.targetR;
@@ -158,7 +162,7 @@ int Boot_RunFrame(void)
                 g_BootHostSaveAt = 0;
             flags = g_GameStateFlags;
             g_GameStateFlags = flags & ~0x30u;
-            skip_movie = Boot_MovieSkipChosen(state);
+            skip_movie = s_skip_prologue || Boot_MovieSkipChosen(state);
 
             if (!(GAME_STATE_OF_SCENE_FLAGS(scene_flags)->flags & 0x8000) && g_GlobalFrameCounter[0] &&
                 (g_FieldPadPressed & 4) &&

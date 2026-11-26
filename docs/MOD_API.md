@@ -129,6 +129,50 @@ all described in `EXTENSION_APIS.md`.
 Events let a mod announce something without knowing who listens. Existing events include
 `bestiary.unlock`, `wardrobe.worn` and `play.log`.
 
+### Imported sound previews
+
+On PC, get `PeAssetsApi` with `pe_service_get("assets", 1)` and `PeAudioApi` with
+`pe_service_get("audio", 1)`. Both tables are declared in `mods/host/pe_services.h`.
+Handle missing services and verify `struct_size` before calling them.
+
+1. In a menu or setup action, pass a source game and a page offset to `list_sounds`.
+   Save the selected catalog ID if the mod needs the selection across sessions.
+2. Call `acquire_sound` with that ID on the main thread. A nonzero handle owns one
+   reference while the clip loads on a worker. Duplicate requests share resident PCM.
+3. Poll `status` on subsequent frames. When ready, call `preview_clip`. The service
+   queues a one-shot audition. The newest audition replaces the previous one.
+4. `release` each acquired reference on completion, cancellation, or shutdown.
+   A missing or invalid clip reports unavailable. Callers may retain their default
+   sound when an audition is unavailable.
+
+The service reads the existing import catalog and works with the Import UI disabled.
+Prepared pack entries, gameplay slots, and polyphonic mixing are future integration work.
+
+### Imported song sources
+
+The `assets` v1 table appends `list_songs`, `acquire_song`, and `song_view`.
+Use `struct_size` to check that the provider includes these fields. List by source game
+with the same paging contract as sounds. A song handle uses the same `status` and
+`release` operations as a sound handle.
+
+`song_view` returns a read-only view of the source representation. For
+`PE_SONG_PSX_SEQ_VAB` it includes up to two PlayStation sequences, a VAB instrument
+header, and the associated SPU sample bytes. For `PE_SONG_PSX_XA` (streamed music) the first
+sequence is a 16-byte header and the samples are CD-XA sound groups (render them with
+`mods/import/core/pe_imp_xa.h`). For `PE_SONG_AKAO` (Square's sequences, FF7) the first sequence
+is the AKAO block, and the instruments, samples and `sample_base` come from the song's bank
+(render them with `mods/import/core/pe_imp_akao.h`). Music lists leave instrument banks out. Keep the handle while using the view.
+This interface serves import tooling and builders.
+
+To play a song, the `audio` v1 table appends `play_song`, `stop_song` and `song_playing`
+(check `struct_size`). Pass a song handle to `play_song` once its `status` is ready: it
+returns 1 when the song is playing on its own stream, looping until `stop_song`, 0 while the
+handle is still loading, and -1 when the song can't be played. The service keeps its own copy,
+so release the handle once `play_song` returns 1. One song plays at a time; a new one replaces
+it. To render a song yourself (offline, or on a platform without the service), use
+`mods/import/core/pe_imp_seq.h`: `pe_imp_seq_open` on the view's main sequence, instruments and
+samples, then `pe_imp_seq_render` for 44.1 kHz stereo PCM.
+
 ## F1 menu rows
 
 Call `pe_menu_begin("Page")` first. Pass 0 to return to `PE Enhancements`. `sub` is a sub-page, which

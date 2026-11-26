@@ -667,6 +667,8 @@ int Save_BuildCardFile(char *path) {
     __builtin_memcpy(g_MemCardIconPalette, resolved + 0x14, 0x20);
     __builtin_memcpy(file->icon, resolved + 0x40, sizeof(file->icon));
 
+    int inventory_phase = 0;
+    PE_HOOK(PE_HOOK_SAVE_INVENTORY, &inventory_phase);
     bzero(g_MemCardFileBuffer, 0x2000);
     g_SaveIoCursor = g_MemCardFileBuffer;
     __builtin_memcpy(g_SaveIoCursor, &g_MemCardIconHeader, sizeof(g_MemCardIconHeader));
@@ -674,7 +676,10 @@ int Save_BuildCardFile(char *path) {
     __builtin_memcpy(g_SaveIoCursor, (u8 *)&g_SaveRuntimeState, 0x12E4);
     g_SaveIoCursor += 0x12E4;
 
-    if (Save_SerializeTail() < 0) return -1;
+    const int tail_result = Save_SerializeTail();
+    inventory_phase = 1;
+    PE_HOOK(PE_HOOK_SAVE_INVENTORY, &inventory_phase);
+    if (tail_result < 0) return -1;
 
     {
         u8 *data = g_MemCardFileBuffer;

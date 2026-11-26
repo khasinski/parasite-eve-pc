@@ -192,9 +192,17 @@ void Battle_StepEnemyMovement(BattleEntity *entity)
     }
 #if defined(PE_MODS) && PE_MODS
     {
-        PeHookEnemyDamage query = {g_ActiveActor, entity, &damage,
-            !(g_ActiveActor->stateFlags & 0x180000u) && !(enemy->statusFlags2 & 0x01000000u)};
+        PeHookEnemyDamage query = {.source = g_ActiveActor, .target = entity, .damage = &damage,
+            .ordinary = !(g_ActiveActor->stateFlags & 0x180000u) && !(enemy->statusFlags2 & 0x01000000u)};
         PE_HOOK(PE_HOOK_ENEMY_DAMAGE, &query);
+        for (unsigned i = 0; i < sizeof query.spread / sizeof *query.spread; ++i) {
+            BattleEntity *target = query.spread[i].target;
+            if (!target || target == entity || !target->core || query.spread[i].damage <= 0) continue;
+            EnemyCombatant *extra = target->core;
+            if (extra->hpAlive <= 0) continue;
+            extra->hpAlive -= query.spread[i].damage;
+            extra->coreFlags = (extra->coreFlags & ~0x6000) | 0x4000;
+        }
     }
 #endif
     enemy->hpAlive -= damage;

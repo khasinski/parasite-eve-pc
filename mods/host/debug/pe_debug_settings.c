@@ -6,7 +6,8 @@
 #include "pe_mod_menu.h"
 
 
-static void pe_ctl_setting(const char *args) {
+static void pe_set_menu_value(const char *args, int live) {
+    const char *command = live ? "mod-set" : "ini-set";
     char key[200], row_key[200], detail[240], *end;
     const char *space = strrchr(args, ' ');
     long value;
@@ -19,9 +20,19 @@ static void pe_ctl_setting(const char *args) {
         PeMenuRow *r = pe_menu_row(i);
         snprintf(row_key, sizeof row_key, "%s/%s", r->page, r->label);
         if (strcmp(key, row_key)) continue;
+        if (live) {
+            if (r->kind != PE_ROW_LIVE_INT || !pe_menu_row_active(r) || !r->set ||
+                value < r->minimum || value > r->maximum || !r->set((int)value)) goto invalid;
+            pe_debug_reply("ok %s %s", command, key);
+            return;
+        }
         if (r->kind == PE_ROW_TOGGLE) { if (value < 0 || value > 1) goto invalid; }
         else if (r->kind == PE_ROW_CHOICE) { if (value < 0 || (unsigned)value >= r->count) goto invalid; }
         else if (r->kind == PE_ROW_INT) { if (value < r->minimum || value > r->maximum) goto invalid; }
+        else if (r->kind == PE_ROW_DYNAMIC_CHOICE) {
+            unsigned count = r->count_fn && pe_menu_row_active(r) ? r->count_fn() : r->count;
+            if (value < 0 || (unsigned)value >= count) goto invalid;
+        }
         else { pe_debug_reply("err %s %s", "ini-set", "only registered stored options are supported"); return; }
         if (!r->value) goto invalid;
         *r->value = (int)value;
@@ -29,9 +40,29 @@ static void pe_ctl_setting(const char *args) {
                  !strcmp(r->page, PE_MENU_MANAGE));
         pe_debug_reply("ok %s %s", "ini-set", detail); return;
     }
-    pe_debug_reply("err %s %s", "ini-set", "unknown option"); return;
+    pe_debug_reply("err %s %s", command, "unknown option"); return;
 invalid:
-    pe_debug_reply("err %s %s", "ini-set", "ini-set PAGE/LABEL VALUE (within the option range)");
+    pe_debug_reply("err %s %s PAGE/LABEL VALUE (within the option range)", command, command);
+}
+
+static void pe_ctl_setting(const char *args) { pe_set_menu_value(args, 0); }
+static void pe_ctl_mod_set(const char *args) { pe_set_menu_value(args, 1); }
+
+/* Run a registered F1 action row, as Enter on it does. Inactive mods' actions don't run. */
+static void pe_ctl_mod_action(const char *key) {
+    char row_key[200];
+    int i;
+    for (i = 0; i < pe_menu_row_count(); ++i) {
+        PeMenuRow *r = pe_menu_row(i);
+        if (r->kind != PE_ROW_ACTION) continue;
+        snprintf(row_key, sizeof row_key, "%s/%s", r->page, r->label);
+        if (strcmp(key, row_key)) continue;
+        if (!pe_menu_row_active(r)) { pe_debug_reply("err %s %s", "mod-action", "that mod is off"); return; }
+        pe_menu_row_accept(r);
+        pe_debug_reply("ok %s %s", "mod-action", key);
+        return;
+    }
+    pe_debug_reply("err %s %s", "mod-action", "unknown action");
 }
 
 static void pe_ctl_mod_state(const char *name) {
@@ -75,7 +106,9 @@ static void pe_ctl_mod_state(const char *name) {
 
 static const PeDebugCommand s_commands[] = {
     {"ini-set", PE_DEBUG_ARGS, pe_ctl_setting},
+    {"mod-set", PE_DEBUG_ARGS, pe_ctl_mod_set},
     {"mod-state", PE_DEBUG_ARGS, pe_ctl_mod_state},
+    {"mod-action", PE_DEBUG_ARGS, pe_ctl_mod_action},
 };
 
 const PeDebugModule pe_debug_settings_module = {

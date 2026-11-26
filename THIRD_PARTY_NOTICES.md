@@ -291,3 +291,106 @@ All rights reserved.
 ## zlib
 
 `localization/editor/vendor/zlib` holds the zlib 1.3.2 headers, and the translation editor links zlib through the`libz-sys` crate, under the zlib License. Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler. The license is in that folder.
+
+## Resident Evil formats and engine references (import and play)
+
+The importer (`mods/import/core`, `mods/pe_src_re1`, `mods/pe_src_re2`, `mods/pe_src_re3`) and the room
+runtime (`mods/pe_re_play`) read the player's own Resident Evil discs; the importer's Parasite Eve side
+(`mods/import/targets/pe1`, ported from the project's own MIT-licensed
+[psxrecomp-decomp-bridge](https://github.com/sirebacon/psxrecomp-decomp-bridge) `tools/pe_assets`)
+reads the player's Parasite Eve discs. No game data is included. These projects were used:
+
+**Adapted (tables and layouts ported, with these notices):**
+
+- [biohazard-utils](https://github.com/biorand/biohazard-utils) (MIT, Copyright (c) 2022-2023 Ted John):
+  script instruction sizes and signatures (`Bio2ConstantTable.cs`, `Bio3ConstantTable.cs`,
+  `OpcodeV2.cs`), item names, message codes (`Room/Msg.cs`), and the model, animation and room layouts
+  (`Rbj.cs`, `Edd1.cs`, `Emr.cs`, `Md2.cs`, `Rdt1.cs`, `Rdt2.cs`).
+- [BioRand](https://github.com/biorand/classic) (MIT, Copyright (c) 2022-2026 Ted John): how weapons
+  are composed onto players (emdui, `TimExtensions.WithWeaponTexture`), RE1 weapon numbers
+  (`re1NpcHelper.cs`), RE2 weapon slots, room and door data used to check names.
+
+MIT License: Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to
+do so, subject to the following conditions: The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+**Consulted for behaviour (no code taken):**
+
+- [bio2-ds](https://github.com/MeganGrass/bio2-ds), a decompilation of Resident Evil 2 Dual Shock (no
+  license stated): the script engine's if / else / endif and scheduler (`SCE0.C`, `SCE1.C`), the
+  engine flags (`def/FLAG.H`), the zone checks and what each zone kind does (`SCE_AT.C`,
+  `def/SCENARIO.H`), the pad's key bits for script key checks (`PAD.C`, `SCE2.C`), the frame's order
+  and its every-frame handler (`GAME.C`, `SCE0.C` Sce_scheduler / Sce_work_clr), and item use, item
+  scripts and item boxes (`ST_SUB00.C`, `SCE2.C`, `SCE_AT.C`), and enemy placements (`SCE2.C`
+  Sce_em_set, `EM_SET.H`), camera cuts (`SCE1.C` Cut_chg / Cut_old / Cut_auto), door-lock flags
+  (`SCE_AT.C` Sce_Door, Key_flg) and the main hall's door-lock computer (`PC_EVENT.C`), the scripts'
+  objects and their fields (`SCE1.C` Work_set / Member_* / Pos_set / Dir_set, `def/SCENARIO.H`
+  MEMBER_* and WORK_TYPE_*), the zone the player last touched (`SCE_AT.C` At_sce_no) and the walk to
+  a spot with its arrival flag (`SCE1.C` Plc_dest), a work value written into the script
+  (`SCE1.C` Work_copy), and the scripts' wall switches and which walls stop the player (`SCE2.C`
+  Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`), the partner hand-over in scenes (`SCE2.C`
+  Splc_sce / Splc_ret), the 4th Survivor's start (`TITLE.C` Title_game_init), and each enemy's
+  starting life (the `EM*.C` Init functions), and the opening poses for RE2 zombie placements
+  and their get-up moves (`EM10.C`, Em10_Init and Em10_mv07).
+  The tables in `pe_src_re2_enemies.c` record those values. We also
+  consulted `EM_SET.C` (Emd_load_file) for Leon's and Claire's enemy archive routing and
+  `EM21.C`, `EM22.C`, `EM24.C`, `EM29.C`, `EM2F.C`, and `EM3A.C` for enemy locomotion.
+  `EM10.C`, `SCE0.C`, and `SND.C` were also consulted for zombie sound cues and enemy bank layout.
+  `EM20.C`, `EM22.C`, and `EM24.C` were consulted for dog and Licker sound cues.
+  For the RE2 story runs we also consulted `SCE2.C` Plc_motion / Plc_dest / Plc_stop (scripted moves,
+  and an arrival flag of 0 that still counts, with `SPL_SCE.C`), `SCE1.C` Cut_chg / Cut_old (the
+  background-drawn status bit scenes wait on) and `SCE_AT.C` Sce_at / Sce_at_check with `GAME.C`
+  (zones checked every frame, for the partner and enemies too). For scenes, `SCE0.C` Sce_rnd_set (the
+  scripts' random value and its seed) and `SCE1.C` Sce_rnd / Cut_replace (camera swaps in the switch zones).
+  For scripted clips, `SPL_SCE.C` Spl_Scenario and its handlers (which clip bank each plc_motion mode plays,
+  looping, double and half speed) and `EM_SUB.H` (the SCE_FLG_* bits).
+  `EM_SUB.C` and `EM10.C` were consulted for selecting feeding zombies' room animation.
+  `EM10.C` and `EM20.C` were consulted for zombie walk and dog run animation selection in the field.
+  `EM21.C`, `EM29.C`, `EM31.C`, `EM33.C`, `EM34.C`, `EM36.C`, and `EM3A.C` were consulted
+  for crow, roach and G sound cues and the airborne attack moves.
+  `EM23.C`, `EM25.C`, `EM27.C`, `EM2A.C`, `EM2B.C`, `EM2E.C`, `EM2F.C`, `EM30.C`,
+  `EM37.C`, and `EM3B.C` were consulted for additional enemy sound events.
+  `EM27.C`, `EM28.C`, `EM2B.C`, and `EM2D.C` were consulted for enemy movement
+  and attacks. `SCE0.C`, `EM28.C`, and `EM2D.C` were consulted for cues in paired sound banks.
+  `EM29.C` and `EM37.C` were consulted for the roach grab and G4 tentacle attack.
+  `EM2F.C` and `EM36.C` were consulted for the Ivy appendage's battle moves and G4's final collapse.
+  `EM26.C`, `EM27.C`, `EM29.C`, `EM2C.C`, `EM2D.C`, `EM2E.C`, `EM37.C`, `EM3B.C`,
+  `EM3E.C`, and `EM3F.C` were consulted for procedural attacks, flinches, and scene-only actors.
+  `EM2C.C`, `EM3E.C`, `EM3F.C`, and `JOINT.C` were consulted for scene actor commands,
+  reverse playback, completion flags, and movable parts.
+  `SCE2.C` was consulted for enemy slot replacement and the killed flags that suppress spawns.
+  `EM23.C` was consulted for the Alligator's entrance command, entrance motion, and exit camera
+  after a damage defeat, and for the canister's grab, shot, and explosion signals.
+  `EM2B.C` was consulted for the final Tyrant's entrance command, damage-gated launcher
+  sequence, and persistent defeat.
+  `EM2A.C` was consulted for Mr. X's room-specific combat releases and knockdown.
+  `EM22.C`, `EM27.C`, and `EM28.C` were consulted for Licker entrances and adult G offspring behaviour,
+  including the adult G's summoning animation and the type of enemy it spawns.
+  Our interpreter and zone checks are written independently from what it shows.
+- [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
+  Yuan), a reimplementation of the Resident Evil 2 engine.
+- [Bio2ScriptViewer](https://github.com/OpenBiohazard2/Bio2ScriptViewer) (MIT, Copyright (c) 2021 Samuel
+  Yuan): RE2 script instruction layouts, used to cross-check ours.
+- The reevengi notes (Patrice Mandin) on Resident Evil room files.
+
+If code from a consulted MIT project is ported later, its notice moves to the list above.
+
+## RE2 part effect behavior reference
+
+The cutscene opcode audit consulted [MeganGrass/bio2-ds](https://github.com/MeganGrass/bio2-ds)
+to identify the retail part and sprite commands. The audit did not incorporate its source code.
+
+## RE2 scenario walks and Kendo's routine
+
+The scenario walk modes in `mods/pe_re_play/pe_re_scd.c` follow the behaviour of RE2's scenario
+dispatcher, as studied in [MeganGrass/bio2-ds](https://github.com/MeganGrass/bio2-ds) (`SPL_SCE.C`,
+`SCE2.C`, `EM_SUB.C`): turn toward the point, then step a per-actor speed while steering. The speed and
+turn values per actor row are the numbers in its `SPL_TBL.H`. Kendo's alternate texture (`SPL.C`
+`Spl_chenge02`) is reimplemented in `pe_re_stage.c`. No source code was incorporated.

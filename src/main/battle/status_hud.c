@@ -5,6 +5,7 @@
 #include "pe1/battle_entity_anim.h"
 #include "pe1/battle_main.h"
 #include "pe1/battle_runtime.h"
+#include "pe1/inventory.h"
 #include "pe1/battle_status.h"
 #include "pe1/battle_update.h"
 #include "pe1/draw_buffers.h"
@@ -639,7 +640,7 @@ void Battle_DrawATBGauge(void)
     i = 0;
     y = g_BattleStatusBarTiles[g_ActiveDrawSlot * 3].y0 + 22;
     category = (g_ActiveActor->action->attackWord >> 20) & 3;
-    ammo = Inv_GetWeaponCategoryAmmoBase(category - 1);
+    ammo = Inv_GetWeaponAmmoBase(Inv_EquippedWeaponRecord(), category - 1);
     base = &g_BattleAmmoLabelSprites[0].sprite;
     packet = (BattleGaugePrim *)((char *)base - PE1_OFFSETOF(BattleGaugePrim, sprite));
 

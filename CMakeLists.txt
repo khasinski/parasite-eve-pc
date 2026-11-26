@@ -461,7 +461,10 @@ set(PE_COMMON_GAME_OBJECTS
     $<TARGET_OBJECTS:parasite-eve-original-e08>)
 if(PE_MODS)
     add_subdirectory(mods)
-    list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods>)
+    list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods> $<TARGET_OBJECTS:pe-import-core>)
+    if("pe_re_play" IN_LIST PE_MOD_LIST OR "pe_re_play" IN_LIST PE_EXTRA_MODS)
+        list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-re-play-core>)
+    endif()
 endif()
 # What the shared game objects need beyond psyz: zipped .pelang files are read with the mod
 # downloads' zip reader (mods/pe_lang/pe_lang_bundle.c).
@@ -724,6 +727,54 @@ if(BUILD_TESTING)
             ${CMAKE_BINARY_DIR}/mouse-evidence)
         set_tests_properties(original-game-mouse PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 900 LABELS "game-assets")
+        if(PE_MODS AND "pe_enemy_import" IN_LIST PE_MOD_LIST AND "pe_cheats" IN_LIST PE_MOD_LIST)
+            # F1 > Fights on Disc 1: a picked fight starts in its room with its enemies; won, run
+            # from and lost, the trip ends safely. -all: every fight in the list starts.
+            add_test(NAME enemy-import-fights COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_fights.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-evidence)
+            set_tests_properties(enemy-import-fights PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+            if("pe_re_play" IN_LIST PE_MOD_LIST AND "pe_src_re2" IN_LIST PE_MOD_LIST)
+                foreach(campaign IN ITEMS claire leon)
+                    add_test(NAME re2-${campaign}-b-finale COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_SOURCE_DIR}/tests/re2_b_finale.py $<TARGET_FILE:parasite-eve-pc>
+                        ${CMAKE_BINARY_DIR}/re2-${campaign}-b-finale-evidence ${campaign})
+                    set_tests_properties(re2-${campaign}-b-finale PROPERTIES SKIP_RETURN_CODE 77
+                        TIMEOUT 900 LABELS "game-assets;mods")
+                endforeach()
+                add_test(NAME re2-rpd-licker COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/re2_rpd_licker.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/re2-rpd-licker-evidence)
+                set_tests_properties(re2-rpd-licker PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 900 LABELS "game-assets;mods")
+                add_test(NAME re2-adult-g-offspring COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/re2_adult_g_offspring.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/re2-adult-g-evidence)
+                set_tests_properties(re2-adult-g-offspring PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 900 LABELS "game-assets;mods")
+            endif()
+            add_test(NAME enemy-import-fights-all COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_fights.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-all-evidence --all)
+            set_tests_properties(enemy-import-fights-all PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 3600 LABELS "game-assets;mods;slow")
+            # An imported enemy (PE_TEST_ENEMY_PACK, built from the player's own files) in M075's
+            # fight: it appears, attacks with its pack's damage, is hurt and dies; the battle is won.
+            # Then M118, whose opening line waits for the player: it joins late and still wins.
+            add_test(NAME enemy-import-nemesis COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_nemesis.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-nemesis-evidence)
+            set_tests_properties(enemy-import-nemesis PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1500 LABELS "game-assets;mods")
+            # The same pack in every fight of the list: joining leaves the room's picture whole
+            # (its texture goes to VRAM the room is not using).
+            add_test(NAME enemy-import-rooms COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_rooms.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-rooms-evidence)
+            set_tests_properties(enemy-import-rooms PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 3600 LABELS "game-assets;mods;slow")
+        endif()
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,
             # a saved name read back, and English as the game drew it before the renderer.

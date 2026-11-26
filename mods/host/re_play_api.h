@@ -1,0 +1,143 @@
+#ifndef RE_PLAY_API_H
+#define RE_PLAY_API_H
+/* The "re_play" service v1 and its events: what the RE play mod (pe_re_play) tells other mods
+ * about an imported game being played. Game-neutral, so an encounter mod for any host game
+ * includes this header and nothing of the RE play mod's or the host game's. (Moved out of
+ * pe_services.h; same names, layout and version.)
+ *
+ * The runtime only reports where the room's scripts put enemies; an encounter policy (another mod)
+ * decides what happens: placement battles, random encounters, nothing. Events (pe_event_id):
+ *   "re_play.room"     (const PeReRoomEvent *) the player came into a room (a door, a jump, a
+ *                      loaded save), with the enemies its scripts placed. Door arrivals are
+ *                      published after the transition completes.
+ *   "re_play.enemies"  (const PeReRoomEvent *) the current placement list after an addition,
+ *                      removal or replacement. An empty list clears the previous placements.
+ * Positions are the source game's room units (x, z on the floor, y down, 1,800 a floor). A placed
+ * enemy's killed flag is the game's own: report a defeat with defeated() and the room's scripts stop
+ * placing it, as after a kill in the source game (RE2: Enemy_flg, Enemy_flg2 from stage 4). */
+#include <stddef.h>
+#include <stdint.h>
+
+#define RE_PLAY_SERVICE "re_play"
+#define RE_PLAY_SERVICE_VERSION 1
+#define RE_PLAY_EVENT_ROOM "re_play.room"
+#define RE_PLAY_EVENT_ENEMIES "re_play.enemies"
+
+#define PE_RE_BATTLE_MAX_FOES 7 /* Current shared roster limit. A game may choose fewer. */
+
+typedef struct PeReEnemyPlacement {
+    uint8_t slot;                  /* the game's enemy slot (Em_no) */
+    uint8_t kind;                  /* the game's id (RE2: 0x10-0x3F creatures; 0x40 and up are people) */
+    uint16_t behaviour;            /* its Type word: pose and AI variant */
+    uint8_t floor, sound, model;
+    uint8_t killed_flag;           /* 0xFF: none (always placed) */
+    int16_t x, y, z, dir;          /* dir 0..4095 */
+    int16_t motion, ctr;
+} PeReEnemyPlacement;
+
+typedef struct PeReRoomEvent {
+    uint32_t struct_size;
+    const char *game;              /* "re2" */
+    uint32_t stage, room;          /* stage 0 = stage 1 */
+    int fresh;                     /* 1: came in; 0: the placement list changed */
+    int count;
+    const PeReEnemyPlacement *enemies;
+} PeReRoomEvent;
+
+enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
+enum { PE_RE_WEAPON_DEFAULT, PE_RE_WEAPON_CLOSE_SHOTGUN, PE_RE_WEAPON_GRENADE_SPLASH, PE_RE_WEAPON_SPARK_BEAM };
+
+/* Native combat reports source-room slots, independent of the host's actor IDs.
+ * A loss with no defeated slots needs only resume_after_battle(). */
+typedef struct PeReBattleResult {
+    const char *game;
+    uint32_t stage, room;
+    uint16_t defeated_slots;
+    uint16_t canister_slots;  /* subset of defeated_slots with an authored canister finish */
+} PeReBattleResult;
+
+typedef struct PeRePlayApi {
+    uint32_t struct_size;
+    /* The reported room and its placements (valid until the next frame); 0, or -1 if unavailable. */
+    int (*room)(PeReRoomEvent *out);
+    /* Set a currently placed enemy's killed flag. The next room update reflects the defeat.
+     * 0 on success, or -1 if the room or flag is unavailable or the flag is 0xFF. */
+    int (*defeated)(uint8_t killed_flag);
+    /* Optional in v1. Pause the imported room for a native battle trip. Returns 1 when
+     * paused, 0 with no running imported room, or -1 if the room is busy. */
+    int (*pause_for_battle)(void);
+    /* Release the pause. The imported room returns on the next free field frame. */
+    void (*resume_after_battle)(void);
+    /* Optional in v1 (check struct_size). A currently placed enemy beaten, by its slot: its killed
+     * flag is set if it has one, and the room's scripts see it die (a boss with no killed flag whose
+     * death moves the story on). 0, or -1 if no placed enemy has that slot. */
+    int (*defeated_slot)(uint8_t slot);
+    /* Optional in v1. Preferred archive suffix for the current room's enemy assets.
+     * NULL keeps the catalogue's default. The returned string is static. */
+    const char *(*enemy_archive)(void);
+    /* Optional: animation assigned to this enemy slot by the current room. */
+    int (*enemy_room_move)(unsigned slot, char *asset, size_t size);
+    /* Optional: current player position when the imported room can start a fight. */
+    int (*encounter_position)(double *x, double *z, int *floor);
+    /* Optional: check whether a straight approach crosses room collision. */
+    int (*encounter_reachable)(double x, double z, double target_x, double target_z);
+    /* Optional: the slot released by a story scene, or -1 when none is ready. */
+    int (*encounter_boss)(void);
+    /* Optional: prepare the authored setup after encounter_boss identifies a ready slot. */
+    int (*prepare_boss)(uint8_t slot);
+    int (*defeated_by_canister)(uint8_t slot);
+    /* Optional: advance field enemies once before checking for an automatic encounter.
+     * Updates the current room snapshot in place. */
+    void (*advance_enemies)(double x, double z, int floor);
+    /* Optional. Apply to a reported room after resuming. Returns the number applied,
+     * 0 while the room is unavailable, or -1 for a mismatch or empty result. */
+    int (*apply_battle_result)(const PeReBattleResult *result);
+    /* Optional. The imported room's units per PE field unit, as the host draws it (a battle in
+     * front of the room places its enemies where they stood: PE offset = room offset / this);
+     * 0 while no room is up. */
+    double (*units_per_pe_unit)(void);
+    /* Optional. Whether a placed enemy is in the current camera's picture (an encounter takes in
+     * every enemy the player can see); -1 when the host can't tell. */
+    int (*in_view)(const PeReEnemyPlacement *enemy);
+    /* Optional. The room's bounds in room units, from its colliders (a battle fought off the host
+     * room's map has to fit them: docs/RE_PLAY_BATTLES.md, D14). 0, or -1 while no room is up. */
+    int (*room_extent)(double *x0, double *z0, double *x1, double *z1);
+    /* Optional. The VRAM the room's drawing uses now, as (x, y, w, h) rectangles into `out` (at most
+     * `max`): a battle's own textures keep out of it (G2). Returns how many, 0 when there's none. */
+    int (*vram_reserved)(int *out, int max);
+    /* Optional: the battle director (docs/RE_PLAY_BATTLES.md, layer 2), owned by RE play. The
+     * adapter drives it; RE play steps its grace in the field. Slots are the room's enemy slots. */
+    int (*battle_begin)(uint8_t lead_slot, uint8_t *slots, int max);         /* first roster; count, or -1 */
+    int (*battle_step)(double aya_x, double aya_z, int time_runs, PeReEnemyPlacement *joins, int max);  /* new joiners */
+    void (*battle_foe_moved)(uint8_t slot, double x, double z);              /* room units */
+    void (*battle_foe_died)(uint8_t slot);
+    void (*battle_end)(int escaped);
+    int (*battle_target_order)(uint8_t *slots, int max);                    /* on screen first, nearest first */
+    int (*battle_encounter_allowed_for)(uint8_t slot);                      /* 0 while its grace runs (D18) */
+    void (*battle_settings)(double grace_seconds, double grace_distance, int halve_on_repeat);
+    /* host <-> room positions through the battle backdrop's own mapping (0, or -1 with no battle) */
+    int (*battle_point)(int to_room, double x, double z, double *out_x, double *out_z);
+    /* a mark in the battle at a host position (D10's off-screen target, D19's joining cue); kind 0 clears */
+    void (*battle_mark)(int id, int kind, double x, double z);
+    /* how far room enemy `slot` walks in a frame while it pursues, in room units (0: it doesn't): a
+     * battle moves it at the same pace as the field does */
+    double (*enemy_walk_speed)(uint8_t slot);
+    /* Optional. How many imported games have started (New Game in RE play, not Continue) since the
+     * game launched: other mods can set Aya up for a new one. */
+    unsigned (*games_started)(void);
+    /* Optional. The id of the imported game being played ("re2"), battles and scenes included, or
+     * NULL when none is. */
+    const char *(*playing_game)(void);
+    /* Host equipment record; the return value is the imported weapon's built-in behavior. */
+    int (*weapon_role)(const void *weapon);
+    /* Placement kind while the field is paused for battle, or -1 if absent. */
+    int (*battle_foe_kind)(uint8_t slot);
+    /* Optional. An electric bolt drawn over the battle from one host-unit floor point to another, for
+     * `frames` frames (the Sparkshot). */
+    void (*battle_bolt)(double x0, double z0, double x1, double z1, int frames);
+} PeRePlayApi;
+
+#define PE_RE_MARK_TARGET 1
+#define PE_RE_MARK_CUE 2
+
+#endif

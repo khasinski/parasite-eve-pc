@@ -1,6 +1,6 @@
 #ifndef PE_EXTENSION_STORE_H
 #define PE_EXTENSION_STORE_H
-#include "pe_registry.h"
+#include "pe_extension_section.h"
 /* Bounded companion store, always owned by the host. Unknown/newer sections are preserved.
  * Registration is init-only, full names are copied, caller data must outlive the game.
  * Sections are dormant until enabled BEFORE mutation. A refused enable changes nothing.
@@ -25,20 +25,6 @@ int pe_checkpoint_slot_state(const char *checkpoint, const char *legacy);
 /* Exactly one 8 KB card file; admit it with pe_mod_load_admit once its native checks pass. */
 int pe_checkpoint_read_legacy(const char *path, unsigned char *block);
 void pe_extension_refill_stacks(short *lists[3], const unsigned sizes[3]);
-typedef struct {
-    const char *key;
-    uint16_t version, min_reader, size;
-    void *data;
-    /* Pure, bounded adapters: no gameplay, profile I/O, RNG or publication.
-     * Return zero for success. Failure locks and preserves the original bytes. */
-    int (*upgrade)(void *candidate, const void *old, unsigned size, unsigned version);
-    int (*check)(const void *candidate);
-    int (*check_native)(const void *candidate, const unsigned char *native_block);
-} PeExtensionSection;
-int pe_extension_owner_available(const char *);
-int pe_extension_register(const PeExtensionSection *section);
-PeRegResult pe_extension_enable(const PeExtensionSection *section);
-int pe_extension_available(const PeExtensionSection *section);
 /* Snapshot into caller memory only; patch replaces an existing v1 section in the copy.
  * Neutral filename/generation are rebound by Restore. No callbacks, allocation, I/O or live changes. */
 int pe_extension_snapshot(unsigned char *out,unsigned capacity,unsigned *size,unsigned char link[20],

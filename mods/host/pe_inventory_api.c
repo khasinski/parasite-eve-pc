@@ -126,6 +126,7 @@ static int pe_guard_hook(void *ctx, void *user) {
     if (g->kind == 0) return !pe_inventory_native_guard(g->value);
     if (g->kind == 1) return !pe_mod_equipment_record_guard(g->record);
     if (g->kind == 2) return !pe_mod_tool_guard(g->selection);
+    if (g->kind == 3) return 0; /* Tracked equipment may use native storage. */
     return 1;
 }
 void pe_inventory_api_install(void) {

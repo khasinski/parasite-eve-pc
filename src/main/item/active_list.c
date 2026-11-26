@@ -1220,7 +1220,12 @@ int Inv_WriteSlotById(ItemDataRecord *item) {
     } else {
         category = kind - 16;
     }
-    if ((unsigned)category < 3) {
+    {   /* a mod's ammo scheme may use one of the other pool records (up to 8) */
+        const int native = category;
+        const int chosen = Inv_AmmoPoolIndex(item, native);
+        category = chosen == native ? ((unsigned)native < 3 ? native : -1) : chosen;
+    }
+    if ((unsigned)category < 9) {
         ItemDataRecord *pool;
         if (FindActiveSlot(category + 512) < 0) {
             int slot = FindFreeActiveSlot();

@@ -3,9 +3,12 @@
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
 # pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_ammo_types pe_phone
+    pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
-    list(APPEND pe_default_mods pe_lang pe_fonts)
+    list(PREPEND pe_default_mods pe_assets)
+    list(REMOVE_ITEM pe_default_mods pe_import)
+    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import pe_re_play)   # pe_enemy_import: F1 > Fights; pe_re_play: play imported games (room runtime); desktop only
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -42,6 +45,64 @@ if("pe_fonts" IN_LIST PE_MOD_LIST)
     add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
+# The importer core (design: Cross-Game Asset Import). Plain C, PC and PS5. Source games register
+# their readers from their own mods (pe_src_<game>); nothing here names a game.
+set(pe_import_core_sources
+    import/core/pe_imp_disc.c       # PS1 disc images: .cue / .bin / .iso, ISO 9660
+    import/core/pe_imp_rofs.c       # RE3 PC rofs*.dat archives, a game folder read like a disc
+    import/core/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
+    import/core/pe_imp_sha256.c     # store keys
+    import/core/pe_imp_model.c      # the Model type: check, store, load
+    import/core/pe_imp_fit.c        # the fit layer: a Model made fit for one use (docs/IMPORT_MODELS.md)
+    import/core/pe_imp_anim.c       # the Animation type: moves with per-frame events
+    import/core/pe_imp_sound.c      # the Sound type: bounded PCM
+    import/core/pe_imp_song.c       # the Song type: sequenced source music
+    import/core/pe_imp_imageset.c   # the ImageSet type: still pictures (room backgrounds)
+    import/core/pe_imp_spu.c        # shared PS1 sound decoder
+    import/core/pe_imp_seq.c        # PS1 sequences (SEQ + VAB) played as PCM
+    import/core/pe_imp_xa.c         # CD-XA streamed audio: decoding and playback
+    import/core/pe_imp_akao.c       # Square's AKAO sequences (FF7) played as PCM
+    import/core/pe_imp_mdec.c       # MDEC frames (room backgrounds) to RGB
+    import/core/pe_imp_rdt.c        # RE1-3 rooms: doors, trigger zones, items, camera zones
+    import/core/pe_imp_logic.c      # the RoomLogic type: what happens in a room, for the runtime
+    import/core/pe_imp_door.c       # RE door transitions as DoorScene records
+    import/core/pe_imp_items.c      # a game's item table (names, icons)
+    import/core/pe_imp_guess.c      # an enemy profile guessed from a model's moves; profile.json
+    import/core/pe_imp_movie.c      # PS1 STR movies, copied once
+    import/core/pe_imp_pictures.c   # TIM pictures (files, maps) kept as stored, and a TIM decoder
+    import/core/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
+    import/core/pe_imp_registry.c   # readers, file patterns, naming tables
+    import/core/pe_imp_store.c      # the extract-once store and the catalog
+    import/core/pe_imp_packs.c)     # packs in the format the Wardrobe loads
+# The importer's PE1 targets: Parasite Eve's own formats, outside the game-neutral core. PE2 adds
+# import/targets/pe2 beside it. Their header (pe_imp_pe.h) is for PE1 code only; the portability
+# check refuses it in the core.
+set(pe_import_pe1_sources
+    import/targets/pe1/pe_imp_pe_disc.c    # Aya's bundles and rooms from the player's PE disc images
+    import/targets/pe1/pe_imp_pe_model.c   # PE models and animation rows: decode, encode, pose
+    import/targets/pe1/pe_imp_pe_retarget.c)   # Aya's rows on another skeleton; the rows rooms install
+include_directories(import/targets/pe1)
+
+set(pe_import_sources ${pe_import_core_sources} ${pe_import_pe1_sources})
+
+set(pe_re_portability_check "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckRePortability.cmake")
+add_custom_target(pe-re-portability
+    COMMAND "${CMAKE_COMMAND}" -P "${pe_re_portability_check}"
+    COMMENT "Check that the shared RE code has no PE1 dependencies"
+    VERBATIM)
+if(BUILD_TESTING)
+    add_test(NAME mod-re-portability COMMAND "${CMAKE_COMMAND}" -P "${pe_re_portability_check}")
+    add_test(NAME mod-re-portability-guard
+        COMMAND "${CMAKE_COMMAND}" "-Dguard=${pe_re_portability_check}"
+            -P "${PROJECT_SOURCE_DIR}/tests/pe_re_portability_guard_test.cmake")
+endif()
+
+add_library(pe-import-core OBJECT ${pe_import_core_sources})
+target_include_directories(pe-import-core PRIVATE import/core)
+# pe_imp_mdec.c builds its tables once across threads with SDL's init-state helpers.
+target_include_directories(pe-import-core PRIVATE "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+add_dependencies(pe-import-core pe-re-portability)
+
 set(pe_debug_sources
     host/pe_debug_control.c
     host/debug/pe_debug_field.c
@@ -58,11 +119,14 @@ set(pe_debug_sources
 )
 
 set(pe_host_sources
+    host/pe_trip_result.c
+    host/pe_battle_space.c  # where an imported room's battle is fought (docs/RE_PLAY_BATTLES.md)
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
     host/pe_pages.c         # PE Enhancements page layout
     host/pe_game.c          # game access helpers
+    host/pe_encounter.c     # random encounters in room bytecode
     host/pe_game_facts.c    # game facts as tables: effect names and groups, power tags
     host/pe_main_menu.c     # extra rows in Aya's main menu, screens from game widgets
     host/pe_equip_sync.c    # edited equipment reaches the next battle
@@ -80,6 +144,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_import_pe1_sources}  # the PE1 output formats
     ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
@@ -98,12 +163,35 @@ endif()
 set(PE_EXTRA_MODS "" CACHE STRING "Additional mods appended to the configured suite")
 set(pe_enabled_mods ${PE_MOD_LIST} ${PE_EXTRA_MODS})
 list(REMOVE_DUPLICATES pe_enabled_mods)
+if(BUILD_TESTING OR "pe_re_play" IN_LIST pe_enabled_mods)
+    file(GLOB pe_re_play_core_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/pe_re_play/*.c")
+    add_library(pe-re-play-core OBJECT ${pe_re_play_core_sources})
+    target_include_directories(pe-re-play-core PRIVATE host import/core)
+    add_dependencies(pe-re-play-core pe-re-portability)
+endif()
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")
 foreach(mod IN LISTS pe_enabled_mods)
-    file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
-    list(APPEND pe_mod_sources ${mod_files})
+    if(mod STREQUAL "pe_re_play")
+        list(APPEND pe_mod_sources
+            pe_re_play/hosts/pe1/pe_re_play_mod.c
+            pe_re_play/hosts/pe1/re_host_pe1.c
+            pe_re_play/hosts/pe1/pe_re_stage.c
+            pe_re_play/hosts/pe1/pe_re_box.c
+            pe_re_play/hosts/pe1/pe_re_ammo.c
+            pe_re_play/hosts/pe1/pe_re_weapons.c)
+    elseif(mod STREQUAL "pe_enemy_import")
+        file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_enemy_import/*.c)
+        list(APPEND pe_mod_sources ${mod_files}
+            pe_enemy_import/hosts/pe1/pe_enemy_import.c pe_enemy_import/hosts/pe1/pe_enemy_battle.c)
+    elseif(mod STREQUAL "pe_import")
+        file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_import/*.c)
+        list(APPEND pe_mod_sources ${mod_files} pe_import/hosts/pe1/import_host_pe1.c)   # the menu, then its PE1 adapter
+    else()
+        file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
+        list(APPEND pe_mod_sources ${mod_files})
+    endif()
     string(APPEND pe_mod_decls "extern const PeMod pe_mod_${mod};\n")
     string(APPEND pe_mod_refs "    &pe_mod_${mod},\n")
 endforeach()
@@ -123,7 +211,8 @@ if("pe_phone" IN_LIST PE_MOD_LIST)
 endif()
 
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
-target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
+add_dependencies(pe-mods pe-re-portability)
+target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host import/core pe_import
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)
@@ -139,6 +228,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
         ${PROJECT_SOURCE_DIR}/tests/pe_mod_frequency_test.c
         pe_qol/pe_battle_frequency.c
+        host/pe_encounter.c
         pe_qol/pe_move.c)
     target_include_directories(pe-mod-frequency PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
@@ -298,6 +388,123 @@ function(pe_feature_test name)
     endif()
     add_test(NAME mod-${name} COMMAND test-mod-${name})
 endfunction()
+if(BUILD_TESTING)
+    # Importer core and the RE2 reader on made-up data; PE_TEST_RE2_DISC adds the real disc.
+    pe_feature_test(import ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_test.c ${pe_import_sources}
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c)
+    target_include_directories(test-mod-import PRIVATE import/core pe_src_re2)
+    if(NOT PE_PS5_GAME)
+        pe_feature_test(assets ${PROJECT_SOURCE_DIR}/tests/pe_mod_assets_test.c
+            pe_assets/pe_assets.c ${pe_import_sources})
+        target_include_directories(test-mod-assets PRIVATE import/core)
+    endif()
+    # The RE3 reader on a made-up person; PE_TEST_RE3_DISC adds every player file on the disc.
+    pe_feature_test(re3 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_test.c ${pe_import_sources}
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-re3 PRIVATE import/core pe_src_re3)
+    # RE3's enemies: the PC folder (rofs archives), EMD models with their moves, enemy sound banks,
+    # on made-up data; PE_TEST_RE3_PC (the RE3 PC folder) adds Nemesis (EM34, E_34) read for real.
+    pe_feature_test(re3-enemy ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_enemy_test.c ${pe_import_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-re3-enemy PRIVATE import/core pe_src_re3)
+    set_tests_properties(mod-re3-enemy PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # The RE1 reader on a made-up person; PE_TEST_RE1_DISC adds the four people on the disc.
+    pe_feature_test(re1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re1_test.c ${pe_import_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c)
+    target_include_directories(test-mod-re1 PRIVATE import/core pe_src_re1)
+    # The Dino Crisis reader on a made-up archive; PE_TEST_DC1_DISC adds Regina's four outfits.
+    pe_feature_test(dc1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_dc1_test.c ${pe_import_sources}
+        pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c)
+    target_include_directories(test-mod-dc1 PRIVATE import/core pe_src_dc1)
+    # Music playback on made-up songs; PE_TEST_RE2_DISC adds RE2's MAIN00 (PE_TEST_SEQ_WAV writes it out).
+    pe_feature_test(seq ${PROJECT_SOURCE_DIR}/tests/pe_mod_seq_test.c ${pe_import_sources}
+        pe_src_re2/pe_src_re2_music.c pe_src_re1/pe_src_re1_music.c pe_src_re3/pe_src_re3_music.c)
+    target_include_directories(test-mod-seq PRIVATE import/core pe_src_re2 pe_src_re1 pe_src_re3)
+    # Streamed (CD-XA) audio on made-up sectors; PE_TEST_DC1_DISC adds Dino Crisis's music.
+    pe_feature_test(xa ${PROJECT_SOURCE_DIR}/tests/pe_mod_xa_test.c ${pe_import_sources}
+        pe_src_dc1/pe_src_dc1_music.c)
+    target_include_directories(test-mod-xa PRIVATE import/core pe_src_dc1)
+    # AKAO (FF7) playback on made-up songs; PE_TEST_FF7_DISC adds FF7 CD1's music.
+    pe_feature_test(akao ${PROJECT_SOURCE_DIR}/tests/pe_mod_akao_test.c ${pe_import_sources}
+        pe_src_ff7/pe_src_ff7.c pe_src_ff7/pe_src_ff7_music.c)
+    target_include_directories(test-mod-akao PRIVATE import/core pe_src_ff7)
+    # MDEC frames and room backgrounds; PE_TEST_RE1/2/3_DISC decode every room view on those discs
+    # (PE_TEST_ROOMS_DIR writes them out).
+    pe_feature_test(mdec ${PROJECT_SOURCE_DIR}/tests/pe_mod_mdec_test.c ${pe_import_sources}
+        pe_src_re1/pe_src_re1_rooms.c pe_src_re2/pe_src_re2_rooms.c pe_src_re3/pe_src_re3_rooms.c
+        ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
+    target_include_directories(test-mod-mdec PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
+    pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_sources}
+        pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c
+        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_music.c
+        pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
+        pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
+        pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_logic.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_pld.c
+        ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
+    target_include_directories(test-mod-rdt PRIVATE host import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
+    pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_sources})
+    target_include_directories(test-mod-fit PRIVATE import/core)
+    pe_feature_test(re-battle ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_battle_test.c
+        pe_re_play/pe_re_battle.c pe_re_play/pe_re_battle_re2.c
+        pe_re_play/pe_re_session.c pe_re_play/pe_re_scd.c pe_re_play/pe_re_rules.c pe_re_play/pe_re_zone.c
+        $<TARGET_OBJECTS:pe-import-core>)
+    target_include_directories(test-mod-re-battle PRIVATE host import/core pe_re_play)
+    # The play session (pe_re_play): zones, cameras and doors on a made-up room; with PE_TEST_RE2_DISC,
+    # RE2's rooms walked door by door from the street.
+    pe_feature_test(re-session ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_session_test.c
+        ${PROJECT_SOURCE_DIR}/tests/pe_re_headless_host.c
+        pe_re_play/hosts/pe1/pe_re_play_mod.c
+        $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
+        pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
+    target_sources(test-mod-re-session PRIVATE pe_src_re2/pe_src_re2_files.c)
+    target_sources(test-mod-re-session PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
+    target_include_directories(test-mod-re-session PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
+    set_tests_properties(mod-re-session PROPERTIES TIMEOUT 600)
+    # A scripted run through RE2 from the street with the real session (tests/pe_re_route_test.c):
+    # doors, locks, pickups and item use as a player meets them; reports how far it gets.
+    pe_feature_test(re-route ${PROJECT_SOURCE_DIR}/tests/pe_re_route_test.c
+        ${PROJECT_SOURCE_DIR}/tests/pe_re_headless_host.c
+        pe_re_play/hosts/pe1/pe_re_play_mod.c
+        $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
+        pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
+    target_sources(test-mod-re-route PRIVATE host/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
+    target_include_directories(test-mod-re-route PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
+    set_tests_properties(mod-re-route PROPERTIES TIMEOUT 900 SKIP_RETURN_CODE 77)   # 77: no RE2 disc set
+    # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
+    # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
+    pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-model-audit PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
+    pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_sources}
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c pe_wardrobe/pe_skin_build.c)
+    target_include_directories(test-mod-skin-build PRIVATE import/core pe_src_re2)
+    target_compile_definitions(test-mod-skin-build PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    set_tests_properties(mod-skin-build PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)
+        # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
+        pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_sources}
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1_objects.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2.c pe_src_re2/pe_src_re2_enemies.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_movies.c pe_src_re3/pe_src_re3_files.c pe_src_re3/pe_src_re3_objects.c pe_src_re3/pe_src_re3.c
+            pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
+            pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
+            pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
+            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c
+            pe_enemy_import/pe_enemy_pack.c pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_target.c)
+        target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import pe_enemy_import)
+        target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+        target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
+        set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800
+            ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+endif()
 if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(loot ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
@@ -316,6 +523,32 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
     pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
+    pe_feature_test(encounter ${PROJECT_SOURCE_DIR}/tests/pe_encounter_test.c host/pe_encounter.c)   # random-encounter spots
+    pe_feature_test(battle-space ${PROJECT_SOURCE_DIR}/tests/pe_battle_space_test.c host/pe_battle_space.c)   # T1, T2
+endif()
+if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
+    # Imported enemy packs: loading, refusals, posing; with PE_TEST_ENEMY_PACK also a real pack.
+    pe_feature_test(enemy-pack ${PROJECT_SOURCE_DIR}/tests/pe_enemy_pack_test.c pe_enemy_import/pe_enemy_pack.c)
+    target_include_directories(test-mod-enemy-pack PRIVATE pe_enemy_import)
+    target_link_libraries(test-mod-enemy-pack PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-pack PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # The enemies builder: a made-up model and moves -> a pack that loads back (events, sounds, hit
+    # frames); PE_TEST_RE3_PC adds Nemesis built from the RE3 PC folder through the importer's store.
+    pe_feature_test(enemy-build ${PROJECT_SOURCE_DIR}/tests/pe_enemy_build_test.c pe_enemy_import/pe_enemy_build.c
+        pe_enemy_import/pe_enemy_pack.c ${pe_import_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-enemy-build PRIVATE pe_enemy_import import/core pe_src_re3)
+    target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
+    # The profile guesser: idle, walk, hurt, die and attacks picked from a model's own moves.
+    pe_feature_test(enemy-guess ${PROJECT_SOURCE_DIR}/tests/pe_enemy_guess_test.c
+        pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-enemy-guess PRIVATE pe_enemy_import import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    target_link_libraries(test-mod-enemy-guess PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-guess PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's
@@ -348,7 +581,9 @@ if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(collection ${PROJECT_SOURCE_DIR}/tests/pe_mod_collection_test.c pe_collection/pe_collection.c pe_collection/pe_profile.c pe_collection/pe_bestiary.c pe_collection/pe_pack_pe1.c
-        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c)
+        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c
+        pe_wardrobe/pe_skin_target.c pe_wardrobe/pe_skin_build.c ${pe_import_sources})   # the Wardrobe registers the skins target
+    target_include_directories(test-mod-collection PRIVATE import/core)
     set_tests_properties(mod-collection PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)

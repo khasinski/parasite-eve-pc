@@ -85,7 +85,9 @@ A game whose window pauses when unfocused answers once it runs again.
 | `ui-state` | one JSON object: `menu` (native menu layer open, active mode, selected item, action submenu, memory-card dialog, save slot), `dialogue` (each open box: state `typing`/`waiting`, page, style, rect, text, choice count and cursor) and `recent_pages` (the last 8 pages a box opened, with frame, map and the text as drawn) |
 | `events` | `ok events <seq>`: the sequence number of the last event written to `events.jsonl` (see below); read lines after it |
 | `snapshot [NAME]` | write `snapshot[-NAME].json` in the control folder: room, ui-state, battle-state, bag, actors (position, yaw, flags), every running mod's live state and the last 32 commands and answers. Answers `ok snapshot <file>` |
-| `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked. Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
+| `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked (a list a mod fills, against its current length). Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
+| `mod-set PAGE/LABEL VALUE` | set a live integer in an active mod using the same range and setter as F1 |
+| `mod-action PAGE/LABEL` | run a registered F1 action row, as Enter on it does; refused for a mod that is off |
 | `trace on` / `trace off` | append events to `battle.jsonl` in the control folder; off initially |
 
 ### Dialogue and menus
@@ -203,6 +205,11 @@ advance after that boundary. Use identical command schedules for comparisons.
 group ID. Room scripts choose and create enemies and initialize encounter state. A generic
 chosen-group command needs a validated encounter loader/catalog; directly passing N to that
 function would produce invalid tests. Bosses still require scenario saves.
+
+A chosen random battle can be started through F1 > Fights (`mods/pe_enemy_import`): it takes Aya
+to the room, stands her in the spot's floor zone and makes that spot's own encounter roll succeed,
+so the room's script starts its battle. Tests drive it with `ini-set Fights/Area N`,
+`ini-set Fights/Fight N` and `mod-action Fights/Start fight` (`tests/enemy_import_fights.py`).
 
 Dedicated critical-roll events (including misses), challenge-specific trigger/settlement
 events, runtime hot-start/hot-stop of mods, arbitrary memory peek/poke, Junk setup,

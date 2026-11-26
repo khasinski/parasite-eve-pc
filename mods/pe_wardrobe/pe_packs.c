@@ -5,6 +5,7 @@
 void pe_packs_scan(void) {}
 void pe_packs_register(void) {}
 void pe_packs_page_register(void) {}
+int pe_packs_add_new(char *names, unsigned size) { if (names && size) names[0] = 0; return 0; }
 int pe_pack_read(const char *ref,const char *name,unsigned char **data,unsigned *size,unsigned max) {
     (void)ref;(void)name;(void)max;if(data)*data=NULL;if(size)*size=0;return 0;
 }
@@ -393,7 +394,11 @@ static void pe_read_chars(PePack *p) {
         }
     }
     qsort(names, (size_t)n, sizeof names[0], pe_cmp);
-    for (i = 0; i < n; ++i) pe_read_char(p, names[i]);
+    for (i = 0; i < n; ++i) {
+        int have = 0, k;
+        for (k = 0; k < p->nchars; ++k) have |= strcmp(p->ch[k].folder, names[i]) == 0;   /* already loaded */
+        if (!have) pe_read_char(p, names[i]);
+    }
 }
 
 /* One entry of packs/: a .zip or a folder. */
@@ -470,6 +475,61 @@ void pe_packs_register(void) {
         for (j = 0; j < p->nchars; ++j)
             if (g_pe_costumes_api.add(&p->ch[j].costume) < 0) ++p->refused_chars;   /* a taken key or a full registry */
     }
+}
+
+/* While the game runs (F1 > Import built something): packs/ read again, only what is new
+ * registered. Loaded packs and their costumes stay where they are (the registry keeps pointers
+ * to them); a new pack whose id is already loaded is refused, as at start-up. */
+static void pe_add_name(char *names, unsigned size, const char *name) {
+    size_t used;
+    if (!names || !size) return;
+    used = strlen(names);
+    if (used + 3 < size) snprintf(names + used, size - used, "%s%s", used ? ", " : "", name);
+}
+
+int pe_packs_add_new(char *names, unsigned size) {
+    char **list;
+    int count, i, k, added = 0;
+    if (names && size) names[0] = 0;
+    if (!s_dir[0] && pe_mod_path(s_dir, sizeof s_dir, PE_PACKS_DIR) != 0) return 0;
+    if (!(list = SDL_GlobDirectory(s_dir, "*", 0, &count))) return 0;
+    qsort(list, (size_t)count, sizeof *list, pe_cmp_ptr);
+    for (i = 0; i < count; ++i) {
+        char path[1300];
+        SDL_PathInfo info;
+        PePack *p = NULL;
+        int zip, before, j;
+        if (list[i][0] == '.') continue;
+        snprintf(path, sizeof path, "%s/%s", s_dir, list[i]);
+        if (!SDL_GetPathInfo(path, &info)) continue;
+        zip = info.type == SDL_PATHTYPE_FILE && pe_ends_zip(list[i]);
+        if (!zip && info.type != SDL_PATHTYPE_DIRECTORY) continue;
+        for (k = 0; k < s_packs; ++k) if (strcmp(s_pack[k]->path, path) == 0) p = s_pack[k];
+        if (p) {                                                    /* known: new characters only */
+            if (p->refused[0] || p->zip) continue;                  /* zips are fixed once read */
+            before = p->nchars;
+            pe_read_chars(p);
+        } else {                                                    /* a new pack */
+            int n = s_packs;
+            pe_read_pack(list[i], zip);
+            if (s_packs == n) continue;
+            p = s_pack[s_packs - 1];
+            for (k = 0; k < s_packs - 1; ++k)
+                if (p->id[0] && strcmp(p->id, s_pack[k]->id) == 0)
+                    snprintf(p->refused, sizeof p->refused, "id %s installed twice: remove one copy", p->id);
+            pe_mod_log("pe_wardrobe", "pack %s (%s): %s%s", p->name, p->id[0] ? p->id : "?",
+                       p->refused[0] ? "refused: " : "loaded", p->refused);
+            if (p->refused[0]) continue;
+            before = 0;
+        }
+        for (j = before; j < p->nchars; ++j) {
+            if (g_pe_costumes_api.add(&p->ch[j].costume) < 0) { ++p->refused_chars; continue; }
+            pe_add_name(names, size, p->ch[j].name);
+            ++added;
+        }
+    }
+    SDL_free(list);
+    return added;
 }
 
 /* ---- F1 > Collection > Wardrobe > Packs ---- */

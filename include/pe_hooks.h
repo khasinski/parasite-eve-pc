@@ -66,9 +66,7 @@ typedef enum PeHookId {
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
-    PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
-                          * (as the card load does) to leave the title the way Continue does; appended,
-                          * previous hook IDs unchanged */
+    PE_HOOK_TITLE_FRAME, /* int *: PeTitleRequest; each title-menu frame */
     PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
                            * gives them (pe1/text_render.h) */
     PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
@@ -95,8 +93,49 @@ typedef enum PeHookId {
     PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
     PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
                             * tries the medicines in may change; appended */
+    PE_HOOK_ACTOR_RENDER, /* PeHookActorDraw: Entity_FrameUpdate, before an actor's model is posed
+                           * and drawn (view set); nonzero: the actor is a mod's own and the mod
+                           * drew it: the game's posing, draw and shadow are skipped; appended */
+    PE_HOOK_FIELD_BACKGROUND, /* PeHookFieldBackground: the room picture, each field frame. Stage 0
+                               * (Render_BuildMeshList): nonzero skips the room's own background
+                               * tiles this frame. Stage 1 (Render_LinkFieldSubpixel, everything
+                               * linked, before the GPU gets it): a mod may link its own packets
+                               * into the ordering table (4095 = farthest). A nonzero stage 1
+                               * result also skips the native backdrop and its scroll offset. */
+    PE_HOOK_FIELD_CAMERA, /* PeHookFieldCamera: nonzero supplies a fixed view for native actor drawing */
+    PE_HOOK_FIELD_MOVE, /* FieldActor *: after Aya integrates a movement step; positive consumes it
+                         * in a preview and restores her host-room position */
+    PE_HOOK_AMMO_POOL, /* PeHookAmmoPool: which ammo pool record a weapon or ammo item uses
+                        * (Inv_AmmoPoolIndex); a mod's ammo scheme may pick another; appended */
+    PE_HOOK_SAVE_INVENTORY, /* int *: 0 before native card serialization, 1 after (including failure) */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookFieldBackground {
+    int stage;          /* 0: may skip the room's own tiles; 1: may link packets */
+    int slot;           /* stage 1: the draw slot (0/1); packets must stay alive until it is shown */
+    void *ordering;     /* stage 1: RenderNativeTag[4096], the frame's ordering table */
+} PeHookFieldBackground;
+
+typedef struct PeHookFieldCamera {
+    const void *player;  /* FieldActor *, or NULL */
+    void *matrix;        /* output GteMatrix with Q12 rotation and integer translation */
+    int distance;        /* output GTE projection distance in pixels */
+    int player_only;     /* preview pose for Aya, with other native models hidden */
+    int player_yaw;      /* output model yaw when player_only is set */
+} PeHookFieldCamera;
+
+typedef struct PeHookActorDraw {
+    void *actor;         /* FieldActor * */
+    const void *view;    /* the entity view matrix (GteMatrix, then the projection distance) */
+} PeHookActorDraw;
+
+/* The ammo pool record (0..8 of g_InvSpecialItemRecords, -1 none) for `item`: `native` is the
+ * game's own choice; a handler may set `pool` to another record. */
+typedef struct PeHookAmmoPool {
+    const struct ItemDataRecord *item;
+    int native, pool;
+} PeHookAmmoPool;
 
 typedef struct PeHookStealResult {
     int item, success;
@@ -123,6 +162,11 @@ typedef struct PeHookEnemyDamage {
     const void *source, *target;
     int *damage;
     int ordinary; /* excludes PE and native instant-kill status effects */
+    /* Extra targets carried by this hit. Applied once, with no extra ammo or hit hooks. */
+    struct {
+        void *target;
+        int damage;
+    } spread[2];
 } PeHookEnemyDamage;
 typedef struct PeHookTargetPreview {
     const void *object; /* RenderObjectEntity * of the selected target */
@@ -155,7 +199,7 @@ typedef struct PeHookSpellDone {
 } PeHookSpellDone;
 
 typedef struct PeHookEquipmentGuard {
-    int kind; /* 0 native value, 1 record, 2 Tools selections */
+    int kind; /* 0 native value, 1 record, 2 Tools selections, 3 transfer from bag */
     int value;
     const struct ItemDataRecord *record;
     unsigned selection;
@@ -288,6 +332,12 @@ typedef enum PeNewGameKind {
     PE_NEW_GAME_EX = 2,        /* the EX Game, from a Clear Data save */
     PE_NEW_GAME_TUTORIAL = 3,  /* MenuCard_RunListScreen result 3 */
 } PeNewGameKind;
+
+typedef enum PeTitleRequest {
+    PE_TITLE_STAY = 0,
+    PE_TITLE_CONTINUE = 1,
+    PE_TITLE_START_IMPORTED = 2
+} PeTitleRequest;
 
 typedef struct PeHookNewGame {
     int kind; /* PeNewGameKind */
