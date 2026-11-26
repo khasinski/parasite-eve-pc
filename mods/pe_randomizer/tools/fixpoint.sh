@@ -14,9 +14,9 @@ zones=$(cat "$D/zones.list")
 [ -f "$D/base-fix.txt" ] || { cp "$D/randomizer-run.txt" "$D/base-fix.txt"; cp runs-win.txt "$D/base-fix-runs.txt"; }
 n=1
 while [ $n -le 12 ]; do
-  python -I "$T/storywalk.py" story-graph.txt randomizer-exits.txt --spots "$T/../pe_rand_spots.h" \
+  python3 -I "$T/storywalk.py" story-graph.txt randomizer-exits.txt --spots "$T/../pe_rand_spots.h" \
     --states "$D/walk-states-fix.txt" --runs "$D/base-fix.txt" --zones "$zones" > "$D/walk-fix.txt"
-  python -I "$T/runlist.py" "$D/walk-states-fix.txt" --without "$D/base-fix.txt" | sed "s/$/ win/" > "$D/runs-new.txt"
+  python3 -I "$T/runlist.py" "$D/walk-states-fix.txt" --without "$D/base-fix.txt" | sed "s/$/ win/" > "$D/runs-new.txt"
   new=$(grep -c . "$D/runs-new.txt" || true)
   echo "round $n: $(grep -c . "$D/walk-states-fix.txt") places, $new without a run; $(head -1 "$D/walk-fix.txt")"
   [ "$new" -eq 0 ] && break
