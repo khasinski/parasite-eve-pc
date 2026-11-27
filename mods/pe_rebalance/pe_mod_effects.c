@@ -35,6 +35,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe1/weapon_list_output.h"
 
 enum { RULES_VANILLA, RULES_REBALANCED, RULES_CUSTOM };
@@ -709,7 +710,21 @@ static void pe_mod_effects_tick(void) {
     pe_fast_volley_tick(battle);                          /* also restores the game's values when off */
 }
 
+static void pe_combat_mod_effects_apply(int preset)
+{
+    int rules = preset == PE_COMBAT_ORIGINAL ? RULES_VANILLA : RULES_REBALANCED;
+    pe_apply_rules(rules);
+    s_rules = s_rules_shown = rules;
+}
+
+static int pe_combat_mod_effects_matches(int preset)
+{
+    int rules = preset == PE_COMBAT_ORIGINAL ? RULES_VANILLA : RULES_REBALANCED;
+    return s_rules == rules && pe_matches(rules);
+}
+
 void pe_mod_effects_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_mod_effects_apply, pe_combat_mod_effects_matches);
     int i;
     /* Saved values restore as the rows register; the rules then follow from what they match. */
     pe_apply_rules(RULES_REBALANCED);
