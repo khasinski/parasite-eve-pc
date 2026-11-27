@@ -1945,6 +1945,15 @@ int Scene_UpdateBgDraw(void) {
         return 0;
     }
 
+    const int battle = (g_GameStateFlags & 2) != 0;
+    /* The battle flag arrives before the scene object is rebuilt from the
+     * battle bank. Give the field override that last stale prop draw only. */
+    const int field_prop = !battle ? entity->render_object.variant_visible :
+        state->scene_object_model && state->scene_object.header == state->scene_object_model;
+    if (field_prop && PE_HOOK(PE_HOOK_FIELD_WEAPON_DRAW, &entity->render_object) > 0) {
+        return 0;
+    }
+
     if (!(g_GameStateFlags & 2) && (g_FieldMoveLock & 2)) {
         return 0;
     }

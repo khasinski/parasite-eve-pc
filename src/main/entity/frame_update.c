@@ -358,7 +358,17 @@ void Entity_FrameUpdate(void) {
                 object = &entity->render_object;
                 Render_InitRoomPrimState(object);
                 if (entity->action_data != 0) {
-                    Anim_BuildRotationMatrices(object, entity->action_data, (s16)entity->anim.parts.integer);
+                    if (entity == g_PlayerEntity && !(g_GameStateFlags & 2)) {
+                        const RenderRotationOverride first = object->rotation_overrides[0];
+                        const RenderRotationOverride second = object->rotation_overrides[1];
+                        PE_HOOK(PE_HOOK_CUTSCENE_WEAPON_POSE, object);
+                        Anim_BuildRotationMatrices(object, entity->action_data, (s16)entity->anim.parts.integer);
+                        object->rotation_overrides[0] = first;
+                        object->rotation_overrides[1] = second;
+                        PE_HOOK(PE_HOOK_FIELD_WEAPON_POSE, object);
+                    } else {
+                        Anim_BuildRotationMatrices(object, entity->action_data, (s16)entity->anim.parts.integer);
+                    }
                 }
                 Render_TransformVertices(object);
                 Render_TransformSkinnedVertices(object, g_EntityRenderScratch);

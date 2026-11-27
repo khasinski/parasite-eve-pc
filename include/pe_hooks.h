@@ -115,6 +115,9 @@ typedef enum PeHookId {
                           * actor); the value may be changed */
     PE_HOOK_ENEMY_POWER, /* PeHookEnemyPower: an actor's script sets an attack's power (ops 112 / 183); the
                           * power may be changed */
+    PE_HOOK_FIELD_WEAPON_DRAW, /* RenderObjectEntity*: field Aya; handled replaces the stock weapon draw */
+    PE_HOOK_CUTSCENE_WEAPON_POSE, /* RenderObjectEntity*: temporary Aya rotation overrides */
+    PE_HOOK_FIELD_WEAPON_POSE, /* RenderObjectEntity*: decoded field Aya pose before transforms */
     PE_HOOK_COUNT
 } PeHookId;
 

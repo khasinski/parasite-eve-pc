@@ -25,6 +25,10 @@ Manage mods name: **PE Enhancements: quality of life**.
 
 **Movement** page:
 - **Always run**: on by default. Hold the run button to walk.
+- **Visible field weapons**: on by default. Shows the equipped firearm's
+  original battle model in compatible USA field scenes with Aya's stock outfit
+  when the required textures are resident. Long guns use their original battle
+  carry pose during supported walks and runs. Handguns keep the field animation.
 - **Walk speed** and **Run speed**: 1.75x by default. Choices go from Normal to 3x.
 - **Combat speed**: Normal by default.
 - **Battle start speed**: speeds up the battle-entry sequence. Normal by default, up to 4x.

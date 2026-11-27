@@ -630,6 +630,9 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_MIRROR_MODEL] = "mirror model",
         [PE_HOOK_ENEMY_FIELD] = "enemy field",
         [PE_HOOK_ENEMY_POWER] = "enemy power",
+        [PE_HOOK_FIELD_WEAPON_DRAW] = "field weapon draw",
+        [PE_HOOK_CUTSCENE_WEAPON_POSE] = "cutscene weapon pose",
+        [PE_HOOK_FIELD_WEAPON_POSE] = "field weapon pose",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

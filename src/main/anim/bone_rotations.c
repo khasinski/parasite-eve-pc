@@ -54,6 +54,22 @@ void Anim_BuildRotationMatrices(RenderObjectEntity *object, RenderAnimationDataH
     }
 }
 
+/* Sample the carry clip in scratch matrices so the movement clip keeps its
+ * native root translation, legs and hit body. */
+void Anim_ApplyAyaArmPose(RenderObjectEntity *object, RenderAnimationDataHeader *data, int frame) {
+    RenderMatrix matrices[31];
+    RenderObjectEntity sample = {0};
+    sample.matrices = matrices;
+    Anim_BuildRotationMatrices(&sample, data, frame);
+    for (int i = 2; i <= 19; i++) {
+        if (i == 10 || i == 11) continue;
+        const GteShortVector *angle = &g_AnimBoneAngles[i];
+        RenderMatrix *matrix = &object->active_matrix[i];
+        RotMatrixYXZ((GteShortVector *)angle, (GteMatrix *)matrix);
+        Pgxp_StoreBoneRotYXZ(matrix, angle->x, angle->y, angle->z);
+    }
+}
+
 /* Bone rotation keyframe decoders for the byte- and halfword-packed
  * animation formats. */
 

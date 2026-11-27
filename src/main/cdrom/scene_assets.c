@@ -671,17 +671,24 @@ void CdRom_BindImage(PeDisc *disc, const PeDiscFile *archive)
     g_GameState.flags &= ~0x1004000u;
 }
 
+int CdRom_CopyArchiveSectors(u32 sector, void *destination, u32 sectors)
+{
+    if (!g_CdImage || !destination) return 0;
+    const uint64_t offset = (uint64_t)sector * 2048u;
+    const uint64_t bytes = (uint64_t)sectors * 2048u;
+    if (offset > mounted_archive.size || bytes > mounted_archive.size - offset ||
+        bytes > SIZE_MAX) return 0;
+    return pe_disc_read(g_CdImage, &mounted_archive, offset, destination, (size_t)bytes);
+}
+
 /* Host I/O replaces drive negotiation and queues. Data is read immediately;
  * the original completion poll still releases the game's read-in-progress flags. */
 int CdRom_ReadSectorsFromLba(u32 lba, void *destination, u32 sectors)
 {
     if (g_GameState.flags & 0x1000000u) return -1;
     completion = -1;
-    if (!g_CdImage || !destination || lba < mounted_archive.sector) return -1;
-    uint64_t offset = (uint64_t)(lba - mounted_archive.sector) * 2048u;
-    uint64_t bytes = (uint64_t)sectors * 2048u;
-    if (offset > mounted_archive.size || bytes > mounted_archive.size - offset || bytes > SIZE_MAX) return -1;
-    if (!pe_disc_read(g_CdImage, &mounted_archive, offset, destination, (size_t)bytes)) return -1;
+    if (lba < mounted_archive.sector ||
+        !CdRom_CopyArchiveSectors(lba - mounted_archive.sector, destination, sectors)) return -1;
     {
         PeHookDiscRead read = {lba - mounted_archive.sector, sectors, destination};
         PE_HOOK(PE_HOOK_DISC_READ, &read);
