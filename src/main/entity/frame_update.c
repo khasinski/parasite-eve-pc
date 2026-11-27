@@ -66,6 +66,12 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
     if (!scene || scene[0] >= sizeof(g_FieldActorTypeCallbacks) / sizeof(*g_FieldActorTypeCallbacks)) return NULL;
     available = g_EntityFreeListHead;
     if (!available) return 0;
+    RenderObjectHeader *model = scene[0] < 10 ? g_GameState.bank_slots[scene[0]] : NULL;
+    allocation = NULL;
+    if (model) {
+        allocation = Entity_AllocBlock(Entity_ModelAllocationSize(model, allocateFull));
+        if (!allocation) return NULL;
+    }
     actor = available;
     nextFree = actor->next;
     g_EntityFreeListHead = nextFree;
@@ -107,11 +113,7 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
     }
     actor->type_id = scene[0];
     actor->sub_id = scene[1];
-    if (scene[0] < 10) {
-        actor->model_state.model_header = g_GameState.bank_slots[scene[0]];
-    } else {
-        actor->model_state.allocation_active = 0;
-    }
+    actor->model_state.model_header = model;
     serial = g_EntitySerialCounter;
     actor->flags = 0x10000000;
     actor->anim_step = 0x10000;
@@ -154,7 +156,6 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
         }
     }
 
-    allocation = Entity_AllocBlock(Entity_ModelAllocationSize(actor->model_state.model_header, allocateFull));
     if (!allocateFull) actor->flags |= 0x600000A0;
     actor->allocation_block = (uintptr_t)allocation;
 

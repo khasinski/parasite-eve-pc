@@ -245,12 +245,33 @@ static int boot_buffer_layout(void)
     second[0].length = 0x5678;
     second[4095].length = 0x9abc;
     memset(g_EntityAllocationTable, 0, sizeof(g_EntityAllocationTable));
-    for (unsigned i = 0; i < 16; ++i) {
+    if (Entity_AllocBlock(8 * ENTITY_ALLOCATION_BLOCK_SIZE + 1)) return 0;
+    void *largest = Entity_AllocBlock(8 * ENTITY_ALLOCATION_BLOCK_SIZE);
+    if (!largest) return 0;
+    Entity_FreeAllocationBlock((uintptr_t)largest);
+    for (unsigned i = 0; i < ENTITY_ALLOCATION_ORIGINAL_SLOTS; ++i) {
         u8 *block = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
         if (!block || block + ENTITY_ALLOCATION_BLOCK_SIZE > g_RenderFrontBufferBase[0])
             return 0;
         block[ENTITY_ALLOCATION_BLOCK_SIZE - 1] = (u8)i;
     }
+    u8 *overflow = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
+    if (!overflow) return 0;
+    for (unsigned i = 1; i < ENTITY_ALLOCATION_SLOTS - ENTITY_ALLOCATION_ORIGINAL_SLOTS; ++i) {
+        u8 *block = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
+        if (block != overflow + i * ENTITY_ALLOCATION_BLOCK_SIZE) return 0;
+        block[ENTITY_ALLOCATION_BLOCK_SIZE - 1] = (u8)i;
+    }
+    /* A full model arena must not consume an actor or splice it into the live list. */
+    FieldActor candidate = {0};
+    FieldActor *saved_free = g_EntityFreeListHead, *saved_live = g_FieldActorListHead;
+    RenderObjectHeader model = {0};
+    u8 scene[] = {1, 0};
+    g_EntityFreeListHead = &candidate;
+    g_GameState.bank_slots[1] = &model;
+    if (Scene_LoadMap(scene, NULL, 1) || g_EntityFreeListHead != &candidate ||
+        g_FieldActorListHead != saved_live) return 0;
+    g_EntityFreeListHead = saved_free;
     if (Entity_AllocBlock(1) || first[4095].length != 0x1234 ||
         second[0].length != 0x5678 || second[4095].length != 0x9abc)
         return 0;

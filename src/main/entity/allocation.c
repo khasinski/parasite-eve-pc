@@ -228,6 +228,7 @@ void Scene_UpdateEntityPositions(void)
 static _Alignas(16) u8 entity_overflow[(ENTITY_ALLOCATION_SLOTS - ENTITY_ALLOCATION_ORIGINAL_SLOTS) * ENTITY_ALLOCATION_BLOCK_SIZE];
 
 void *Entity_AllocBlock(u32 size) {
+    if (size > 8 * ENTITY_ALLOCATION_BLOCK_SIZE) return NULL;
 #if PE_NATIVE_STATE_CPU_COMPONENTS
     void *restored=0;int prepared=PeStateActor_ConsumeAllocation(size,&restored);
     if(prepared)return prepared>0?restored:0;
