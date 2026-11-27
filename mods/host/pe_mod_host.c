@@ -34,7 +34,7 @@ void pe_debug_control_install(void);   /* pe_debug_control.c */
 
 extern const PeMod *const g_pe_mods[]; /* generated: pe_mod_list.c */
 
-enum { PE_MAX_HANDLERS = 256, PE_MAX_EVENTS = 64, PE_MAX_SERVICES = 32, PE_MAX_MODS = 32 };
+enum { PE_MAX_HANDLERS = 512, PE_MAX_EVENTS = 64, PE_MAX_SERVICES = 32, PE_MAX_MODS = 32 };
 /* Every mod of the build, filled when the mods start. Code a hook can reach reads this, not
  * g_pe_mods: naming that table links every mod into whatever calls a hook. */
 static const PeMod *s_mods[PE_MAX_MODS];
