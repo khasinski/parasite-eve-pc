@@ -3,9 +3,11 @@
 #include "pe1/dialogue_alpha.h"
 #include "pe1/planar_shadow.h"
 #endif
+#ifdef PE_MODS
+#include "../../../mods/host/pe_mod_host.h"
+#endif
 #if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
 #include "../../../mods/host/pe_mod_menu.h"
-#include "../../../mods/host/pe_mod_host.h"
 static int host_open_assists;
 #endif
 #include "common.h"
@@ -1702,7 +1704,7 @@ static void Host_NativeApplicationShutdown(void){
     Host_HdStop();
     if(g_BootDisplayPlaybackActive)BootDisplay_WaitForCdAndRestoreCallbacks();
 #ifdef PE_MODS
-    extern void pe_mods_shutdown_now(void);pe_mods_shutdown_now();
+    pe_mods_shutdown_now();
 #endif
     Psyz_AudioDestroy();CdRom_BindImage(NULL,NULL);
     g_CdImageVolumes[0]=g_CdImageVolumes[1]=NULL;g_CdImageRequest=NULL;
@@ -4934,6 +4936,9 @@ shutdown:
     if (g_BootDisplayPlaybackActive) {
         BootDisplay_WaitForCdAndRestoreCallbacks();
     }
+#ifdef PE_MODS
+    pe_mods_shutdown_now();
+#endif
     Psyz_AudioDestroy();
     CdRom_BindImage(NULL, NULL);
     g_CdImageVolumes[0] = g_CdImageVolumes[1] = NULL;

@@ -6,6 +6,7 @@
  *   pe_wardrobe_profile.c      the profile: costumes owned and the one worn, kept across games
  *   pe_wardrobe.c              the costume registry (`costumes` and `wardrobe` services); F1 pages
  *   pe_wardrobe_menu.c         the Wardrobe screen in Aya's menu
+ *   pe_wardrobe_weapons.c      weapons on view there: Aya's gun and imported weapons
  *   pe_skin_loader.c           character skins (costumes with a `bundle` folder)
  *   pe_pack_pe1_costumes.c     Parasite Eve's own costumes, registered like any other pack
  *   pe_packs.c                 character packs from <preferences>/packs/ (zip or folder)
@@ -65,10 +66,22 @@ const PeCostume *pe_wardrobe_browsed(void);      /* F1 candidate, never applies 
 void pe_wardrobe_wear_later(const PeCostume *c); /* worn from the next room load (the menu's close) */
 void pe_wardrobe_menu_register(const char *mod_id);
 
+/* ---- weapons on view (pe_wardrobe_weapons.c): looked at, never equipped ----
+ * Entry 0 is the gun Aya holds (Parasite Eve draws one model for every weapon); then each weapon
+ * imported from another game, by game. Read again at each refresh (the screen's opening). */
+void pe_ward_weapons_refresh(void);
+void pe_ward_weapons_release(void);              /* the screen closed: converted models freed */
+int pe_ward_weapons_count(void);
+const char *pe_ward_weapon_name(int k);
+const char *pe_ward_weapon_group(int k);         /* "Parasite Eve", "Resident Evil 2", ... */
+const char *pe_ward_weapon_note(int k);
+int pe_ward_weapon_source(int k, PeModelSource *src);   /* 0 if there's no such weapon */
+
 /* ---- character packs (pe_packs.c) ----
  * A pack costume's bundle is "@<pack id>/<folder>"; the skin loader reads its files through here. */
 void pe_packs_scan(void);                        /* at start-up */
 void pe_packs_register(void);                    /* their costumes into the registry */
+int pe_packs_add_new(char *names, unsigned size); /* while running: only new packs / characters (wardrobe_packs) */
 void pe_packs_page_register(void);               /* F1 > Collection > Wardrobe > Packs */
 int pe_pack_read(const char *ref, const char *name, unsigned char **data, unsigned *size, unsigned max);
 int pe_pack_has(const char *ref, const char *name);

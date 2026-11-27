@@ -72,6 +72,27 @@ Text missing from a pack is shown in English. See [Translating](TRANSLATING.md) 
 
 - [Phone Calls](PHONE_CALLS.md). Built in. Open **F1 → Phone Calls** to configure optional conversations after saves or to write your own calls.
 
+### Enemy import (Fights)
+
+Manage mods name: **Enemy import**. Page: **F1 → Fights**. Off until you turn it on.
+
+**Area** and **Fight** pick one of the game's own random battles (Day 1 sewer to Day 4 hospital).
+**Start fight** takes Aya to that room after the panel closes and the battle starts there. After a
+win or running away she comes back to where she stood, with the story as it was; rewards are kept.
+Losing is the game's normal Game Over. **Last fight** shows how the last one ended.
+
+**Imported enemy** adds an enemy you made from another game with the enemy importer tool (folders
+in `pe_enemies` beside the settings), or **None**. It joins the fight as an extra enemy with its own
+model, texture, moves and fight behaviour: it walks up to Aya, attacks when its time bar is full,
+flinches when shot and falls when beaten, giving its own EXP. **How many** adds 1 to 3 of it.
+**Room's enemies** chooses whether the room's own foes **Fight too** or are **Sent away**.
+**Imported status** shows how the last one did. Packs are built on your own PC from your own game
+files and are for your own use only.
+
+To make one in the game: turn on **Enemy import**, add your Resident Evil 3 PC folder (the one with
+`rofs1.dat`) under **F1 → Import**, and Nemesis is built by himself, with his own moves and sounds.
+Other enemies with a profile show in Import's list with **Build as an enemy**.
+
 ## Tools and cheats
 
 ### Quick save

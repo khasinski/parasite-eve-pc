@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re1;pe_src_re2;pe_src_re3;pe_src_dc1;pe_import` (desktop builds add `pe_assets;pe_src_ff7;pe_lang;pe_fonts;pe_enemy_import`; add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -60,12 +60,19 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_enemy_import/     F1 > Fights: start a chosen random battle in its own room; imported enemy packs
   pe_phone/            Phone Calls: after saving at a phone, "Stay on the line?" and a short call
   pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
                        bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
   pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
                        by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
+  pe_import/           F1 > Import: models from the player's other PlayStation games, built into packs
+  pe_src_re1/          import source: Resident Evil, Director's Cut (its reader, naming table and rig)
+  pe_src_re2/          import source: Resident Evil 2 (its readers, naming table and rig)
+  pe_src_re3/          import source: Resident Evil 3 (its reader, naming table and rig)
+  pe_src_dc1/          import source: Dino Crisis (Regina's outfits; its reader, naming table and rig)
+  host/import/         the importer core (disc images, store, catalog, PE formats); see Import below
 ```
 
 ## Stacked items (pe_stacks)
@@ -95,6 +102,98 @@ their own letters.
 F1 > Warp: pick a story checkpoint and Warp. It sets script variable 74 (story progress) to that
 point and runs the field script's own room transfer (Script_EncodeBarcode) on the next free field
 frame, never during a battle, an event, a room change or a movie.
+
+## Fights (pe_enemy_import)
+
+F1 > Fights: pick an area and a fight, then Start fight. A room's enemies live in that room's data,
+so a picked fight is that room's own random battle: the field script's room transfer (as pe_warp,
+story variable set to the area's point), Aya stood in the spot's floor zone (mods/host/pe_encounter.c
+finds the zones in the loaded room script) and that spot's encounter roll made to succeed once.
+After a win or an escape the script variables go back as they were and Aya returns to where she
+stood. A loss is the game's own Game Over. The list holds only fights the `enemy-import-fights-all`
+CTest saw start and come back. Logs `cheat_fight_picker`, so challenge runs count as assisted.
+
+**Imported enemy** (pe_enemy_battle.c, pe_enemy_pack.c): a pack in `<prefs>/pe_enemies/<folder>/`
+(formats in pe_enemy_pack.h: enemy.json, model.bin, texture.bin, anims/) is added to the picked
+fight as a new enemy; nothing of the room is replaced. **How many** adds 1-3 of it; **Room's
+enemies** lets the room's own foes fight too or sends them away. Each one is a new actor from the
+game's actor pool (type 0xEE, no model or script) with its own enemy record (Entity_AllocSlot),
+stood on the floor (Entity_FindFloor). It joins once the room's battle script has started the clock
+(g_BattleEnemyEscapeFlag) plus 10 frames (900 frames at most). Its brain runs each battle frame:
+turn and walk to Aya, attack when its time bar is full (curHP >= 9000) and Aya is in reach, land
+the blow at the attack's "hit" frame through the game's enemy-hit path (effect record power,
+coreFlags bit 31, Aya stateFlags 0x4000), stagger when shot (unless mid-attack), and at 0 HP play
+its death animation, then the game's own death fade, EXP (hpMirror = exp) and free. Drawing: at
+PE_HOOK_ACTOR_RENDER (Entity_FrameUpdate, before posing) the mod poses the pack's model (every
+vertex on its bone, joint vertices half and half on two) and links it as textured triangles,
+depth-sorted like the game's, and returns nonzero so the game skips its own posing, draw and
+shadow for that actor. The texture goes to VRAM x 320..511, y 256..511 (palettes x 512, y 500..),
+which no battle room uses; what was there is saved and put back after the battle. Pack fields the
+brain reads: hp, defense, exp; "behavior" {speed, charge, radius, stagger}; per attack "power"
+(else "damage"), "range" and "hit" (else half the animation). Tests: `mod-enemy-pack` (loader,
+refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `enemy-import-nemesis`
+(PE_TEST_DISC + PE_TEST_ENEMY_PACK: alone and beside the room's enemies, it appears, walks,
+attacks, is hurt, dies, the battle is won and the VRAM block given back).
+
+**Built in the game (F1 > Import)**, the same way as costumes: a source game's mod registers
+readers, a naming table and an **enemy profile** (`host/import/pe_imp_enemy.h`: moves for the
+roles and attacks, HP, power, reach, height, sounds) for an asset; the `enemies` builder target
+(pe_enemy_build.c, pe_enemy_target.c, "Build as an enemy") turns the catalogued Model, its
+Animation and its Sounds into a pack in `<prefs>/pe_enemies/<game>-<name>/` (targets may now name
+their own place and which assets they take: `accepts`, `place`, `current` in PeImpTarget). Pack
+additions: anims version 2 carry a u16 event per frame (sound number, hit frame); "sounds" lists
+WAV files. Sound frames play through the `audio` service's new `play_effect` (several voices at
+once). Importer core additions: Model v2 (optional per-corner skin: bone + second bone, written
+only for skinned models), the Animation type (moves, frames, per-frame events), and a PC game
+folder of RE3 `rofs*.dat` archives opened like a disc image (pe_imp_rofs.c). pe_src_re3 reads RE3
+PC enemies (`ROOM/EMD/EM??.EMD` + TIM: skinned model and all moves; step flag 0x800 = hit frame,
+top 4 bits = sound) and enemy sound banks (`DATA/SOUND/E_??.VH` + VB, as tones at their pitch);
+Nemesis = EM34 with his profile and an automatic build once the RE3 PC folder is in the import
+folders. The PS1 disc keeps its enemies in each room's bundle, `CD_DATA/STAGEs/Rsrr.BIN` (u32 size,
+u32 count, per entry u32 length and tag, entries on 2 KB boundaries; tag byte 3 = the enemy number,
+byte 1 = 1 for its TIM, byte 2 a version): the same EMD and TIM formats, read by `g_re3_emd_ps1`
+into `enemy/em<nn>-<version>` and its moves (85 from 64 enemies; 21 come in two versions whose later
+move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. RE2's PS1 enemies are
+in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (the archive's own index
+holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
+(EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by
+`g_re2_emd_ps1` (`pe_src_re2/pe_src_re2_emd.c`) with the disc's executable (SLUS_*) as companion: it
+holds a table per archive, 32 bytes per enemy ((sector, size) of two sound entries, the TIM, the EMD).
+The main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2; found as the place where most of the
+archive's pairs have their record) has row k = enemy 0x10 + k, which every row's bone count fits
+against biohazard-utils' Bio2ConstantTable names (zombies 15, dog 17, lickers 22): those enemies are
+`enemy/em<nn>` (em10 zombie cop, em22 licker...); the other archives' tables start at 0x10 too (their bone counts
+agree with the main archive's same enemies, 15 of 15 and 35 of 35): `enemy/em<nn>-cdemd2` and so on
+(70 enemies on disc 1, 91 on disc 2). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
+(not EM102x / EM103x, the people): the directory is the last 20 bytes, D0..D4 with a section implied
+at 0; D3 the TMD, D4 the TIM. The monster's skeleton and moves are the EMR at D1 with its EDD at D2
+(10 to 20 bones); when D0 isn't 0, the EMR at 0 with its EDD at D0 is the player's 15-bone moves for
+that monster (grabbed, bitten). Read by `g_re1_monsters_ps1` with the people's mesh code (any
+skeleton, part i on bone i) and RE1's room-animation moves, as `enemy/em<nnnn>`, its `moves` and
+`player-moves` (50 models, 86 move sets). Player moves and weapons: RE1's people files carry one
+move set (the EMR at D1, its EDD at D2), read as `player/<name>/moves` with bones in RE2's order like
+their models (`g_re1_person_moves_ps1`, 24). RE1's weapons, `PLAYERS/Wxx.EMW`: the EMR at 0, the last 8 bytes the EDD and
+TMD offsets; the player's moves with that weapon, `weapon/wxx/moves` (RE2's bone order). The weapon
+Model `weapon/wxx` (32) is the player holding it, as BioRand's emdui composes it: the TMD's object
+replaces RE1's part 11 (14 in RE2's order), textured from the player's own picture. Each EMW carries
+the skeleton of the player it was made for, and the four people's skeletons differ, so it is paired
+with the nearest: W0x, W2x, W15 and W35 Chris (`CHAR10`), the other W1x and W3x Jill (`CHAR11`); all
+match exactly but W23 (nearest Chris). RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
+layout (u32 directory: EDD, EMR, MD1, TIM): a PLD's moves are `player/plxx/moves` (10); a PLW's are
+the player's moves with that weapon, `weapon/plxxwyy/moves` (29; the other 6 have an empty EMR, no
+moves of their own). The weapon Model `weapon/plxxwyy` (35) is the player PLxx.PLD holding it, as
+BioRand's emdui composes it: the PLW's first mesh part replaces part 11 (the right hand), and its 56 x
+32 picture goes into page 1 of the player's texture at (72, 224), each colour the nearest in palette
+row 1 (TimExtensions.WithWeaponTexture). RE3's `CD_DATA/PLD/PLxx.PLD` starts its directory EDD, EMR: the
+player's moves, bones in RE2's order like the model (`player/plxx/moves`, 15); a `PLxxWyy.PLW` has 9
+sections: 0-1 the player's moves with that weapon (`weapon/plxxwyy/moves`, 84), 2-3 and 5-6 two
+small move sets of 7 and 9 bones (likely the weapon's own moving parts; `extra-moves-1` and `-2`
+where they read), 7 the weapon's MD2 mesh and 8 its picture. The weapon Model (84) is composed as
+RE2's: MD2 object 0 replaces part 11 (BioRand leaves RE3 as a to-do; object 0's faces use the hand's
+palette and page and their UVs land in the pasted picture). Identical weapon files exist (PL00W02 = PL00W03), so the weapon
+readers key the store by path. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
+data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
 
 ## Quick save (pe_quicksave)
 
@@ -400,7 +499,7 @@ Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk
 `catalog` and `rebuild` v1 (pe_catalog), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
 `costumes` v1 (pe_wardrobe).
 
-The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
+The shared registry (host/pe_registry.h; bridge findings D6 Â§11) is for mods' definitions that
 other mods build on: custom content, equipment effects, Catalog entries and shop offers. During
 its init a mod declares batches (`pe_reg_batch`) and submits entries (`pe_reg_submit`) under its
 own namespace, "<mod id>/<name>"; it gets a receipt, not a definition. Once every mod has started
@@ -408,7 +507,7 @@ the host seals the registry: limits, keys declared twice (every claimant fails, 
 references and batch requirements, to a fixed point, the same whatever order mods start in. Then
 `pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
 reason) answer; nothing new is accepted until the next start. No mod uses it yet.
-`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
+`tests/pe_mod_registry_test.c` runs the D6 Â§11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
@@ -703,10 +802,270 @@ host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) rer
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,
 Tool, Rebuild and editor changes reach the next battle.
 
+## Import (pe_import, pe_src_<game>, host/import)
+
+F1 > Import brings models from the player's other PlayStation games into Parasite Eve, in the game
+itself (PC and PS5, no outside tools). The player only provides the discs: disc images (.cue with
+its .bin, or .iso) in `<preferences>/import/discs/`, loose or one folder deep, or in folders of
+their own added with F1 > Import > Add a folder (the system's folder picker; kept one per line in
+`<preferences>/import/folders.txt`, which is edited by hand where there is no picker, as on PS5).
+
+**Automatic.** When the game starts, a worker thread (`pe_import_job.c`) reads new or changed disc
+images and builds everything the source games mark automatic (`pe_imp_add_auto`; RE1: Chris and Jill;
+RE2: Claire from disc 2, Leon from disc 1; RE3: Jill and Carlos; Dino Crisis: Regina) unless its pack already holds a build of the same source file by the
+same builder. Back on the main thread the Wardrobe adds the new costumes at once (the
+`wardrobe_packs` service, `pe_packs_add_new`: only new packs and characters; registered costumes
+stay put), with a message. F1 > Import > Automatic import says what's ready and which discs to add;
+Scan again reruns it.
+
+**By hand** (F1 > Import > Build by hand), for anything else:
+
+- **Scanning**: each image a source game recognises is read once into the store,
+  `<preferences>/import/store/<game>/<sha256 of the file>/`, and its catalog
+  (`<game>/catalog.json`: stable IDs such as `re2:player/claire`). Files already read by the same
+  reader version are skipped.
+- **Model** lists what a builder target can make (today: costumes, from models a rig fits), and
+  **Build as a costume** writes it as a pack in `<preferences>/packs/<game>-local/` (format 1, the
+  same pack id and folder names as tools/re2-skin, so keys such as `re2-local/claire.re2` match).
+  The Wardrobe loads it at the next start.
+
+**Sounds (PC).** F1 > Import > Sounds lists waveforms from scanned copies of Resident Evil
+Director's Cut, Resident Evil 2, Resident Evil 3, Dino Crisis, and Final Fantasy VII. Choose
+a source game, browse the pages, select a waveform, and choose **Preview sound**. These are
+raw sample auditions at a fixed reference pitch. Dino Crisis (US) includes Gian and VAB
+sample banks embedded in DAT archives. The shared asset and audio services also
+work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
+
+**Music (PC).** F1 > Import > Music lists source songs after scanning a supported disc:
+RE2 (`COMMON/SOUND/*.BGM`: a sequence or two, the bank and samples), RE1 Director's Cut
+(`SOUND/SEPxx.HSB`: a bank and a package of sequences, one Song each, 94 on the US disc) and
+Dino Crisis (`PSX/DATA_XA/STAGE00.XAS`: seven streamed CD-XA tracks; the other XA files are
+speech) and RE3 (`SOUND/MAINxx.BGM` with its `.VB`, and the room archives' tracks: 46, the 169
+rooms sharing 42, one catalog entry each; its compact banks are rebuilt as standard VABs) and FF7
+(the AKAO songs inside the LZS-compressed `FIELD/*.DAT` files and `ENEMY6/*.SND`, 92 across the
+three discs, one entry per song number; they play on the game's own instrument bank, `INSTR.DAT`
+and `INSTR.ALL`, cataloged once as `ff7:bank/instr`). Square's AKAO sequences play through
+`host/import/pe_imp_akao.c` (first-generation AKAO: notes, ties, rests, octaves and the
+instruments' pitch tables, envelopes, loops and jumps, tempo, drum kits; reverb, LFOs and
+overlay voices aren't modelled). `mod-akao` tests it on made-up songs and on FF7 CD1 with
+`PE_TEST_FF7_DISC` (`PE_TEST_AKAO_WAV`). Choose a track and **Play track**: it plays from the game's own
+sequence and instruments, looping until **Stop**. `host/import/pe_imp_seq.c` renders a PS1
+sequence (SEQ) on its bank (VAB) to 44.1 kHz stereo: programs and key-split tones, the SPU's
+ADSR envelope, pitch bend, volume, pan and expression, and the sequence's loop marks; reverb
+isn't modelled. Plain C, so the same renderer can prepare tracks offline for in-game use later;
+on PC the audio service (`play_song`, `stop_song`, `song_playing`) pulls it from an SDL stream.
+`mod-seq` tests it on made-up songs, on RE2's MAIN00 with `PE_TEST_RE2_DISC`
+(`PE_TEST_SEQ_WAV` writes what it rendered to a WAV file) and on RE1's 94 with
+`PE_TEST_RE1_DISC`. Streamed tracks play through `host/import/pe_imp_xa.c` (CD-XA ADPCM,
+resampled to 44.1 kHz); readers set `xa` to get a file's audio sectors (`pe_imp_disc_xa`,
+raw `.bin` images only). `mod-xa` tests it on made-up sectors and on Dino Crisis's tracks with
+`PE_TEST_DC1_DISC` (`PE_TEST_XA_WAV`).
+
+**Rooms.** F1 > Import > Rooms lists the room backgrounds after scanning a Resident Evil
+(Director's Cut, RE2, or RE3) PS1 disc. Each ImageSet holds 320 × 240 MDEC frames in their
+original BSS slot order, plus the matching camera and any foreground data. The importer pairs
+RE1 and RE2 backgrounds with RDT files and extracts the RE3 RDT from the room's ARD.
+RE1 supplies the foreground atlas as a TIM in the RDT. RE2 and RE3 store it compressed in
+the BSS slot. The importer decodes both backgrounds and atlases on demand.
+
+**Export pictures** writes the selected room's background BMPs, transparent `*_mask.bmp`
+foreground layers, and one `*_cameras.json` file to `<preferences>/import/rooms/<game>/`.
+**Export every room** writes these for the whole game. Camera JSON preserves the source slot,
+eye and target (source units, Y down), raw projection word, and per-tile atlas position,
+screen position, dimensions, and raw depth. Some discs have extra BSS pictures without a matching
+camera record. Those backgrounds still export. Discs already scanned are picked up by the next
+import scan. Collision and in-game room placement are separate from this export.
+
+`mod-mdec` tests the legacy store and checks backgrounds, camera pairing, and foreground pixels
+with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC`, and `PE_TEST_RE3_DISC`.
+Set `PE_TEST_ROOMS_DIR` to write background previews during that test.
+
+**Room logic (RE1, RE2, RE3).** `host/import/pe_imp_rdt.c` reads what happens in a room from its RDT:
+the doors (zone, where each leads, starting camera, door animation and sound, lock), the trigger
+zones, item pickups and enemy placements declared by the room's scripts, and the camera switch
+zones. It walks the scripts with the games' instruction sizes (from IntelOrca's biohazard-utils,
+MIT) and leaves the bytecode as it is for a later interpreter. `mod-rdt` checks it on a made-up
+rooms and damaged copies, and with `PE_TEST_RE1_DISC` / `PE_TEST_RE2_DISC` / `PE_TEST_RE3_DISC`
+reads every room: RE1 Director's Cut has 335 room files (Chris's and Jill's), 551 procedures (none
+unreadable) and 782 doors; RE2 disc 1 1,940 procedures (none unreadable) and 283 doors; RE3 4,238
+procedures and 453 doors. RE1 has its own script format (length-prefixed procedures, its own
+instruction set; its event scripts aren't walked yet). `PE_TEST_RDT_ROOM=ROOM1060` prints a room's
+doors. Not used by the game yet.
+
+**RoomLogic: the contract for the room runtime.** A scan now also stores each RE room file as a
+**RoomLogic** record (`host/import/pe_imp_logic.h`), cataloged as `<game>:logic/<stage><room>`
+plus `-<player>` for RE1 and RE2, where Chris/Jill and Leon/Claire have their own scripts (for
+example `re2:logic/105-0`). It holds game-neutral records (doors, trigger zones, item pickups,
+camera zones, enemy placements as their source instruction) and keeps the room's collision,
+messages and scripts as they are, for that game's interpreter. The future room runtime reads only
+these records through `pe_imp_catalog_roomlogic`, never a disc. The file is sectioned, so sections
+can be added later without breaking a reader. The readers are `pe_src_re{1,2,3}_logic.c`.
+Each record also keeps the whole room file (`RDT0`, offsets intact: sound bank, lights, floors,
+objects and their textures, effects, animations), so the runtime never needs the disc again; RE3's
+also keeps its room archive's sound entries (`ARDS`). RE1 and RE2 rooms' sound banks are cataloged
+as Sounds too (bank `room<stage><room>`; 1,285 on RE2 disc 1). RE3's are too (1,609 in 153 rooms):
+its room file holds a compact bank header (after 0xFF padding) and the archive entry of the size it
+names holds the samples; the header is rebuilt as a standard VAB with the same code as RE3's music
+(`re3_bank_size`, `re3_bank_rebuild`). The kept files take about what they
+take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
+21 MB for RE3.
+
+**Room animations (RE1, RE2, RE3).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
+key frames, an EDD of moves; layout from biohazard-utils `Rbj.cs`, `Edd1.cs`, `Emr.cs`) becomes an
+Animation `roomanim/<stage><room>-<n>` at 30 frames a second (`pe_src_re2/pe_src_re2_rbj.c`; 114 on
+disc 1, mostly 15-bone people). RE1 keeps one set per room file in sections 9 (EMR) and 10 (EDD),
+the same layout with plain s16 angles (6 bytes a bone): one Animation `roomanim/<stage><room>-<player>`
+per file (`pe_src_re1/pe_src_re1_anims.c`; 334 of 335, Chris's and Jill's separate). RE3's room files
+have no animation section; its room moves are in the room's enemy bundle, `CD_DATA/STAGEs/Rsrr.BIN`
+(see the enemies above), in the entries tagged 0x80 and up: u32 directory offset, u32 count, the
+directory's u32 section offsets. A section holding a flags word and an EMR (15 bones for a player, 7
+or 9 for a prop) followed by a section holding its EDD (8-byte moves, as in RE3's EMD) becomes an
+Animation `roomanim/<stage><room>-<entry>-<n>` (`g_re3_room_anims_ps1`; 114 on the disc, 1,478
+moves). EMRs with no EDD after them (key frames only, likely played straight through by the room
+script; 83) aren't read.
+
+**Fixing imported models.** Before changing a model reader, the costume or enemy builder, or a mod
+that shows imported models, read [docs/IMPORT_MODELS.md](../docs/IMPORT_MODELS.md): readers stay
+faithful, mods never fix models, and each kind of fix has one place (reader, fit layer, builder or a
+data table), measured with the model audit (`test-mod-model-audit`). Mods take models through the fit layer
+(`host/import/pe_imp_fit.c`): `pe_imp_fit(store, id, use, ...)` gives a copy fit for a costume, enemy,
+held weapon or prop, or a reason it can't serve; the costume and enemy targets use it.
+
+**Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
+doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on
+disc 1, in 106 rooms). A room file's section 10 lists them as (texture, mesh) offsets; each mesh is
+a one-part MD1 with an 8-bit TIM, read by the same code as RE2's player models (`re2_object_parse`,
+sharing `mesh_and_texture` with `re2_pld_parse`; the costume tests are unchanged). Where an object
+stands is set by the room's script. RE3's room objects are too (`pe_src_re3/pe_src_re3_objects.c`;
+695 of 712, in 143 rooms): the same section-10 table; each mesh starts with a small header whose
+first u16 is the offset of an MD2 block (the player models' mesh format), read as one part per MD2
+object. The rest of that header is an EMR skeleton (tree, bone offsets); when it names one bone per
+MD2 object (663 of 712) the model gets those bones, piece i on bone i, so a prop whose pieces move
+can be animated; otherwise it is one bone. RE1's room props and floor items are
+too (`pe_src_re1/pe_src_re1_objects.c`, `object/...` and `item/...`; 589, Chris's and Jill's rooms
+merged): sections 2 and 3 list (TMD, TIM) pairs; the TMD's textured triangles and quads are read
+(modes 0x34/0x36, 0x24, 0x3C), the rare untextured and unlit ones passed over.
+A scan now offers each file to every reader that matches it, not just the first; a second reader
+of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads a record, refuses a
+damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB
+for RE3), and scans RE2 into a store and reads room 105's doors back through the catalog.
+
+**Door transitions.** Each RE door file becomes a **DoorScene** record (`host/import/pe_imp_door.c`,
+same sectioned container as RoomLogic, `doorscene.bin`), cataloged as `door/<name>` (RE3:
+`door/<stage>-<name>`, as RE3 keeps doors per stage). RE2's `COMMON/DOOR/DOORnn.DO2` holds a sound
+bank (`VAB0`; its samples start 8 bytes after the bank header) and the 3D door scene (`SCN0`:
+animation, model, texture); its door sounds are also cataloged as Sounds (bank `door<nn>`, 151 on
+disc 1). RE1's `ITEM_M1/DOOR*.DOR` (21) and RE3's `STAGEs/DOOR*.DO1` (76) are kept whole as `SCN0`
+until their layouts are worked out. Playing the 3D door scene is the room runtime's job. RE1's door
+model is also a Model, `doormodel/<name>` (21): a `.DOR` starts with three u32 offsets (animation,
+TMD model of the door and its frame, 8-bit TIM); the TMD's objects become parts (the TMD reader now
+takes several objects). Its "animation" block is a door script too (36 u32 offsets to short command
+records, the same bytes in every `.DOR`), kept as stored with the rest of the file. RE2's door models are too (`doormodel/<nn>`, 55): the scene block starts
+with u32 offsets of the door's MD1 mesh and its TIM, read like a room object. Door animations aren't
+keyframes: RE2's scene holds a small door script (a table of offsets, then bytecode that moves the
+camera and turns the door), kept as stored for the runtime to interpret. RE3's door models are Models
+too (`doormodel/<stage>-<nn>`, 76): after the compact sound bank, a scene at a 2 KB boundary starts
+with u32 offsets of the door's MD2 mesh and its 8-bit TIM, read like an RE3 room object. Each RoomLogic record also carries the room's messages as text (`TEXT`: one UTF-8 string
+per message; line break `
+`, page break `#`, green `{...}`, yes/no `@xx`). The character table and
+RE2/RE3's codes are biohazard-utils' (`Room/Msg.cs`); the English list is RE2's section 14 and RE3's
+13 (the US release's). RE1 (not in biohazard-utils) uses the same table in section 11 with its own
+codes: 01 p the end, 02 a line break, 03 p a page break, 04 p a pause or cue, 79 a full stop, 74-77
+the letters of "S.T.A.R.S."; its entries starting 04 are cues, kept as empty strings
+(518 / 958 / 1,110 messages with text). RE1's event scripts are kept as stored
+(`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
+
+**Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,
+`itemtable.bin`, same container), cataloged as `<game>:items/all` and built when the game's icon
+file is scanned (RE1 `DATA/ITEM_ALL.PIX`, RE2 `COMMON/DATA/ITEMALL.PIX`, RE3 `CD_DATA/ETC/ITEMI.PIX`).
+`NAME` holds each item number with its name (from biohazard-utils' lists, MIT; RE1 75, RE2 124, RE3
+127) and its icon where known. `ICN8` keeps the 40 x 30 icons as stored, 8 bits per pixel (RE1 76,
+RE2 106, RE3 228). Not yet known: the icons' palette (not stored plainly on the discs), and which
+icon each RE2 and RE3 item uses (RE1's icon k is item k + 1; item 0 is "nothing"). The key pocket
+names RE keys from this table.
+
+**Item pictures in colour.** Pictures records, picture i for item i: RE2 `COMMON/DATA/ITPS.ITP` (100)
+and RE3 `CD_DATA/ETC/ITEMG.PIX` (134) hold the inventory's 112 x 72 item pictures, a TIM every 12 KB /
+10 KB, each with its own palette (`items/pictures`; 1 is the knife, 2 the handgun, 7 the shotgun).
+RE1's 40 x 30 icons take their colours from row 2 of `DATA/STATUS.TIM`'s palette, the status screen's
+(found by eye; rows 0 and 1 are wrong): `items/icons`, icon k for item k + 1 (`pe_imp_emit_pix8`).
+RE2's map pages are still grey: no fixed palette was found, and the map screen recolours rooms by
+state (visited, current), so the colours are probably set by the game's code.
+
+**Movies.** Each RE STR movie (RE1 `ZMOVIE`, RE2 `ZMOVIE` and the player's `PL0`/`PL1` `ZMOVIE`, RE3 `CD_DATA/ZMOVIE`) is
+copied once into the store as a **Movie** (`host/import/pe_imp_movie.c`, `movie.bin`): a frame
+index, its MDEC frames (320 x 240 in RE1, 320 x 160 letterboxed in RE2 and RE3; decoded by
+`pe_imp_mdec.c` like the room backgrounds) and its CD-XA sound sectors as stored. That is about
+1 GB for all the discs (RE1 296 MB, RE2 330 MB a disc, RE3 120 MB). The sound needs a raw `.bin`
+image; an `.iso` has none. A reader can ask for a file and its XA sectors together
+(`xa = PE_IMP_XA_BOTH`), and one file may now be up to 128 MB (RE2's longest movie is 92 MB).
+`mod-rdt` reads a short movie from each disc, saves and loads it, and decodes a frame.
+
+**Files (readable documents).** The file pictures are kept as stored in **Pictures** records
+(`host/import/pe_imp_pictures.c`, `pictures.bin`, the sectioned container; one or more PS1 TIMs, with
+a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
+RE2 `COMMON/DATA/FILES.TIM` as `files/all` (216 TIMs), RE3 `CD_DATA/ETC/FILEGU.PIX` as `files/all`
+(183). Each document is an 8-bit background followed by its 4-bit text pages (a page may follow the
+background directly, off the 2 KB grid), so the record also has a DOCS section: per document its
+first picture, its picture count and its item number in the game's ItemTable (its name there).
+RE2: 25 documents, document k = item 0x68 + k (Chris's diary to the second hint file, the order of
+biohazard-utils' `Bio2ConstantTable.cs`, checked against the titles on the pages). RE3: 31, item 0
+(its files aren't items; their titles are only on their pages). RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
+4-bit pixels 512 wide), is cut into 512 x 192 pages and kept as 4-bit TIMs with that palette
+(`files/filem_00` and so on; 92 pages in 46 files). The
+container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
+
+**Effects.** biohazard-utils treats an effect as an id, its EFF data and its sprite TIM, and doesn't
+decode the EFF data; here too the EFF data stays as stored (in each room's `RDT0`, and the common
+`CORE00.ESP`), and the sprite sheets are Pictures. RE2: a room's RDT section 20 (TIMs back to back),
+`effects/<stage><room>-<player>` (picture k = the room's effect k, ids in section 18; 373 sheets in 103
+rooms). RE3: section 20 of the room in each `.ARD`, ids in section 17, `effects/<stage><room>` (308 in
+141 rooms), and `ETC/CORE00.TIM`, the common effects' sheet, `effects/core`. RE1: `DATA/CORE00.ETM`,
+the common sheets (8), `effects/core`; RE1's rooms: their effect ids and TIM table (Rdt1
+entries 13 and 15, one u32 offset per id in use), `effects/<stage><room>-<player>` (220). RE2's
+`CORE01.TIM`: two 256 x 256 4-bit pages with no header or palette, the grey placeholder (`GREY`),
+`effects/core`.
+
+**Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at
+4 bits a pixel with no palette of their own: their colours are in `COMMON/DATA/TEX.TIM`'s palette (19
+rows of 32 = 38 palettes of 16, the map screen's room colours: blue, red, green and highlighted
+versions). Each page is wrapped as a 4-bit TIM with palette 16 (rooms blue on black, found by eye),
+and all 38 are kept as `PALS` so a runtime can recolour rooms by state. Without `TEX.TIM` the pages
+get a placeholder of 16 greys and the record is marked `GREY`. RE3's `CD_DATA/ETC/MAP_U.MAP` holds a section table,
+the room and label tables and 18 TIMs (9 maps and their legends, in their own colours): the TIMs,
+and the whole file as `FILE` for the tables. RE1's are `ITEM_M2/MAP00.TIM` to `MAP0E.TIM`, one 8-bit
+TIM each in its own colours, one record each as `maps/<name>` (`maps/map01` and so on; 15): MAP01 to
+MAP0B the floor maps (256 x 112), MAP00 and MAP0C to MAP0E the area overviews (256 x 160) the map
+screen shows as more of the game opens up. `mod-rdt` decodes every map picture.
+
+Other games' files are read only then, when the player asks, never during play. Aya's data comes
+from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
+
+- `host/import/`: the core. `pe_imp.h` (disc images, the Model type, readers, rigs, targets, store,
+  catalog, packs), `pe_imp_pe.h` (PE's model and row formats, retargeting, the rows rooms install),
+  `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON reader (no cJSON on PS5).
+- `pe_src_<game>/`: one mod per source game registers its readers, naming table and rigs. Nothing
+  in the core names a game. RE1's people are rigid like RE2's, in another bone order; its reader
+  puts them in RE2's order (`pe_src_re1_emd.c`). RE3's people are skinned (an arm is one mesh in the root's frame, a
+  table says which bone moves each vertex); its reader splits them back into RE2's 15 bone-local
+  parts, so the fit is RE2's (`pe_src_re3_pld.c` has the layout). Dino Crisis packs Regina into
+  compressed archives (`PSX/DATA/CORE0x.DAT`, one per outfit) with a skinned vertex pool and a
+  tiled texture; `pe_src_dc1_core.c` documents what was worked out from the disc. A game whose
+  disc shares another's file layout names a file that tells them apart (`pe_imp_add_disc_id`:
+  Dino Crisis 2 has the same CORE names).
+- `pe_wardrobe/pe_skin_build.c` + `pe_skin_target.c`: the skins target, a port of tools/re2-skin
+  (PR #4). Every file is byte for byte the Python's except texture.bin (our colour reduction) and
+  angles at gimbal lock, where the Python read rounding noise (`pe_imp_to_yxz`).
+- Tests: `mod-import` (made-up disc images and models, broken files, the store; real disc with
+  `PE_TEST_RE2_DISC`), `mod-re1`, `mod-re3` and `mod-dc1` (made-up data each; the real people with
+  `PE_TEST_RE1_DISC`, `PE_TEST_RE3_DISC`, `PE_TEST_DC1_DISC`),
+  `mod-skin-build` and `mod-import-flow` (need `PE_TEST_DISC` and
+  `PE_TEST_RE2_DISC`; `PE_TEST_SKIN_REFERENCE` compares with tools/re2-skin's output).
+
 ## Collection (pe_collection) and Wardrobe (pe_wardrobe)
 
 F1 > PE Enhancements > Collection and Wardrobe. Cosmetic and information only; Junk comes from the
-economy's `junk` service. Two mods since November 2026 (bridge findings D8 §12, D9): the
+economy's `junk` service. Two mods since November 2026 (bridge findings D8 Â§12, D9): the
 Collection is the Bestiary, the Wardrobe the costumes; neither needs the other. Each is a
 registry: its creatures or costumes come from packs, and Parasite Eve's own are just the first
 pack (`pe_collection/pe_pack_pe1.c`, `pe_wardrobe/pe_pack_pe1_costumes.c`). Other mods (an import
@@ -765,7 +1124,10 @@ In pe_wardrobe/:
   Kept in host memory: Aya's textures are swapped
   at the game's upload (PE_HOOK_PLAYER_TEXTURES, the game's own kept for changing back), and
   bank_slots[0] and her rows point at the skin before her actor takes them (PE_HOOK_PLAYER_ROWS) and
-  every frame; the weapon follows the skin's hand, room animations use retargeted copies. Instant
+  every frame; the weapon follows the skin's hand, room animations use retargeted copies. A row
+  the skin can't play (another bone count, no retargeted copy) gets the skin's idle pose held for
+  its length ("idle pose held" in the log), and the mirror rooms' reflection actor draws the worn
+  skin instead of the room's own Aya mesh. Instant
   swap (Wardrobe, experimental, off) changes skins in place without a room reload. A game outfit
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
@@ -777,7 +1139,7 @@ In pe_wardrobe/:
   23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
   `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
   threshold alone keeps the old cached set. The generator must also collect the bank 11 bundle
-  rows 28–34 (image entry 19), not only rows installed by room archives: none of those seven
+  rows 28â€“34 (image entry 19), not only rows installed by room archives: none of those seven
   fingerprints occurs in the room-only scan of either US disc. Updated `rooms.bin` copies are required as well as
   the loader fix: updating the game executable does not repair existing skin assets.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
@@ -801,8 +1163,8 @@ In pe_wardrobe/:
   rules, on by default) restricts wearing to owned or free costumes, bought with Junk. With the
   rule off, or no such mod running, every installed costume can be worn and nothing is bought or
   written as owned. What Aya wears follows a rule change at the next room load only; a costume the
-  rule locks comes off there with its key kept (bridge findings D8 §12).
-- `pe_packs.c`: character packs (bridge findings D8 §3, format v1) dropped in
+  rule locks comes off there with its key kept (bridge findings D8 Â§12).
+- `pe_packs.c`: character packs (bridge findings D8 Â§3, format v1) dropped in
   `<preferences>/packs/` as a plain zip or the same layout unzipped: `pack.json` (`format` 1, `id`
   of a-z / 0-9 / -, at most 31, `kind` "assets"), `LICENSE`, and `characters/<folder>/` with
   `character.json` (`name`, `group`, `tier`: extra, outfit, supporting, main or special) and the
@@ -819,6 +1181,8 @@ In pe_wardrobe/:
   the Wardrobe (the host never calls it by name). Recipe packs (Parasite Eve's own characters,
   shared as instructions) are listed as needing a build: the bridge's
   tools/pe_assets/pe_pack_build.py builds them from the player's disc into an assets pack here.
+  Models from other games are converted on the player's computer: `tools/re2-skin/` builds an
+  assets pack from a Resident Evil 2 PC player model (BioRand's `claire.re2/PL01.PLD`).
   Not yet: default-appearance replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
   the preview reader and the shape check's refusals.
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
