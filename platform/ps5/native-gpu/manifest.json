@@ -2903,7 +2903,7 @@
     },
     {
       "path": "include/pe1/fmv.h",
-      "sha256": "6576e2e34c7b5ca424d520a5923945cefa3f2a1acf0cce89dff7594aa6d973eb"
+      "sha256": "f6a1ced54300db4fc50411b27b55859cc2b8fc1c03a8b8fc1a2e1fd9893ba815"
     },
     {
       "path": "include/pe1/font.h",
