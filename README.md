@@ -25,7 +25,7 @@ Keep each CUE file next to its BIN file. A CHD is a single file (its first track
 
 **HD backgrounds:** open **Escape → Mods → Background pack** to download or update the optional artwork.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
-You can also [download the pack manually](https://pe.polanka.ovh/). Widescreen uses the artwork available for each room; some rooms still have black borders.
+You can also [download the pack manually](https://pe.polanka.ovh/). See [how to use the extracted pack](docs/MODS.md#using-a-manually-downloaded-hd-background-pack). Widescreen uses the artwork available for each room; some rooms still have black borders.
 
 **Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. Choose **Fast forward** there to assign a key or controller button: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Fast-forward button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
