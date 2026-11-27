@@ -40,8 +40,9 @@ int Inv_GetWayneListItemByIndex(int i) { return i; }
 int Inv_IsSlotEquipped(int i) { (void)i;return 1; }
 void Menu_SetSwapReturnFlag(void) {}
 void Draw_StatePush(void) {}
-void Draw_OffsetCursor(int x,int y) { (void)x;(void)y; }
-void Draw_PrintNumberWidth3Unk(int n) { (void)n; }
+static int number_x, number_y, drawn_count;
+void Draw_OffsetCursor(int x,int y) { number_x=x; number_y=y; }
+void Draw_PrintNumberWidth3Unk(int n) { drawn_count=n; }
 void Draw_StatePop(void) {}
 static ItemDataRecord s_base[256];
 static int loaded = 1, sort_calls, *pocket_enabled, *stacks_enabled;
@@ -252,6 +253,9 @@ int main(void) {
     Inv_RebuildSelectableMask();
     assert(g_AyaInventoryItems[2]==0x0B && !g_AyaInventoryItems[3]);
     assert(stacks->count(0,2)==7 && stacks->total(0,0x0B)==7 && g_StatBaseTable[0]==7);
+    PeHookSlotDrawn bag_row={g_AyaInventoryItems,2};
+    pe_hook_dispatch(PE_HOOK_SLOT_DRAWN,&bag_row);
+    assert(number_x==104 && number_y==5 && drawn_count==7);
     assert(g_WayneStorageItems[0]==0x0C && !g_WayneStorageItems[1]);
     assert(stacks->count(1,0)==4 && stacks->total(1,0x0C)==4 && g_StatBaseTable[3]==4);
     assert(g_StatBaseTable[1]==0 && g_StatBaseTable[2]==0);

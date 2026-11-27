@@ -378,7 +378,9 @@ static int pe_on_slot_drawn(void *ctx, void *user) {
     (void)user;
     if (!pe_on() || (l = pe_list_of(s->list)) < 0 || (n = pe_count(l, s->index)) < 2) return 0;
     Draw_StatePush();
-    Draw_OffsetCursor(0x56, 5);   /* where a weapon's rounds go; consumables leave it empty */
+    /* SLOT_DRAWN starts at the icon. The native ammo column is at
+     * 0x12 + 0x56 in the US layout and 0x10 + 0x58 in the Japanese layout. */
+    Draw_OffsetCursor(0x68, 5);
     Draw_PrintNumberWidth3Unk(n);
     Draw_StatePop();
     return 0;
