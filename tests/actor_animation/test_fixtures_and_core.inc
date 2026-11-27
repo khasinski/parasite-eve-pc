@@ -245,6 +245,10 @@ static int boot_buffer_layout(void)
     second[0].length = 0x5678;
     second[4095].length = 0x9abc;
     memset(g_EntityAllocationTable, 0, sizeof(g_EntityAllocationTable));
+    if (Entity_AllocBlock(8 * ENTITY_ALLOCATION_BLOCK_SIZE + 1)) return 0;
+    void *largest = Entity_AllocBlock(8 * ENTITY_ALLOCATION_BLOCK_SIZE);
+    if (!largest) return 0;
+    Entity_FreeAllocationBlock((uintptr_t)largest);
     for (unsigned i = 0; i < ENTITY_ALLOCATION_ORIGINAL_SLOTS; ++i) {
         u8 *block = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
         if (!block || block + ENTITY_ALLOCATION_BLOCK_SIZE > g_RenderFrontBufferBase[0])
