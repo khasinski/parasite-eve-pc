@@ -26,6 +26,7 @@ int pe_ui_font_ready(void);
 int pe_ui_surface_begin(PeSurface *s, int w, int h);
 void pe_ui_surface_finish(PeSurface *s);            /* sets the solid texel */
 void pe_ui_surface_free(PeSurface *s);
+void pe_ui_fill_rect(PeSurface *s, int x, int y, int w, int h, PeColor c);
 void pe_ui_fill_round_rect(PeSurface *s, float x, float y, float w, float h, float r, PeColor c);
 float pe_ui_text_width(const char *text, float em);
 void pe_ui_draw_text(PeSurface *s, float x, float baseline, float em, const char *text, PeColor c, PeAlign align);

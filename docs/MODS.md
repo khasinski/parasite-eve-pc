@@ -29,6 +29,31 @@ portable mode it is the `userdata` folder beside the game. The game creates thes
 
 Language packs can also go in the `lang` folder beside the game.
 
+## Using a manually downloaded HD background pack
+
+On desktop, extract the ZIP to a folder you want to keep. Find the extracted
+folder containing `manifest.json`. Point `PE_HD_BACKGROUNDS` at that folder
+and launch the game from the same terminal. For example, if the manifest is
+in a folder named `PE-HD` under Downloads:
+
+**Windows PowerShell**, from the folder containing the game:
+
+```powershell
+$env:PE_HD_BACKGROUNDS = "$HOME/Downloads/PE-HD"
+.\parasite-eve-pc.exe
+```
+
+**macOS or Linux**, from the folder containing the executable:
+
+```sh
+PE_HD_BACKGROUNDS="$HOME/Downloads/PE-HD" ./parasite-eve-pc
+```
+
+Open **Escape → Mods → Background pack** and look for **Local preview**.
+Choose an internal resolution of **2×** or higher under **Graphics**.
+Use the same launch command each time you want to use the extracted pack.
+The in-game downloader manages its own version and integrity checks.
+
 ## Turning mods on
 
 1. Press **F1** and open **Manage mods**.

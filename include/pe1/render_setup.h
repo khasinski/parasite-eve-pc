@@ -64,4 +64,12 @@ int Render_SetupEntityPrims(RenderObjectEntity *object, RenderObjectHeader *mode
                             s16 paletteRow, s16 initCount, s8 **textureOut,
                             int setup);
 
+/* Aya and her reflections sample the same player texture pages and CLUT. */
+static inline void Render_SetupPlayerModel(RenderObjectEntity *object, RenderObjectHeader *model,
+                                           u8 *packetBuffer, int setup)
+{
+    s8 *textures;
+    Render_SetupEntityPrims(object, model, packetBuffer, 0x3C0, 0x100, 0, 0x1C0, 2, &textures, setup);
+}
+
 #endif /* PE1_RENDER_SETUP_H */

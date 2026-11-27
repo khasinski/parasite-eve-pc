@@ -1,5 +1,38 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <psyz/video.h>
 #include <psyz/audio.h>
 #include <psyz/cd.h>
+
+/* The MDEC input frame advances before the finished upload is presented. */
+static unsigned movieFrameNumber;
+static char movieReplacementDir[1024];
+
+static void MenuCard_ClearMovieFrames(void) {
+#ifdef PSYZ_HAS_MOVIE_FRAME_REPLACEMENT
+    if (movieReplacementDir[0]) Psyz_VideoSetMovieFrame(-1, NULL);
+#endif
+    movieReplacementDir[0] = 0;
+}
+
+static void MenuCard_SetMovieDirectory(const char *name) {
+    const char *root = getenv("PE_FMV_DIR");
+    if (!root || !*root) return;
+    if (*name == '\\') ++name;
+    size_t length = strcspn(name, ".");
+    int n = snprintf(movieReplacementDir, sizeof(movieReplacementDir), "%s/%.*s", root, (int)length, name);
+    if (n < 0 || (size_t)n >= sizeof(movieReplacementDir)) movieReplacementDir[0] = 0;
+}
+
+static void MenuCard_PresentMovieFrame(int pageY, unsigned number) {
+#ifdef PSYZ_HAS_MOVIE_FRAME_REPLACEMENT
+    if (movieReplacementDir[0]) {
+        char path[sizeof(movieReplacementDir) + 24];
+        snprintf(path, sizeof(path), "%s/%06u.webp", movieReplacementDir, number);
+        Psyz_VideoSetMovieFrame(pageY, path);
+    }
+#endif
+}
 
 /* Both original movie players read image sectors directly. Feed their XA
  * track to the existing SDK decoder independently of video-frame assembly. */
@@ -128,6 +161,7 @@ void *MENUCARD_UPDATE_VIDEO_FRAME_NAME(VideoDisplay *display) {
     }
     display->regions[0].h = display->regions[1].h = MENUCARD_VIDEO_SIZE[1];
     display->rect.h = MENUCARD_VIDEO_SIZE[1];
+    movieFrameNumber = frame->frameCount;
     return data;
 }
 

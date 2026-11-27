@@ -29,6 +29,7 @@ int RoomEffect_MirrorNoOp4(PmSlotHeader *slot);
 int RoomEffect_MirrorKill(PmSlotHeader *slot);
 void RoomEffect_MirrorNoOp6(void);
 void RoomEffect_ModelBind(FieldActor *actor, FieldActor *owner, int x0, int z0, int x1, int z1);
+int RoomEffect_CopyMirrorModel(FieldActor *actor, RenderObjectEntity *copy);
 void RoomEffect_ModelUpdate(FieldActor *actor);
 void RoomEffect_ModelDraw(RenderObjectEntity *entity);
 

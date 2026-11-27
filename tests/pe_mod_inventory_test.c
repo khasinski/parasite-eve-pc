@@ -43,8 +43,9 @@ static int reserved_slot;
 int Inv_IsAyaInventorySlotReserved(int i) { return i == reserved_slot; }
 void Menu_SetSwapReturnFlag(void) {}
 void Draw_StatePush(void) {}
-void Draw_OffsetCursor(int x,int y) { (void)x;(void)y; }
-void Draw_PrintNumberWidth3Unk(int n) { (void)n; }
+static int number_x, number_y, drawn_count;
+void Draw_OffsetCursor(int x,int y) { number_x=x; number_y=y; }
+void Draw_PrintNumberWidth3Unk(int n) { drawn_count=n; }
 void Draw_StatePop(void) {}
 static ItemDataRecord s_base[256];
 static int loaded = 1, sort_calls, *pocket_enabled, *stacks_enabled;
@@ -57,6 +58,7 @@ static const PeKeysApi *keys;
 static const PeStacksApi *stacks;
 static struct { int id; PeHookFn fn; } hooks[PE_HOOK_COUNT];
 static int hook_count;
+int pe_host_init(const PeHookInit *init) { (void)init; return 0; }
 int pe_game_loaded(void) { return loaded; }
 int pe_save_loaded(void) { return loaded; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
@@ -254,6 +256,9 @@ int main(void) {
     Inv_RebuildSelectableMask();
     assert(g_AyaInventoryItems[2]==0x0B && !g_AyaInventoryItems[3]);
     assert(stacks->count(0,2)==7 && stacks->total(0,0x0B)==7 && g_StatBaseTable[0]==7);
+    PeHookSlotDrawn bag_row={g_AyaInventoryItems,2};
+    pe_hook_dispatch(PE_HOOK_SLOT_DRAWN,&bag_row);
+    assert(number_x==104 && number_y==5 && drawn_count==7);
     assert(g_WayneStorageItems[0]==0x0C && !g_WayneStorageItems[1]);
     assert(stacks->count(1,0)==4 && stacks->total(1,0x0C)==4 && g_StatBaseTable[3]==4);
     assert(g_StatBaseTable[1]==0 && g_StatBaseTable[2]==0);
@@ -284,6 +289,16 @@ int main(void) {
     assert(g_InventoryRuntime.equipment[1].bonusStats[1]==7 && g_AyaInventoryItems[0]==0x100);
     assert(g_WayneStorageItems[0]==0x0C && stacks->count(1,0)==3 && g_StatBaseTable[3]==3);
     g_MenuLayoutLocked=0;
+    g_AyaInventoryItems[2]=g_AyaInventoryItems[3]=0x0B;
+    g_InvItemArray[0]=g_InvItemArray[1]=0x0B;
+    Inv_RebuildSelectableMask();
+    assert(stacks->count(0,2)==2 && stacks->count(2,0)==2);
+    PeHookNewGame ex={PE_NEW_GAME_EX};
+    pe_hook_dispatch(PE_HOOK_NEW_GAME,&ex);
+    assert(stacks->count(0,2)==1 && stacks->count(1,0)==3 && stacks->count(2,0)==2);
+    PeHookNewGame title={PE_NEW_GAME_TITLE};
+    pe_hook_dispatch(PE_HOOK_NEW_GAME,&title);
+    assert(stacks->count(1,0)==1 && stacks->count(2,0)==1);
 
     /* Quick Send can split a trading-card stack and merge into a full bag. */
     reset();

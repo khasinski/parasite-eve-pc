@@ -304,13 +304,12 @@ static void pe_keep_rooms(void) {
 /* Her actor takes the model and idle row again, as the room load does (step 0x27). */
 static void pe_rebind_player(void) {
     FieldActor *player = g_PlayerEntity;
-    s8 *setup;
     if (!player || !g_GameState.bank_slots[0]) return;
     player->model_state.model_header = g_GameState.bank_slots[0];
     player->action_data = g_GameState.bank_rows[0][PE_IDLE_MODE];
     Entity_SetActionMode((BattleEntity *)player, PE_IDLE_MODE);
-    Render_SetupEntityPrims(&player->render_object, player->model_state.model_header,
-                            (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 0x3C0, 0x100, 0, 0x1C0, 2, &setup, 1);
+    Render_SetupPlayerModel(&player->render_object, player->model_state.model_header,
+                           (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 1);
     Render_InitRoomPrimState(&player->render_object);
     Render_DrawWithAnim(&player->render_object, player->action_data, 0, &g_RenderLightingState);
     player->render_object.header->shadow_radius = player->render_object.hit_cylinder.radius * 2;
@@ -390,6 +389,11 @@ static void pe_mirror(void) {
 }
 
 /* ---- hooks ---- */
+static int pe_on_mirror_model(void *owner, void *user) {
+    (void)user;
+    return owner && owner == g_PlayerEntity && (s_pointed || pe_worn_outfit());
+}
+
 static int pe_on_player_bank(void *ctx, void *user) {
     PeSkin *k;
     (void)ctx;
@@ -484,6 +488,7 @@ static int pe_on_load(void *ctx, void *user) {
 }
 
 void pe_skin_register(const char *mod_id) {
+    pe_hook_add(PE_HOOK_MIRROR_MODEL, pe_on_mirror_model, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_BANK, pe_on_player_bank, NULL, PE_PRIORITY_LATE, mod_id);   /* after the Wardrobe's bank */
     pe_hook_add(PE_HOOK_PLAYER_TEXTURES, pe_on_player_textures, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_ROWS, pe_on_player_rows, NULL, PE_PRIORITY_NORMAL, mod_id);

@@ -49,11 +49,14 @@ s32 MENUCARD_STEP_VIDEO_NAME(void) {
             MENUCARD_VIDEO_SET_DISPLAY(g_ActiveDrawSlot ^ 1, g_MovieWide);
             *flip = 0;
         }
+        unsigned currentFrame = movieFrameNumber;
+        int pageY = MENUCARD_VIDEO_DISPLAY.region == 0 ? 240 : 0;
         DecDCTin(MENUCARD_VIDEO_DISPLAY.decode[MENUCARD_VIDEO_DISPLAY.decodeIndex], MENUCARD_VIDEO_MODE);
         DecDCTout(MENUCARD_VIDEO_DISPLAY.buffers[MENUCARD_VIDEO_DISPLAY.selector],
                       MENUCARD_VIDEO_DISPLAY.rect.w * MENUCARD_VIDEO_DISPLAY.rect.h / 2);
         if (MenuCard_NextVideoFrame(&MENUCARD_VIDEO_DISPLAY) == -1) finished = 1;
         MenuCard_SyncVideoUpload(&MENUCARD_VIDEO_DISPLAY);
+        MenuCard_PresentMovieFrame(pageY, currentFrame);
         if (MENUCARD_VIDEO_FINISHED == 1) {
             finished = 1;
         }
@@ -65,6 +68,7 @@ s32 MENUCARD_STEP_VIDEO_NAME(void) {
 
             (*active)--;
         }
+        MenuCard_ClearMovieFrames();
         MenuCard_StopMovieAudio();
         DecDCToutCallback(0);
     }

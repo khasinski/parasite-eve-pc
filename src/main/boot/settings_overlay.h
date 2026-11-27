@@ -1483,10 +1483,10 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
                 ? host_options.buttons[HOST_SPEED_BINDING] == HOST_UNBOUND_BUTTON
                 : host_options.keys[HOST_SPEED_BINDING] == HOST_UNBOUND_KEY;
             if (unbound)
-                return "No fast-forward button assigned. Enter/South: choose a binding. Left/Right: 2x-4x.";
+                return "No fast-forward button assigned. Enter/South: choose a binding. Left/Right adjusts speed.";
             return host_options.speed_toggle
-                       ? "Press to speed up, again for normal. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds."
-                       : "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
+                       ? "Press to speed up, again for normal. Left/Right adjusts speed. Enter/South binds; Del/West unbinds."
+                       : "Hold to speed up. Left/Right adjusts speed. Enter/South binds; Del/West unbinds.";
         }
         if (state->row == HOST_SPEED_MODE_ROW) {
             return "Hold: fast while the speed button is held. Toggle: each press switches it on or off.";

@@ -1276,9 +1276,11 @@ int main(int argc, char **argv) {
     Host_ProcessSettingsEvent(&speed_state, &step, NULL, NULL);
     assert(host_options.speed_factor == 2);
     step.key.scancode = SDL_SCANCODE_RIGHT;
-    for (unsigned i = 0; i < 3; ++i) {
+    for (int factor = 3; factor <= PSYZ_SPEED_MAX; ++factor) {
         Host_ProcessSettingsEvent(&speed_state, &step, NULL, NULL);
+        assert(host_options.speed_factor == factor);
     }
+    Host_ProcessSettingsEvent(&speed_state, &step, NULL, NULL);
     assert(host_options.speed_factor == PSYZ_SPEED_MAX && !speed_state.capturing_binding);
     speed_key.type = SDL_EVENT_KEY_DOWN;
     speed_key.key.down = true;
