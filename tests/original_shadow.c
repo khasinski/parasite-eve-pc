@@ -1,4 +1,5 @@
 #include "pe1/render_shadow.h"
+#include "pe1/entity_allocation.h"
 #define SetLineF2 PeTest_SetLineF2
 #include "pe1/render_prim.h"
 #undef SetLineF2
@@ -123,6 +124,41 @@ int main(int argc,char **argv)
     if(argc==3 && !strcmp(argv[1],"--descriptor-gpu"))return descriptor_gpu_capture(argv[2]);
     if(argc==2 && !strcmp(argv[1],"--widescreen-gpu"))return widescreen_gpu_capture();
     FieldActor actors[3] = {0}, reflection = {0};
+    {
+        struct {
+            RenderPacket34 packets[2];
+            RenderAnimationLookupEntry entries[2];
+            RenderMatrix matrices[2];
+        } scratch = {0};
+        RenderObjectHeader outfit = {.part_count = 2, .packet34_count = 1};
+        RenderObjectEntity *source = &actors[2].render_object, reflected;
+        FieldActor *carrier = &g_EntityPool[3];
+        carrier->render_object.reflection_owner = &actors[2];
+        source->header = &outfit;
+        source->draw_count = 1;
+        source->primitive_buffer = (u8 *)scratch.packets;
+        source->animation_entries = scratch.entries;
+        source->matrices = scratch.matrices;
+        scratch.packets[0].clut = 123;
+        scratch.matrices[1].translation[2] = 456;
+        int slot = g_ActiveDrawSlot;
+        CHECK(RoomEffect_CopyMirrorModel(carrier, &reflected));
+        CHECK(reflected.header == &outfit && reflected.reflection_owner == &actors[2]);
+        CHECK(((RenderPacket34 *)reflected.primitive_buffer)->clut == 123);
+        CHECK(reflected.matrices[1].translation[2] == 456);
+        reflected.matrices[1].translation[2] = 789;
+        reflected.animation_entries[1].radius = 99;
+        ((RenderPacket34 *)reflected.primitive_buffer)->clut = 321;
+        CHECK(scratch.matrices[1].translation[2] == 456 && scratch.entries[1].radius == 0);
+        CHECK(scratch.packets[0].clut == 123);
+        RenderPacket34 *submitted = (void *)reflected.primitive_buffer;
+        g_ActiveDrawSlot ^= 1;
+        CHECK(RoomEffect_CopyMirrorModel(carrier, &reflected));
+        CHECK((void *)submitted != reflected.primitive_buffer && submitted->clut == 321);
+        g_ActiveDrawSlot = slot;
+        *source = (RenderObjectEntity){0};
+        carrier->render_object.reflection_owner = NULL;
+    }
     RoomFxMirror mirror = {0};
     mirror.header.owner = &reflection;
     actors[0].next = &actors[1]; actors[1].next = &actors[2];

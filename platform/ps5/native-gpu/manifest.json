@@ -2651,7 +2651,7 @@
     },
     {
       "path": "include/pe1/entity_allocation.h",
-      "sha256": "eade1c7d1954c21d6a35d5ff5baf86a9196fc14388a3b3e72d308cbd18b434e9"
+      "sha256": "7fa8413a4b57e5c9d5df99c569173553cd36c9e4d2aa65584b199a50683bbcf5"
     },
     {
       "path": "include/pe1/entity_animation.h",
@@ -3291,7 +3291,7 @@
     },
     {
       "path": "include/pe1/render_setup.h",
-      "sha256": "eb4007b53d2ce3695b272d4b619570b923668ad08bc0ca953991359457d5cd8a"
+      "sha256": "23ecdc860a528a476bc3a991ddd8c769ced6a651eb068217f6114528e83aaf9a"
     },
     {
       "path": "include/pe1/render_shadow.h",
@@ -3371,7 +3371,7 @@
     },
     {
       "path": "include/pe1/room_fx_model.h",
-      "sha256": "4b89d5b46c1f8298538a3b67f109d74d7497ec5010d835484c2a55f8fdab47a5"
+      "sha256": "13c17f9453488a69df44db3e93dedc4fa3f0375ff2e4ae102c3470d4428284dd"
     },
     {
       "path": "include/pe1/room_glint_ribbon.h",
@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "3777a0663dd8e8f3fd246b544c8f252acda9b7f457c734ad64631a1134e92fc8"
+      "sha256": "81a0894c942f821a285d24c4f3f809fd04170b6ddb8c2d3b002112cf94592bcd"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4035,7 +4035,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "31ffd8ca953cfab50507f7bf9efafbfbfa89f34801ce0c23dfdb2e563f8903f6"
+      "sha256": "3bcdbd9329e92b0946a21c6744407b1e8ce97c396a50976e93cf2199f2ec55fb"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4511,7 +4511,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "8a758147a939d83e94e74cc98bf8e21c20bafee60c4b626434032375c91781a7"
+      "sha256": "8dfe2dfc5be99091042484f520db49b9e46224a80c1d2eb7180918ed13e76770"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
@@ -4535,7 +4535,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "cc7afd8c845e5656ddffd325d094edcbec6a8f97e661813582b349e55a4bf286"
+      "sha256": "7d06fcea42661648aa5167324bd0e3f63306c29705d2f92b75a9050afe8e17fe"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
