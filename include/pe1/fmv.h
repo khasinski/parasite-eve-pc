@@ -5,15 +5,17 @@
  *
  * Characterised live on real BIOS (DuckStation GDB) by stepping through the
  * first FMV sequence: captured the game-state transitions in/out of playback.
- * The decoder itself is not in src/ yet (MDEC/DecDCT pipeline, still in asm/ or
- * libpress); what is documented here is the OBSERVABLE main-RAM footprint, which
- * is what a PC port must reproduce at the engine level.
  *
- * == DISC SOURCE ==
- *   FMV streams live on the disc as \FMV1\PEDISC01.IDF;1 (CD1) and
- *   \FMV2\PEDISC02.IDF;1 (CD2) -- the same files Asset_OpenPeImage searches for disc
- *   detection (see pe_image.h). They are streamed via the CD/DsRead path, not
- *   read out of PE.IMG.
+ * == PC PLAYBACK ==
+ * Both movie players look up the authored VideoEntry name on the mounted
+ * disc, for example \FMV1\FMV001.STR;1. The directory is FMV1 or FMV2.
+ * PEDISC01.IDF and PEDISC02.IDF identify the discs. The movie payloads are
+ * in the individual STR files (see menu_memcard/video_open.inc).
+ *
+ * video_frame.inc assembles STR frames and uses the stream header's
+ * frameCount for end-of-clip and volume fade decisions. XA audio uses its
+ * own sector reader. video_step.inc starts MDEC decoding, and
+ * video_upload.inc transfers the decoded slices to the display regions.
  *
  * == STATE-MACHINE BRACKETING (verified live) ==
  *   FMV is dispatched as its own SCENE through the boot/main.c dispatcher on
@@ -44,9 +46,7 @@
  *   in CPU-visible main RAM (a 0x801D0000 buffer that the scene-load pointers
  *   reference stays 0% changed during playback -- it is static loaded data, not
  *   the video). Consequence: the frames are invisible to the GDB main-RAM path
- *   (DuckStation's RSP does not expose VRAM). Port implication: the decode is
- *   CD-STR -> MDEC -> DMA -> VRAM; reimplement as a stream demux + video decode
- *   to a texture, driven by the same frame counter, with audio to the SPU mixer.
+ *   (DuckStation's RSP does not expose VRAM). The PC path above implements this sequence.
  *
  * Quick live probe (tools at /tmp/fmv_probe.py): scene token = *(u32*)0x8009D280;
  *   FMV-active iff (*(u32*)0x800B0CD8 & 0x8240) != 0; frame counter at 0x8009D250.
