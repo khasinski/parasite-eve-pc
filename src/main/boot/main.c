@@ -4486,7 +4486,8 @@ int main(int argc, char **argv) {
             interactive = 0;
         }
     }
-#ifndef PE_PS5
+/* The Android launcher already imports discs and passes the selected CUE. */
+#if !defined(PE_PS5) && !defined(__ANDROID__)
     int setup_argument = 0;
     for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--setup")) setup_argument = 1;
 #ifdef __APPLE__
@@ -4752,7 +4753,7 @@ int main(int argc, char **argv) {
         if(!resolution_argument)internal_resolution=host_options.scale;}}
 #endif
     if (interactive) {
-#ifndef PE_PS5
+#if !defined(PE_PS5) && !defined(__ANDROID__)
         Host_WelcomeApplyDiscs();
         host_setup_pending = setup_argument || first_launch;
 #endif
