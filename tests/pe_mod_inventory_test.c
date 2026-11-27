@@ -36,9 +36,11 @@ void Inv_SetActiveList(int mode,void *slot) { (void)mode;(void)slot;assert(0); }
 int Inv_GetBonusSlotCount(void) { assert(0);return 0; }
 void Menu_CreateNotificationDialog(int a,int b) { (void)a;(void)b;assert(0); }
 int Inv_TransferItemAlt2(int mask) { (void)mask;assert(0);return 0; }
-int Inv_GetWayneListItemByIndex(int i) { return i; }
+s32 g_InvTransferItemCount = 10;
+int Inv_GetWayneListItemByIndex(int i) { return i >= 0 && i < g_InvTransferItemCount ? i : 0; }
 int Inv_IsSlotEquipped(int i) { (void)i;return 1; }
-int Inv_IsAyaInventorySlotReserved(int i) { return i == 0; }
+static int reserved_slot;
+int Inv_IsAyaInventorySlotReserved(int i) { return i == reserved_slot; }
 void Menu_SetSwapReturnFlag(void) {}
 void Draw_StatePush(void) {}
 static int number_x, number_y, drawn_count;
@@ -314,6 +316,13 @@ int main(void) {
     send.moved = 0;
     assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send) && send.moved);
     assert(stacks->total(0, 0x15) == 0 && stacks->total(1, 0x15) == 5);
+
+    reserved_slot = 1;
+    /* The legacy row lookup aliases an out-of-range row to bag slot zero. */
+    send = (PeHookQuickSendStack){.from_mode = 0x34, .from_index = 0,
+        .vacancy = g_InvTransferItemCount, .amount = 1};
+    pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send);
+    assert(!send.moved && stacks->total(1, 0x15) == 5 && !g_AyaInventoryItems[0]);
 
     for (int slot = 0; slot < 10; slot++) g_AyaInventoryItems[slot] = 0x100;
     send = (PeHookQuickSendStack){.from_mode = 0x34, .from_index = 0, .vacancy = -1, .amount = 5};

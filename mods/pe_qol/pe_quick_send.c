@@ -30,6 +30,8 @@ static u8 s_label[64];
 static u8 s_help[96];
 
 static int pe_source_id(MenuWidgetNode *source) {
+    if (source->selected_base == 0x33 && (s_source_row < 0 || s_source_row >= g_InvTransferItemCount))
+        return -1;
     const int slot = source->selected_base == 0x33 ?
         Inv_GetWayneListItemByIndex(s_source_row) : s_source_row;
     return g_InvItemPtr && slot >= 0 && slot < g_InvSlotLimit ? g_InvItemPtr[slot] : -1;
@@ -63,7 +65,7 @@ static int pe_send_step(MenuWidgetNode *panel, unsigned int flags) {
 
     MenuWidgetNode *source = panel->parent;
     Inv_SelectActiveList(g_MenuActiveItemList);
-    if (pe_source_id(source) != s_source_id) {
+    if (s_source_id <= 0 || pe_source_id(source) != s_source_id) {
         Menu_PlayErrorSound();
         return 1;
     }
