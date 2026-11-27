@@ -233,7 +233,7 @@ static const PeColor pe_look_dim = {0.55f, 0.62f, 0.74f, 1.0f};
 
 /* Whole pixels, so stacked strips meet without seams. */
 static void pe_px_rect(int x, int y, int w, int h, PeColor c) {
-    if (w > 0 && h > 0) pe_ui_fill_round_rect(&s_surface, (float)x, (float)y, (float)w, (float)h, 0, c);
+    pe_ui_fill_rect(&s_surface, x, y, w, h, c);
 }
 
 static PeColor pe_mix(PeColor a, PeColor b, float t) {
