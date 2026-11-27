@@ -76,6 +76,10 @@ typedef struct PeLogLine { const char *tag, *text; } PeLogLine;
 /* A one-line message over the game for a few seconds (interactive runs). */
 void pe_toast(const char *text);
 
+/* Stop the running mods before releasing the platform or mounted discs.
+ * The process-exit fallback can safely call this again. */
+void pe_mods_shutdown_now(void);
+
 /* host internals shared by its own files */
 /* Around every call into a mod: what crash reports name as the running mod code
  * (what: "hook", "per-frame tick", "F1 row"...; detail: which one, or NULL). */

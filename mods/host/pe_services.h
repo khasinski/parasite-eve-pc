@@ -30,6 +30,58 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
 #include <stddef.h>
 #include <stdint.h>
 
+/* assets v1 and audio v1. Preview handles address imported catalog data by stable
+ * source ID. Call on the main thread and release each acquired reference once.
+ * list_sounds does catalog I/O and belongs in a menu or setup action.
+ * acquire_sound prepares the PCM on a worker. status reports 1 ready, 0 pending,
+ * or -1 unavailable. Zero is an invalid handle. */
+typedef uint32_t PeAssetHandle;
+typedef struct {
+    char id[80];
+    char name[48];
+    char tags[64];
+} PeAssetInfo;
+/* XA: sequence[0] is its 16-byte header, samples the sound groups. AKAO: sequence[0] the AKAO
+ * block, instruments its bank's 128 records, samples the bank's samples from sample_base. */
+enum { PE_SONG_PSX_SEQ_VAB = 1, PE_SONG_PSX_XA = 2, PE_SONG_AKAO = 3 };
+typedef struct {
+    uint32_t format;
+    const uint8_t *sequence[2];       /* secondary is NULL when absent */
+    uint32_t sequence_size[2];
+    const uint8_t *instruments, *samples;
+    uint32_t instrument_size, sample_size;
+    uint32_t sample_base;                             /* AKAO: the SPU address of samples[0] */
+} PeSongView;
+
+typedef struct {
+    uint32_t struct_size;
+    int (*list_sounds)(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity);
+    PeAssetHandle (*acquire_sound)(const char *source_id);
+    int (*status)(PeAssetHandle handle);
+    void (*release)(PeAssetHandle handle);
+    int (*list_songs)(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity);
+    PeAssetHandle (*acquire_song)(const char *source_id);
+    /* 1 ready, 0 pending, -1 unavailable. Pointers live until release. */
+    int (*song_view)(PeAssetHandle handle, PeSongView *out);
+} PeAssetsApi;
+
+typedef struct {
+    uint32_t struct_size;
+    int (*preview_clip)(PeAssetHandle handle); /* 1 queued, 0 pending, -1 unavailable */
+    /* Songs (added after preview_clip: check struct_size). play_song starts the song on its own
+     * stream, looping, replacing any playing one: 1 playing, 0 pending, -1 unavailable (the
+     * handle may be released once it returns 1). stop_song stops it; song_playing: 1 or 0. */
+    int (*play_song)(PeAssetHandle handle);
+    void (*stop_song)(void);
+    int (*song_playing)(void);
+    /* Effects (added after song_playing: check struct_size). play_effect plays mono 16-bit PCM
+     * (copied, 8000-48000 Hz) on one of a few voices of its own, so several play at once beside the
+     * preview and the song (footsteps and blows in a fight); when all are busy the one that started
+     * first is cut off. volume 0-1, times the game's volume. 1 playing, -1 unavailable. Main thread. */
+    int (*play_effect)(const int16_t *pcm, uint32_t frames, uint32_t rate, float volume);
+    void (*stop_effects)(void);
+} PeAudioApi;
+
 /* Economy armor effects, in the game's unused armor effect numbers 17-20. */
 #define PE_FX_BARGAIN    17 /* prices -15% */
 #define PE_FX_SCAVENGER  18 /* battle Junk +50% */
@@ -215,6 +267,15 @@ typedef struct PeCostumesApi {
     const PeCostume *(*worn)(void);         /* NULL: Aya's own clothes */
     int (*reload)(void);                    /* the game's same-room reload, so a change shows now; 0 if not now */
 } PeCostumesApi;
+
+/* "wardrobe_packs" v1 (pe_wardrobe): character packs added while the game runs (F1 > Import writes
+ * them). add_new reads packs/ again and registers only what is new: new packs and new character
+ * folders in packs already loaded; costumes already registered are untouched. Returns the number
+ * added; `names` (may be NULL) receives their names, comma-separated. Main thread only. */
+typedef struct PeWardrobePacksApi {
+    uint32_t struct_size;
+    int (*add_new)(char *names, unsigned size);
+} PeWardrobePacksApi;
 
 /* Events (pe_event_id): "bestiary.unlock" (PeBestiaryEvent *), "wardrobe.worn" (const PeCostume *,
  * NULL for Aya's own). */

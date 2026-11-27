@@ -22,6 +22,10 @@ static void pe_ctl_setting(const char *args) {
         if (r->kind == PE_ROW_TOGGLE) { if (value < 0 || value > 1) goto invalid; }
         else if (r->kind == PE_ROW_CHOICE) { if (value < 0 || (unsigned)value >= r->count) goto invalid; }
         else if (r->kind == PE_ROW_INT) { if (value < r->minimum || value > r->maximum) goto invalid; }
+        else if (r->kind == PE_ROW_DYNAMIC_CHOICE) {
+            unsigned count = r->count_fn && pe_menu_row_active(r) ? r->count_fn() : r->count;
+            if (value < 0 || (unsigned)value >= count) goto invalid;
+        }
         else { pe_debug_reply("err %s %s", "ini-set", "only registered stored options are supported"); return; }
         if (!r->value) goto invalid;
         *r->value = (int)value;
@@ -32,6 +36,23 @@ static void pe_ctl_setting(const char *args) {
     pe_debug_reply("err %s %s", "ini-set", "unknown option"); return;
 invalid:
     pe_debug_reply("err %s %s", "ini-set", "ini-set PAGE/LABEL VALUE (within the option range)");
+}
+
+/* Run a registered F1 action row, as Enter on it does. Inactive mods' actions don't run. */
+static void pe_ctl_mod_action(const char *key) {
+    char row_key[200];
+    int i;
+    for (i = 0; i < pe_menu_row_count(); ++i) {
+        PeMenuRow *r = pe_menu_row(i);
+        if (r->kind != PE_ROW_ACTION) continue;
+        snprintf(row_key, sizeof row_key, "%s/%s", r->page, r->label);
+        if (strcmp(key, row_key)) continue;
+        if (!pe_menu_row_active(r)) { pe_debug_reply("err %s %s", "mod-action", "that mod is off"); return; }
+        pe_menu_row_accept(r);
+        pe_debug_reply("ok %s %s", "mod-action", key);
+        return;
+    }
+    pe_debug_reply("err %s %s", "mod-action", "unknown action");
 }
 
 static void pe_ctl_mod_state(const char *name) {
@@ -76,6 +97,7 @@ static void pe_ctl_mod_state(const char *name) {
 static const PeDebugCommand s_commands[] = {
     {"ini-set", PE_DEBUG_ARGS, pe_ctl_setting},
     {"mod-state", PE_DEBUG_ARGS, pe_ctl_mod_state},
+    {"mod-action", PE_DEBUG_ARGS, pe_ctl_mod_action},
 };
 
 const PeDebugModule pe_debug_settings_module = {

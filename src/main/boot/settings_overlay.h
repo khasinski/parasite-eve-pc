@@ -1850,6 +1850,11 @@ static void Host_OverlayReleaseGpuResources(void) {
 }
 
 static void Host_OverlayDestroyGPU(void) {
+#if defined(PE_MODS) && !defined(PE_PS5_GPU_NATIVE)
+    /* PsyZ handles desktop window close inside its event loop and then exits.
+     * Release mod-owned audio and workers while SDL is still running. */
+    if (Psyz_QuitRequested()) pe_mods_shutdown_now();
+#endif
     if (s_prevOverlayDestroy != NULL) {
         s_prevOverlayDestroy();
     }
