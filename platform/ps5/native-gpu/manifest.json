@@ -4531,7 +4531,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "c5d41b2eb5607e9f4253a20777329335d3f4a832719013d15c5750cc0d2ec989"
+      "sha256": "94850d3f9cc338fe22b0d4f9918c51104c106119289a19add8576505a149b1dd"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
@@ -5051,7 +5051,7 @@
     },
     {
       "path": "mods/pe_qol/pe_quick_send.c",
-      "sha256": "9598ae22ebc053152a00895bdab15e3fb5db0b80bd8faf9629de2d44c3caa2d9"
+      "sha256": "dfb61038d91c3a03dca1ed4bf1d9d8065b33218a56ff3a02ed240a91a489d7b6"
     }
   ]
 }
