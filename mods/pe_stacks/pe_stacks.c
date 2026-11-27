@@ -381,6 +381,7 @@ static int pe_on_quick_send(void *ctx, void *user) {
     if (!pe_on() || storage < 1 || (!withdrawing && send->from_mode != 0x33))
         return 0;
 
+    if (!withdrawing && (send->from_index < 0 || send->from_index >= g_InvTransferItemCount)) return 0;
     const int sourceSlot = withdrawing ? send->from_index :
         Inv_GetWayneListItemByIndex(send->from_index);
     if (sourceSlot < 0 || sourceSlot >= pe_list_size(from)) return 0;
@@ -393,7 +394,7 @@ static int pe_on_quick_send(void *ctx, void *user) {
     send->count = count;
 
     const int destinationSlot = existing >= 0 ? existing :
-        send->vacancy < 0 ? -1 : withdrawing ?
+        send->vacancy < 0 || (withdrawing && send->vacancy >= g_InvTransferItemCount) ? -1 : withdrawing ?
             Inv_GetWayneListItemByIndex(send->vacancy) : send->vacancy;
     if (destinationSlot < 0 || destinationSlot >= pe_list_size(to)) return 1;
 
