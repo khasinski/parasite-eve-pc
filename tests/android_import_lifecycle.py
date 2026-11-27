@@ -9,7 +9,7 @@ import re
 import subprocess
 import time
 import uuid
-import xml.etree.ElementTree as ET
+from android_ui import read_nodes
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--serial', required=True)
@@ -28,8 +28,7 @@ def adb(*args, check=True):
 
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/data/local/tmp/pe-import-lifecycle.xml')
-    return list(ET.fromstring(adb('shell', 'cat', '/data/local/tmp/pe-import-lifecycle.xml')).iter('node'))
+    return read_nodes(adb, '/data/local/tmp/pe-import-lifecycle.xml')
 
 
 def click(text):

@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 import uuid
-import xml.etree.ElementTree as ET
+from android_ui import read_nodes
 import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -31,14 +31,7 @@ def adb(*words):
 
 
 def nodes():
-    path = '/data/local/tmp/pe-saf-test.xml'
-    deadline = time.monotonic() + 15
-    while time.monotonic() < deadline:
-        adb('shell', 'rm', '-f', path)
-        result = adb('shell', 'uiautomator', 'dump', path)
-        if path.encode() in result:
-            return list(ET.fromstring(adb('shell', 'cat', path)).iter('node'))
-    raise AssertionError('No current Android UI hierarchy')
+    return read_nodes(adb, '/data/local/tmp/pe-saf-test.xml')
 
 
 def wait_for_save_picker():

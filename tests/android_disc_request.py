@@ -8,7 +8,7 @@ import json
 import re
 import subprocess
 import time
-import xml.etree.ElementTree as ET
+from android_ui import read_nodes
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--serial', required=True)
@@ -26,8 +26,7 @@ def adb(*words, check=True):
 
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/data/local/tmp/pe-disc-request.xml')
-    return list(ET.fromstring(adb('shell', 'cat', '/data/local/tmp/pe-disc-request.xml')).iter('node'))
+    return read_nodes(adb, '/data/local/tmp/pe-disc-request.xml')
 
 
 def click(text):
