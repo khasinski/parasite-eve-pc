@@ -65,6 +65,7 @@ s32 MENUCARD_OPEN_VIDEO_NAME(s32 number) {
     VideoEntry *entry;
 
     /* A failed replacement must not leave the preceding movie audible. */
+    MenuCard_ClearMovieFrames();
     MenuCard_StopMovieAudio();
 #ifdef PE_PS5_GPU_NATIVE
     Psyz_VideoSetMovieActive(0);
@@ -105,6 +106,7 @@ s32 MENUCARD_OPEN_VIDEO_NAME(s32 number) {
         DecDCToutCallback(0);
         return 0;
     }
+    MenuCard_SetMovieDirectory(MENUCARD_VIDEO_ENTRY->name);
     MENUCARD_VIDEO_FINISHED = 0;
     g_SeqElapsed = 1;
     {

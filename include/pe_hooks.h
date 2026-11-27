@@ -110,6 +110,7 @@ typedef enum PeHookId {
     PE_HOOK_ITEM_ACTIONS_READY, /* PeHookItemActions: custom actions and initial cursor are ready */
     PE_HOOK_ITEM_ACTION_ROW, /* PeHookItemActionRow: remap or draw a popup row */
     PE_HOOK_QUICK_SEND_STACK, /* PeHookQuickSendStack: optional storage stack transfer */
+    PE_HOOK_MIRROR_MODEL, /* FieldActor * reflected owner: return 1 to draw its current model. */
     PE_HOOK_COUNT
 } PeHookId;
 
