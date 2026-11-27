@@ -875,3 +875,21 @@ aya: Which is?
 them: Why the heat never touched them.
 aya: I never told anyone it didn't.
 them: You just did.
+
+# ======== Dino Crisis ========
+
+[pe1/dc_regina]
+caller = Regina
+tone = funny
+day = 5
+priority = 1
+once = yes
+needs = phone.crossovers
+them: S.O.R.T. Headquarters. Who is this?
+them: How'd you get this number?
+aya: I found it on the desk here.
+them: Where's here?
+aya: The Museum of Natural History.
+aya: There are dinosaurs running around, somehow...
+them: Have you tried shooting them?
+them: It's always worked for us!
