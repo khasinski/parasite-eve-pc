@@ -1,0 +1,28 @@
+# mod-randomizer-battleai (tools/battlestats.py checks the output, the run test the ai= lines). Every line runs
+# the real mod (gate, one seed) with the enemy ops on (stats), Aya standing in the room's encounter zone (at=).
+# ai=E<MNNN:F gives actor E the script and model of room MNNN's actor F (its own and its spawner's numbers
+# made this room's, the script slots MNNN installs and this room lacks installed); with force=E<MNNN:F the
+# stat block too: the whole actor. The plain lines are each room's own fight, as the forced line needs.
+M012 0x0 0x0 win stats gate seed=123456,2 at=-90,-1612 id=plain-theater-rat
+M197 0x0 0x0 win stats gate seed=123456,2 at=0,-2200 id=plain-museum-dinosaur
+# a Day 5 Museum dinosaur slot with a Day 1 Theater rat: script, model and numbers (the rat needs slot 115)
+M197 0x0 0x0 win gate seed=123456,2 at=0,-2200 force=5<M012:5 ai=5<M012:5 id=museum-dinosaur-as-rat
+M028 0x0 0x0 win stats gate seed=123456,2 at=0,-3180 id=plain-sewer-frog
+M059 0x0 0x0 win stats gate seed=123456,2 at=1717,-6312 id=plain-central-park-green-snake
+M061 0x0 0x0 win stats gate seed=123456,2 at=-2596,-789 id=plain-central-park-blackbird
+M140 0x0 0x0 win stats gate seed=123456,2 at=570,-116 id=plain-hospital-slime
+# the Theater rat slot (Day 1) with a Sewer frog (Day 1) and a Central Park green snake (Day 2)
+M012 0x0 0x0 win gate seed=123456,2 at=-90,-1612 force=5<M028:8 ai=5<M028:8 id=theater-rat-as-frog
+M012 0x0 0x0 win gate seed=123456,2 at=-90,-1612 force=5<M059:5 ai=5<M059:5 id=theater-rat-as-green-snake
+# a Day 3 Hospital slime slot with a Day 2 Central Park blackbird
+M140 0x0 0x0 win gate seed=123456,2 at=570,-116 force=5<M061:5 ai=5<M061:5 id=hospital-slime-as-blackbird
+M063 0x0 0x0 win stats gate seed=123456,2 at=278,1747 id=plain-central-park-monkey
+# not clean: the monkey sends events (op 28) to its room's e4, here the Theater's e4 (not fixed); the dinosaur
+# sets bits in N0x1b-0x1d, which Theater scripts use (the switch moves them to free N vars: the mod log's
+# "N0x1b > N0x6"), and sets the Museum story bit V0x2a|0x80 (not fixed)
+M012 0x0 0x0 win gate seed=123456,2 at=-90,-1612 force=5<M063:3 ai=5<M063:3 id=theater-rat-as-monkey
+M012 0x0 0x0 win gate seed=123456,2 at=-90,-1612 force=5<M197:5 ai=5<M197:5 id=theater-rat-as-dinosaur
+# playtest 641276: a Chrysler Plant in the Theater rat slot sends 0x70 only with its own lead sub id (0x1f) and
+# waits on its spawner's N0x3; the Theater spawner places its pair with sub ids 0 and 1 and keeps its flags in
+# N0x0. The copy takes the slot's lead and its fight vars (N0x3 > N0x0 ...): the spawner's 0x70 step runs
+M012 0x0 0x0 win stats gate seed=123456,2 at=-90,-1612 ai=5<M391:6 ran=+6748 id=theater-rat-as-chrysler-plant
