@@ -31,8 +31,14 @@ def adb(*words):
 
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/data/local/tmp/pe-saf-test.xml')
-    return list(ET.fromstring(adb('shell', 'cat', '/data/local/tmp/pe-saf-test.xml')).iter('node'))
+    path = '/data/local/tmp/pe-saf-test.xml'
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        adb('shell', 'rm', '-f', path)
+        result = adb('shell', 'uiautomator', 'dump', path)
+        if path.encode() in result:
+            return list(ET.fromstring(adb('shell', 'cat', path)).iter('node'))
+    raise AssertionError('No current Android UI hierarchy')
 
 
 def wait_for_save_picker():
@@ -165,8 +171,13 @@ def save_import_test():
             click('Show roots')
             click('Downloads')
         click(source.split('/')[-1])
-        text = '\n'.join(n.get('text', '') for n in nodes())
-        assert expected in text, text
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            text = '\n'.join(n.get('text', '') for n in nodes())
+            if expected in text:
+                break
+        else:
+            raise AssertionError(f'Missing import result {expected!r}: {text}')
         click('OK')
 
     try:
