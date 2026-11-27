@@ -324,13 +324,19 @@ void Menu_OpenItemActionSubmenu(MenuWidgetNode *arg0, s32 arg1, s32 arg2) {
         }
         if (var_s2 == 0) {
             temp_s1->cursor_y = 1;
-            return;
+            goto actions_ready;
         }
     }
 block_21:
     if (g_MenuItemActionDisabled != 0) {
 block_22:
         temp_s1->cursor_y = 1;
+    }
+actions_ready:
+    {
+        PeHookItemActions actions = {temp_v0_2, temp_s1, g_MenuItemActionContext, arg1, arg2};
+        PE_HOOK(PE_HOOK_ITEM_ACTIONS_READY, &actions);
+        (void)actions;
     }
 }
 

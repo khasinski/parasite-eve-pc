@@ -2991,7 +2991,7 @@
     },
     {
       "path": "include/pe1/inventory.h",
-      "sha256": "00970136b95d0be56b163267162b76172f2e5ce8c3a4c2a08b202a9c28ef1590"
+      "sha256": "037e2d6db3d511d6eaed0baadebe267ffbe1ddf83110c402a2373af8c4628c02"
     },
     {
       "path": "include/pe1/inventory_queries.h",
@@ -3843,7 +3843,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "5d0b09744fd59ab3c522603d1fb602d6129388f5d525e4a9c01ba35d53573092"
+      "sha256": "e2d850f1aa5a0ca42f9227f85f3cca409afab14f50a8c23881150c40a7f58241"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4055,7 +4055,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "476f27106d6ff2f4bcd183b8b3e0c6393ab982263c964a613e006c8002efe6e5"
+      "sha256": "d4f28a7d9bb0b19aea250d8da3bb1124ed715ed7947eb26ffa91ee4992e6ef79"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4295,7 +4295,7 @@
     },
     {
       "path": "mods/pe_collection/pe_bestiary.c",
-      "sha256": "282dd443d6a129f77e0959004a278d1e476d2a583c633a5106d7a1fb2e89a435"
+      "sha256": "b86cb157b81ca26294ecdc4105b66e1b4f252c6e6f0560313a019ab086b1bc59"
     },
     {
       "path": "mods/pe_collection/pe_bestiary_menu.c",
@@ -4423,7 +4423,7 @@
     },
     {
       "path": "mods/pe_qol/pe_qol.c",
-      "sha256": "b03c89b21469ab98167aef95d386163ac85e0b01a4edadc9d3190f0aa6689532"
+      "sha256": "b0cf65a09cb930a539f4e9b98a1e92c3eea90b491d4ec5689fe6a7b407ba6c35"
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
@@ -4531,7 +4531,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "8a758147a939d83e94e74cc98bf8e21c20bafee60c4b626434032375c91781a7"
+      "sha256": "809424eeebfeb9dcefdb0e1dec6f3c5373095901506e1db878189094fd612e31"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
@@ -4611,7 +4611,7 @@
     },
     {
       "path": "src/main/item/swap.c",
-      "sha256": "265afb1dfcaf08a7fe4ea75e7d914ba0ba3dfe8860eaaee7a01efaa1172f59e0"
+      "sha256": "b17a4bf6309c2ae8b264e3e26bcdb69bc99046edbb30372efe7040d2b675bc2e"
     },
     {
       "path": "src/main/memcard/save_flow.c",
@@ -5048,6 +5048,10 @@
     {
       "path": "tests/pe_mod_pe_test.c",
       "sha256": "24ed7b1a1131778ee1b237b961d639a9ee713c96cbbe2ded04422c8da7da753c"
+    },
+    {
+      "path": "mods/pe_qol/pe_quick_send.c",
+      "sha256": "9598ae22ebc053152a00895bdab15e3fb5db0b80bd8faf9629de2d44c3caa2d9"
     }
   ]
 }

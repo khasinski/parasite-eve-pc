@@ -46,6 +46,7 @@ Manage mods name: **PE Enhancements: quality of life**.
   menu. Turning the pocket off puts them back in the bag as space allows.
 - **Bag sort**: Manual or Auto, saved with your game. Auto keeps the game's own sort order. Moving
   an item by hand switches back to Manual. Square in the Use Item list opens sorting.
+- **Quick Send** is off by default. In storage and reward menus, **Send >** or **Send <** moves one item to the opposite pane. In storage, double arrows send the whole stack if it fits. **Move** lets you pick a slot.
 - **Inventory tips**: on by default. The Items row and empty bag slots show the Square sorting
   shortcut and whether Auto sort is active. The first bag visit in a session explains both.
 
@@ -100,6 +101,7 @@ from **Bestiary** in Aya's main menu, which appears once you have met a creature
 - **Weaknesses**: revealed by casting Scan on the creature, or after 5 kills. For a boss, beating
   it.
 - **Loot**: revealed after 15 kills. For a boss, only by buying it.
+- **Kill progress popups** are on by default. Defeating an enemy shows the updated kill count and the next unlock threshold. The count turns gold when you reach it.
 - **Buy next tier**: any tier can be bought with Junk, which needs Junk economy.
 - **Area** and **Show** filter the list by location, creatures you have met, or incomplete entries.
   Revealed entries show stats and kills, elemental strengths and weaknesses, and drop and steal odds.
