@@ -30,6 +30,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_save.h"
+#include "pe_save_emission.h"
 #include "pe1/asset_table.h"
 #include "pe1/game_state.h"
 #include "pe1/inventory.h"
@@ -639,6 +640,8 @@ static void pe_rand_spoiler(void) {
 /* Every new game (the title's New Game or Tutorial, or the EX Game), after the host has reset the
  * record: the only place a run's settings are taken. Only a session where the randomizer runs alone
  * randomizes, and never the Tutorial. */
+static const PeSaveRecord s_record, s_foes_record;
+
 static int pe_rand_new_game(void *ctx, void *user) {
     const PeHookNewGame *game = ctx;
     char line[96];
@@ -652,7 +655,15 @@ static int pe_rand_new_game(void *ctx, void *user) {
     s_run.logic = PE_RAND_LOGIC_VERSION;
     s_run.table = PE_RAND_TABLE_VERSION;
     s_run.seed = pe_rand_seed();
+    if (s_run.on && pe_save_enable_record(&s_record) != PE_SAVE_EMISSION_OK) {
+        s_run.on = 0;
+        pe_toast("Randomizer: no save space for the seed; this game uses original items");
+    }
     s_foes_run.on = (uint8_t)(s_run.on && s_foes_enabled);
+    if (s_foes_run.on && pe_save_enable_record(&s_foes_record) != PE_SAVE_EMISSION_OK) {
+        s_foes_run.on = 0;
+        pe_toast("Randomizer: no save space for enemy settings; this game uses original enemies");
+    }
     s_foes_run.version = PE_RAND_FOES_VERSION;
     pe_rand_foes_apply();
     if (!s_run.on || !pe_rand_ready()) {
@@ -766,7 +777,7 @@ static int pe_rand_init(void) {
     pe_rand_battle_register();
     pe_rand_model_register();
     pe_rand_ai_register();
-    return pe_save_register(&s_record) < 0 || pe_save_register(&s_foes_record) < 0;
+    return pe_save_register_conditional(&s_record) < 0 || pe_save_register_conditional(&s_foes_record) < 0;
 }
 
 const PeMod pe_mod_pe_randomizer = {MOD_ID, "Randomizer", "0.1", NULL, pe_rand_init, NULL};
