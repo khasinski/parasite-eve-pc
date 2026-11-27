@@ -2651,7 +2651,7 @@
     },
     {
       "path": "include/pe1/entity_allocation.h",
-      "sha256": "eade1c7d1954c21d6a35d5ff5baf86a9196fc14388a3b3e72d308cbd18b434e9"
+      "sha256": "7fa8413a4b57e5c9d5df99c569173553cd36c9e4d2aa65584b199a50683bbcf5"
     },
     {
       "path": "include/pe1/entity_animation.h",
@@ -4511,7 +4511,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "8a758147a939d83e94e74cc98bf8e21c20bafee60c4b626434032375c91781a7"
+      "sha256": "8dfe2dfc5be99091042484f520db49b9e46224a80c1d2eb7180918ed13e76770"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
