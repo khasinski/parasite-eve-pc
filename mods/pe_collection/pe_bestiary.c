@@ -19,6 +19,11 @@
 #include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe1/battle_status.h"
+#include "pe1/game_state.h"
+#include "pe1/psyq_gpu.h"
+#include "pe1/render_packets.h"
+#include "pe1/render_prim.h"
 
 #define PE_SCAN           7
 #define PE_ENEMY_SLOTS    7
@@ -37,6 +42,14 @@ static int s_maps;
 static PeBestiaryResolver s_resolver[PE_MAX_RESOLVERS];
 static int s_resolvers;
 static int s_event = -1;
+static int s_kill_popups = 1;
+enum { POPUP_FRAMES = 48, POPUP_GLYPHS = 5 };
+static struct {
+    int x, y, frames;
+    unsigned kills, goal;
+} s_popups[PE_ENEMY_SLOTS];
+static RenderPagedSpritePacket s_popup_glyphs[2][PE_ENEMY_SLOTS][POPUP_GLYPHS];
+void Draw_InitDrawModeSprtPacket(void *packet, int tpage);
 static uint32_t s_checkpoint_epoch=1;
 static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
 
@@ -128,10 +141,77 @@ static void pe_unlock_why(int h, unsigned bits, const char *why) {
 
 static void pe_unlock(int h, unsigned bits) { pe_unlock_why(h, bits, "mod"); }
 
-static void pe_kill(int h) {
+static void pe_show_kill(int slot, unsigned kills, unsigned goal) {
+    if (!s_kill_popups || slot < 0 || !goal || kills > goal) return;
+    for (const BattleEntity *actor = (const BattleEntity *)g_FieldActorListHead;
+         actor; actor = actor->next) {
+        if ((const void *)actor->core != &g_BattleEnemySlots[slot].combatant) continue;
+        if (!actor->renderObject.projected_target_x && !actor->renderObject.projected_target_y)
+            return;
+        s_popups[slot].x = actor->renderObject.projected_target_x;
+        const int y = actor->renderObject.projected_target_y - 40;
+        s_popups[slot].y = y < 16 ? 16 : y;
+        s_popups[slot].kills = kills;
+        s_popups[slot].goal = goal;
+        s_popups[slot].frames = POPUP_FRAMES;
+        return;
+    }
+}
+
+static int pe_clear_popups(void *ctx, void *user) {
+    (void)ctx;
+    (void)user;
+    memset(s_popups, 0, sizeof s_popups);
+    return 0;
+}
+
+static int pe_draw_popups(void *ctx, void *user) {
+    const unsigned buffer = (unsigned)g_ActiveDrawSlot;
+    (void)ctx;
+    (void)user;
+    if (!s_kill_popups) return pe_clear_popups(NULL, NULL);
+    if (buffer >= 2 || !D_800B0E38.ordering[buffer]) return 0;
+    const int page = GetTPage(0, 1, 0x100, 0x1e0);
+    const u16 clut = GetClut(0x130, 0x1f8);
+    for (int slot = 0; slot < PE_ENEMY_SLOTS; slot++) {
+        const int frames = s_popups[slot].frames;
+        if (!frames) continue;
+        s_popups[slot].frames--;
+        const unsigned kills = s_popups[slot].kills, goal = s_popups[slot].goal;
+        const int reached = kills == goal;
+        char label[POPUP_GLYPHS + 1];
+        const int length = snprintf(label, sizeof label, "%u/%u", kills, goal);
+        if (length <= 0 || length > POPUP_GLYPHS) continue;
+        const int y = s_popups[slot].y - (POPUP_FRAMES - frames) / 4;
+        const int x = s_popups[slot].x - length * 3;
+        const int light = frames < 12 ? frames * 10 : 120;
+        for (int i = 0; i < length; i++) {
+            RenderPagedSpritePacket *packet = &s_popup_glyphs[buffer][slot][i];
+            Draw_InitDrawModeSprtPacket(packet, page);
+            RenderSpritePacket *sprite = &packet->sprite;
+            sprite->clut = clut;
+            sprite->u = (label[i] == '/' ? 10 : label[i] - '0') * 8;
+            sprite->v = 0xe8;
+            sprite->width = 6;
+            sprite->height = 10;
+            sprite->x = x + i * 6;
+            sprite->y = y;
+            BATTLE_SET_SPRITE_COLOR(*sprite, light, reached ? light * 3 / 4 : light,
+                                   reached ? light / 5 : light);
+            AddPrim(D_800B0E38.ordering[buffer] + 4, packet);
+        }
+    }
+    return 0;
+}
+
+static void pe_kill(int h, int slot) {
     const PeCreatureInfo *c = pe_info(h);
     unsigned k = pe_kills(h) + 1u, bits = PE_BESTIARY_MET;
     if (!c) return;
+    const unsigned known = pe_state(h);
+    const unsigned goal = c->boss ? (!(known & PE_BESTIARY_WEAK) ? 1 : 0) :
+        !(known & PE_BESTIARY_WEAK) ? PE_KILLS_WEAK :
+        !(known & PE_BESTIARY_LOOT) ? PE_KILLS_LOOT : 0;
     pe_profile_set_creature(c->key, pe_profile_creature(c->key,NULL), k);
     if (c->boss) bits |= PE_BESTIARY_WEAK;                 /* defeated: its weaknesses are known */
     else {
@@ -139,6 +219,7 @@ static void pe_kill(int h) {
         if (k >= PE_KILLS_LOOT) bits |= PE_BESTIARY_LOOT;
     }
     pe_unlock_why(h, bits, "kill");
+    pe_show_kill(slot, k, goal);
 }
 
 /* ---- model forms (for the viewer) ---- */
@@ -203,7 +284,7 @@ static int pe_on_battle(void *ctx, void *user) {
         }
         if (s_slot[s].hp > 0 && hp <= 0 && room > 0) {
             const int h = pe_resolve(room, s_slot[s].identity ? s_slot[s].identity : id, core);
-            if (h >= 0) pe_kill(h);
+            if (h >= 0) pe_kill(h, s);
         } else if (s_slot[s].hp > 1000000 && hp <= 1000000 && room > 0) {
             /* Original boss scripts offset HP by a million and end their
              * fight themselves. The observer must not wait for HP zero. */
@@ -243,10 +324,11 @@ static void pe_field_tick(void) {
                 int seen = 0;
                 for (int j = 0; j < s; ++j)
                     if (s_slot[j].tracking == s_slot[s].tracking) seen = 1;
-                if (!seen) pe_kill(h);
+                if (!seen) pe_kill(h, -1);
             }
         }
         memset(s_slot, 0, sizeof s_slot);
+        pe_clear_popups(NULL, NULL);
     }
 }
 
@@ -479,7 +561,7 @@ static void pe_test_kill(void) {
     const int h = pe_test();
     char msg[80];
     if (h < 0) return;
-    pe_kill(h);                                            /* the real kill path: 5 and 15 unlock */
+    pe_kill(h, -1);                                        /* the real kill path: 5 and 15 unlock */
     pe_profile_save();
     snprintf(msg, sizeof msg, "%s: %u kills", s_creature[h]->name, pe_kills(h));
     pe_col_say(msg);
@@ -513,6 +595,9 @@ static void pe_clear_new(void) { pe_all_seen(1); }
 static void pe_make_new(void) { pe_all_seen(0); }
 void pe_bestiary_register(const char *mod_id) {
     s_event = pe_event_id("bestiary.unlock");
+    pe_menu_register_toggle(PE_PAGE_BESTIARY, "Kill progress popups",
+        "Show kills toward the next Bestiary unlock above defeated enemies.",
+        &s_kill_popups, NULL);
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Unlock all Bestiary",
         "Testing: reveal every registered creature, weakness and loot entry. Keep kill counts.", pe_unlock_all);
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset Bestiary",
@@ -546,6 +631,8 @@ void pe_bestiary_register(const char *mod_id) {
     pe_menu_register_info(PE_PAGE_BESTIARY, "Result", "What the last action did.", pe_result);
     pe_menu_register_tick(pe_field_tick);
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
+    pe_hook_add(PE_HOOK_BATTLE_HUD, pe_draw_popups, NULL, PE_PRIORITY_LATE, mod_id);
+    pe_hook_add(PE_HOOK_SCENE_START, pe_clear_popups, NULL, PE_PRIORITY_NORMAL, mod_id);
     /* A script can release its actor before the next battle update. Observe
      * completed damage while the original model and stat identity still exist. */
     pe_hook_add(PE_HOOK_ENEMY_HIT_END, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
@@ -557,6 +644,6 @@ void pe_bestiary_register(const char *mod_id) {
 int pe_bestiary_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
 if(s_checkpoint_epoch==UINT32_MAX)return 0;if(apply&&(!in||!pe_bestiary_checkpoint_walk(in,0,0)))return 0;
 PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_creatures,0,PE_MAX_CREATURES,1);PE_CK_S(w,s_maps,0,PE_MAX_MAPPINGS,1);PE_CK_S(w,s_resolvers,0,PE_MAX_RESOLVERS,1);PE_CK_S(w,s_event,-1,INT_MAX,1);
-for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,PE_MAX_CREATURES+1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}return w.ok&&w.at==132;
+for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,PE_MAX_CREATURES+1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}if(apply&&w.ok)pe_clear_popups(NULL,NULL);return w.ok&&w.at==132;
 }
 #endif

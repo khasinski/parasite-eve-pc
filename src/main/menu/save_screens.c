@@ -379,11 +379,13 @@ void Menu_DrawContextHelpText(MenuWidgetNode *panel)
             break;
         }
     }
-    if (text != 0) {
+    if (text != 0 || (current && (current->selected_base == 2 || current->selected_base == 3))) {
         Draw_OffsetCursor(PE_JAPAN ? 4 : 6, 5);
         PE_HOOK(PE_HOOK_HELP_TEXT, &text);
-        Draw_PrintRawText(text);
-        Draw_SetColor(0x808080);
+        if (text != 0) {
+            Draw_PrintRawText(text);
+            Draw_SetColor(0x808080);
+        }
     }
 }
 

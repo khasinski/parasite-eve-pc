@@ -371,6 +371,65 @@ static int pe_on_transfer(void *ctx, void *user) {
     return 1;
 }
 
+static int pe_on_quick_send(void *ctx, void *user) {
+    PeHookQuickSendStack *send = ctx;
+    const int storage = pe_list_of(g_InvActiveItemList);
+    const int withdrawing = send->from_mode == 0x34;
+    const int from = withdrawing ? storage : 0;
+    const int to = withdrawing ? 0 : storage;
+    (void)user;
+    if (!pe_on() || storage < 1 || (!withdrawing && send->from_mode != 0x33))
+        return 0;
+
+    if (!withdrawing && (send->from_index < 0 || send->from_index >= g_InvTransferItemCount)) return 0;
+    const int sourceSlot = withdrawing ? send->from_index :
+        Inv_GetWayneListItemByIndex(send->from_index);
+    if (sourceSlot < 0 || sourceSlot >= pe_list_size(from)) return 0;
+    const int id = pe_list(from)[sourceSlot];
+    if (!pe_stackable(id)) return 0;
+
+    const int existing = pe_find(to, id);
+    const int count = pe_count(from, sourceSlot);
+    if (existing < 0 && count == 1) return 0;
+    send->count = count;
+
+    const int destinationSlot = existing >= 0 ? existing :
+        send->vacancy < 0 || (withdrawing && send->vacancy >= g_InvTransferItemCount) ? -1 : withdrawing ?
+            Inv_GetWayneListItemByIndex(send->vacancy) : send->vacancy;
+    if (destinationSlot < 0 || destinationSlot >= pe_list_size(to)) return 1;
+
+    const int bagSlot = withdrawing ? destinationSlot : sourceSlot;
+    s16 *savedItems = g_InvItemPtr;
+    const int savedLimit = g_InvSlotLimit;
+    g_InvItemPtr = g_AyaInventoryItems;
+    g_InvSlotLimit = pe_list_size(0);
+    const int allowed = Inv_IsSlotEquipped(bagSlot) && !Inv_IsAyaInventorySlotReserved(bagSlot);
+    g_InvItemPtr = savedItems;
+    g_InvSlotLimit = savedLimit;
+    if (!allowed) return 1;
+
+    s16 *destination = pe_list(to);
+    if (existing < 0 && destination[destinationSlot]) return 1;
+
+    const int held = existing >= 0 ? pe_count(to, existing) : 0;
+    int room = PE_STACK_MAX - held;
+    if (!pe_reserve_room(to, id)) room = held == 0 ? 1 : 0;
+    send->capacity = room < count ? room : count;
+    if (send->amount <= 0 || send->amount > send->capacity) return 1;
+    if (held + send->amount > 1 && !pe_store_ready()) return 1;
+
+    const int remaining = count - send->amount;
+    destination[destinationSlot] = (s16)id;
+    s_extra[to][id] = (uint8_t)(held + send->amount - 1);
+    if (pe_find(from, id) == sourceSlot)
+        s_extra[from][id] = (uint8_t)(remaining > 0 ? remaining - 1 : 0);
+    if (remaining == 0) pe_list(from)[sourceSlot] = 0;
+    Menu_SetSwapReturnFlag();
+    Inv_RebuildSelectableMask();
+    send->moved = 1;
+    return 1;
+}
+
 static int pe_on_slot_drawn(void *ctx, void *user) {
     const PeHookSlotDrawn *s = ctx;
     int l, n;
@@ -508,6 +567,7 @@ static int stacks_init(void) {
     pe_hook_add(PE_HOOK_INV_COMMAND, pe_on_command, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_INVENTORY_REBUILD, pe_on_rebuild, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_STORAGE_TRANSFER, pe_on_transfer, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_QUICK_SEND_STACK, pe_on_quick_send, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SLOT_DRAWN, pe_on_slot_drawn, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SAVE_WRITE, pe_on_save, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_load, NULL, PE_PRIORITY_NORMAL, MOD_ID);

@@ -36,8 +36,11 @@ void Inv_SetActiveList(int mode,void *slot) { (void)mode;(void)slot;assert(0); }
 int Inv_GetBonusSlotCount(void) { assert(0);return 0; }
 void Menu_CreateNotificationDialog(int a,int b) { (void)a;(void)b;assert(0); }
 int Inv_TransferItemAlt2(int mask) { (void)mask;assert(0);return 0; }
-int Inv_GetWayneListItemByIndex(int i) { return i; }
+s32 g_InvTransferItemCount = 10;
+int Inv_GetWayneListItemByIndex(int i) { return i >= 0 && i < g_InvTransferItemCount ? i : 0; }
 int Inv_IsSlotEquipped(int i) { (void)i;return 1; }
+static int reserved_slot;
+int Inv_IsAyaInventorySlotReserved(int i) { return i == reserved_slot; }
 void Menu_SetSwapReturnFlag(void) {}
 void Draw_StatePush(void) {}
 void Draw_OffsetCursor(int x,int y) { (void)x;(void)y; }
@@ -52,7 +55,7 @@ static PeMenuPerFrame ticks[4];
 static int tick_count;
 static const PeKeysApi *keys;
 static const PeStacksApi *stacks;
-static struct { int id; PeHookFn fn; } hooks[24];
+static struct { int id; PeHookFn fn; } hooks[PE_HOOK_COUNT];
 static int hook_count;
 int pe_game_loaded(void) { return loaded; }
 int pe_save_loaded(void) { return loaded; }
@@ -281,6 +284,39 @@ int main(void) {
     assert(g_InventoryRuntime.equipment[1].bonusStats[1]==7 && g_AyaInventoryItems[0]==0x100);
     assert(g_WayneStorageItems[0]==0x0C && stacks->count(1,0)==3 && g_StatBaseTable[3]==3);
     g_MenuLayoutLocked=0;
+
+    /* Quick Send can split a trading-card stack and merge into a full bag. */
+    reset();
+    s_base[0x15].kind = 12;
+    g_InvActiveItemList = g_WayneStorageItems;
+    for (int slot = 2; slot < 7; slot++) g_AyaInventoryItems[slot] = 0x15;
+    Inv_RebuildSelectableMask();
+    PeHookQuickSendStack send = {.from_mode = 0x33, .from_index = 2, .vacancy = 0};
+    assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send));
+    assert(send.count == 5 && send.capacity == 5 && !send.moved);
+    send.amount = 1;
+    assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send) && send.moved);
+    assert(stacks->total(0, 0x15) == 4 && stacks->total(1, 0x15) == 1);
+    send.amount = 4;
+    send.moved = 0;
+    assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send) && send.moved);
+    assert(stacks->total(0, 0x15) == 0 && stacks->total(1, 0x15) == 5);
+
+    reserved_slot = 1;
+    /* The legacy row lookup aliases an out-of-range row to bag slot zero. */
+    send = (PeHookQuickSendStack){.from_mode = 0x34, .from_index = 0,
+        .vacancy = g_InvTransferItemCount, .amount = 1};
+    pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send);
+    assert(!send.moved && stacks->total(1, 0x15) == 5 && !g_AyaInventoryItems[0]);
+
+    for (int slot = 0; slot < 10; slot++) g_AyaInventoryItems[slot] = 0x100;
+    send = (PeHookQuickSendStack){.from_mode = 0x34, .from_index = 0, .vacancy = -1, .amount = 5};
+    assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send) && !send.moved);
+    assert(stacks->total(0, 0x15) == 0 && stacks->total(1, 0x15) == 5);
+    g_AyaInventoryItems[2] = 0x15;
+    assert(pe_hook_dispatch(PE_HOOK_QUICK_SEND_STACK, &send) && send.moved);
+    assert(stacks->total(0, 0x15) == 6 && stacks->total(1, 0x15) == 0);
+
     puts("Passed native inventory tests: pocket/full-bag story counts and consumption, disabled-pocket draining, pickup/reward handling, recomp-compatible saves, checksum/ID validation, real native auto-sort, equipped items, manual override, battle/script guards, and stacked Tool/Super Tool consumption.");
     return 0;
 }
