@@ -31,6 +31,7 @@ void MENUCARD_RESET_DISPLAY_STATE_NAME(void) {
     u8 *active;
     MemcardRect rect;
 
+    MenuCard_ClearMovieFrames();
     MenuCard_StopMovieAudio();
 #ifdef PE_PS5_GPU_NATIVE
     Psyz_VideoSetMovieActive(0);

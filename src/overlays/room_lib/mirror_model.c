@@ -13,6 +13,8 @@
  */
 
 #include "pe1/entity_frame_update.h"
+#include "pe1/entity_allocation.h"
+#include "pe_hooks.h"
 #include <stdlib.h>
 #include <string.h>
 #include "pe1/gte.h"
@@ -87,6 +89,48 @@ int RoomEffect_MirrorSelect(PmSlotHeader *slot, int cancel, int mode, intptr_t a
     return 0;
 }
 
+/* Packet links must survive until this draw slot is submitted. Keep separate
+ * storage for both slots of every mirror actor, including across outfit swaps. */
+static struct MirrorWorkspace {
+    u8 *bytes;
+    size_t capacity;
+} s_workspaces[sizeof(g_EntityPool) / sizeof(g_EntityPool[0])][2];
+
+int RoomEffect_CopyMirrorModel(FieldActor *actor, RenderObjectEntity *copy) {
+    FieldActor *owner = actor->render_object.reflection_owner;
+    if (!owner) return 0;
+    RenderObjectEntity *source = &owner->render_object;
+    if (!source->header || !source->primitive_buffer || !source->matrices ||
+        !source->animation_entries || !source->draw_count) return 0;
+
+    for (size_t i = 0; i < sizeof(g_EntityPool) / sizeof(g_EntityPool[0]); ++i) {
+        if (actor != &g_EntityPool[i]) continue;
+        struct MirrorWorkspace *workspace = &s_workspaces[i][g_ActiveDrawSlot];
+        /* SetupEntityPrims packs packets, populated animation entries and
+         * matrices consecutively. Copy exactly the initialized layout. */
+        size_t bytes = (u8 *)(source->matrices + source->header->part_count) - source->primitive_buffer;
+        if (bytes > workspace->capacity) {
+            u8 *buffer = realloc(workspace->bytes, bytes);
+            if (!buffer) return 0;
+            workspace->bytes = buffer;
+            workspace->capacity = bytes;
+        }
+        *copy = *source;
+        memcpy(workspace->bytes, source->primitive_buffer, bytes);
+        copy->primitive_buffer = workspace->bytes;
+        copy->animation_entries = (void *)(workspace->bytes + ((u8 *)source->animation_entries - source->primitive_buffer));
+        copy->matrices = (void *)(workspace->bytes + ((u8 *)source->matrices - source->primitive_buffer));
+        copy->active_matrix = copy->matrices;
+        copy->reflection_owner = owner;
+        copy->animation_state = 5;
+        copy->flags_9C |= 0x1000;
+        return 1;
+    }
+    return 0;
+}
+
+static void Mirror_UpdatePose(FieldActor *actor, RenderObjectEntity *geom);
+
 int RoomEffect_MirrorTick(PmSlotHeader *slot) {
     RoomFxMirror *mirror = (RoomFxMirror *)slot;
     FieldActor *object = mirror->header.owner;
@@ -96,11 +140,16 @@ int RoomEffect_MirrorTick(PmSlotHeader *slot) {
         mirror->bound = 1;
     }
     if (mirror->active != 0) {
-        RoomEffect_ModelUpdate(object);
-        Render_TransformVertices(&object->render_object);
-        Render_TransformMorphVertices(&object->render_object,
-                                      (u32 *)g_ViewMatrixSlot.value);
-        RoomEffect_ModelDraw(&object->render_object);
+        RenderObjectEntity copy;
+        RenderObjectEntity *model = &object->render_object;
+        if (PE_HOOK(PE_HOOK_MIRROR_MODEL, model->reflection_owner)) {
+            if (!RoomEffect_CopyMirrorModel(object, &copy)) return 0;
+            model = &copy;
+        }
+        Mirror_UpdatePose(object, model);
+        Render_TransformVertices(model);
+        Render_TransformMorphVertices(model, (u32 *)g_ViewMatrixSlot.value);
+        RoomEffect_ModelDraw(model);
     }
     return 0;
 }
@@ -139,7 +188,10 @@ void RoomEffect_ModelBind(FieldActor *actor, FieldActor *owner, int x0, int z0, 
  * through the line, flip its rotation and point the model along the line,
  * then rebuild the animation matrices. */
 void RoomEffect_ModelUpdate(FieldActor *actor) {
-    RenderObjectEntity *geom = &actor->render_object;
+    Mirror_UpdatePose(actor, &actor->render_object);
+}
+
+static void Mirror_UpdatePose(FieldActor *actor, RenderObjectEntity *geom) {
     FieldActor *owner = geom->reflection_owner;
     RenderObjectEntity *parent = &owner->render_object;
     s16 dx = -actor->mirror_line.x0 + actor->mirror_line.x1;

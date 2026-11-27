@@ -39,12 +39,17 @@ typedef struct PeModel {
  * pe_model_release or until it falls out of that cache. NULL (and a log line) on failure. */
 const PeModel *pe_model_load(const PeModelSource *src);
 void pe_model_release_all(void);
+/* A PE_MODEL_CALLBACK provider about to free a model it returned: the cache drops it first. */
+void pe_model_forget(const PeModel *external);
 
 /* Decode a model from a room's blobs (for tests and pe_model_load). 1 on success. */
 struct PeRoomBlobs;
 int pe_model_decode(const struct PeRoomBlobs *room, int slot, PeModel *out);
 /* Player bundles have slot 0 and idle row 0x15, independent of enemy row grouping. */
 int pe_model_decode_player(const struct PeRoomBlobs *room, PeModel *out);
+/* The gun Aya holds (pe_disc_held_gun's blobs). Scene_LoadRoom sets it up with no prim block
+ * init, so its faces keep their own page (x 704) and palettes (row 450). No animation. 1 on success. */
+int pe_model_decode_held_gun(const struct PeRoomBlobs *gun, PeModel *out);
 /* Internal source loader, isolated in pe_model_skin.c; never equips or uploads to game VRAM. */
 int pe_model_skin_load(const PeModelSource *src, PeModel *out);
 /* A skin folder starting "@" (a Wardrobe character pack's, "@<pack id>/<folder>") is read through

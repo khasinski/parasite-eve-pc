@@ -270,6 +270,7 @@ static void pe_keep(PeSkin *k) {
         pe_point_bundle(k->model.data);
         pe_point_day(k->day[pe_day()].data, 1);
         pe_room_rows(k);
+        pe_guard_rows(k);
         pe_running_row(k);
     } else if (s_pointed) {
         pe_restore_rows();
@@ -303,19 +304,96 @@ static void pe_keep_rooms(void) {
 /* Her actor takes the model and idle row again, as the room load does (step 0x27). */
 static void pe_rebind_player(void) {
     FieldActor *player = g_PlayerEntity;
-    s8 *setup;
     if (!player || !g_GameState.bank_slots[0]) return;
     player->model_state.model_header = g_GameState.bank_slots[0];
     player->action_data = g_GameState.bank_rows[0][PE_IDLE_MODE];
     Entity_SetActionMode((BattleEntity *)player, PE_IDLE_MODE);
-    Render_SetupEntityPrims(&player->render_object, player->model_state.model_header,
-                            (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 0x3C0, 0x100, 0, 0x1C0, 2, &setup, 1);
+    Render_SetupPlayerModel(&player->render_object, player->model_state.model_header,
+                           (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 1);
     Render_InitRoomPrimState(&player->render_object);
     Render_DrawWithAnim(&player->render_object, player->action_data, 0, &g_RenderLightingState);
     player->render_object.header->shadow_radius = player->render_object.hit_cylinder.radius * 2;
 }
 
+/* ---- mirror ---- */
+/* Seven rooms (mirror_model.c) reflect the player with an actor of their own: it copies her pose
+ * but draws the room's copy of Aya's mesh. While a skin is worn that actor draws the skin's model
+ * from a buffer of ours; its own model fields go back when the skin comes off. */
+static FieldActor *s_mirror;                 /* the actor we gave the skin's model, or NULL */
+static RenderObjectEntity s_mirror_own;      /* its own model fields, from before */
+static u8 *s_mirror_buf;
+static size_t s_mirror_cap;
+
+static void pe_mirror_fields(RenderObjectEntity *to, const RenderObjectEntity *from) {
+    to->header = from->header;
+    to->parts = from->parts;
+    to->vertices = from->vertices;
+    to->vertex_colours = from->vertex_colours;
+    to->primitive_descriptors = from->primitive_descriptors;
+    to->model_section14 = from->model_section14;
+    to->bounds_vertices = from->bounds_vertices;
+    to->projection_origin = from->projection_origin;
+    to->matrix_commands = from->matrix_commands;
+    to->primitive_buffer = from->primitive_buffer;
+    to->hit_cylinder = from->hit_cylinder;
+    to->animation_entries = from->animation_entries;
+    to->matrices = from->matrices;
+    to->active_matrix = NULL;
+    to->draw_count = from->draw_count;
+}
+
+static FieldActor *pe_mirror_actor(void) {
+    FieldActor *a;
+    for (a = g_FieldActorListHead; a; a = a->next)
+        if (a != g_PlayerEntity && (a->render_object.flags_9C & 0x1000) && a->render_object.animation_state == 5 &&
+            a->render_object.reflection_owner == g_PlayerEntity)
+            return a;
+    return NULL;
+}
+
+static void pe_mirror(void) {
+    FieldActor *m = g_PlayerEntity ? pe_mirror_actor() : NULL;
+    RenderObjectHeader *want = s_pointed && g_PlayerEntity ? g_PlayerEntity->render_object.header : NULL;
+    RenderObjectEntity tmp;
+    size_t size;
+    s8 *setup;
+    u16 shadow;
+    if (s_mirror && s_mirror != m) s_mirror = NULL;             /* a room change freed it */
+    if (!m) return;
+    if (!want) {
+        if (s_mirror) {
+            pe_mirror_fields(&m->render_object, &s_mirror_own);
+            s_mirror = NULL;
+            pe_log("skin", "mirror: the room's own model back");
+        }
+        return;
+    }
+    if (s_mirror && m->render_object.header == want) return;
+    size = 2 * (want->packet34_count * sizeof(RenderPacket34) + want->packet28_count * sizeof(RenderPacket28) +
+                want->packet24_count * sizeof(RenderPacket24) + want->packet1c_count * sizeof(RenderPacket1C)) +
+           want->animation_entry_count * sizeof(RenderAnimationLookupEntry) + want->part_count * sizeof(RenderMatrix);
+    if (size > s_mirror_cap) {
+        u8 *b = realloc(s_mirror_buf, size);
+        if (!b) return;
+        s_mirror_buf = b;
+        s_mirror_cap = size;
+    }
+    if (!s_mirror) s_mirror_own = m->render_object;
+    tmp = m->render_object;
+    shadow = want->shadow_radius;                               /* the setup clears it in the shared header */
+    Render_SetupEntityPrims(&tmp, want, s_mirror_buf, 0x3C0, 0x100, 0, 0x1C0, 2, &setup, 1);
+    want->shadow_radius = shadow;
+    pe_mirror_fields(&m->render_object, &tmp);
+    s_mirror = m;
+    pe_log("skin", "mirror: wearing the skin's model");
+}
+
 /* ---- hooks ---- */
+static int pe_on_mirror_model(void *owner, void *user) {
+    (void)user;
+    return owner && owner == g_PlayerEntity && (s_pointed || pe_worn_outfit());
+}
+
 static int pe_on_player_bank(void *ctx, void *user) {
     PeSkin *k;
     (void)ctx;
@@ -384,6 +462,7 @@ static int pe_on_frame(void *ctx, void *user) {
     } else if (s_pointed || k) {
         pe_keep(s_tex == k ? k : s_pointed);
     }
+    pe_mirror();
     return 0;
 }
 
@@ -402,12 +481,14 @@ static int pe_on_load(void *ctx, void *user) {
     s_tex_known = 0;
     s_tex = s_pointed = s_room_pack = NULL;
     s_fitting = 0;
+    s_mirror = NULL;
     s_gun_written = -1;
     memset(s_replaced, 0, sizeof s_replaced);
     return 0;
 }
 
 void pe_skin_register(const char *mod_id) {
+    pe_hook_add(PE_HOOK_MIRROR_MODEL, pe_on_mirror_model, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_BANK, pe_on_player_bank, NULL, PE_PRIORITY_LATE, mod_id);   /* after the Wardrobe's bank */
     pe_hook_add(PE_HOOK_PLAYER_TEXTURES, pe_on_player_textures, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_ROWS, pe_on_player_rows, NULL, PE_PRIORITY_NORMAL, mod_id);

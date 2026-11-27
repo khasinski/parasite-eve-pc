@@ -39,6 +39,10 @@ enum { PE_PRIORITY_EARLY = -100, PE_PRIORITY_NORMAL = 0, PE_PRIORITY_LATE = 100 
 /* Registration while dispatching is refused (-1). Same-event recursion and nesting beyond eight
  * dispatches are refused (-1); distinct nested events remain supported. Save requests cannot nest. */
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
+/* The same, for the rare handler that goes on while another mod runs alone (pe_mod_run_alone), if
+ * its own mod is otherwise on. Everything else of that mod stays off, so such a handler must not
+ * lean on the rest of it. */
+int pe_hook_add_beside(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
 
 int pe_event_id(const char *name);
 int pe_event_emit(int id, void *ctx);
@@ -55,6 +59,13 @@ int pe_mod_is_running(const char *mod_id);
 const char *pe_mod_current(void);
 int pe_mod_data_available(const char *mod_id);
 int pe_mod_active(const char *mod_id);
+/* In a mod's init: when this mod runs this session, no other mod does (they stay inactive, as if off
+ * in Manage mods, until a start without the request). For a mod whose play must not mix with other
+ * mods' (the randomizer). The first request wins; -1 outside an init or after another mod's. */
+int pe_mod_run_alone(void);
+/* The same in a running session: every other mod stops now (its shutdown runs) until the next
+ * start. For a save that must be played alone (PeSaveRecord.wants_alone). 1 if it took effect. */
+int pe_mod_stand_alone(const char *mod_id);
 int pe_mod_interactive(void);
 /* Whether `mod_id` is set to run at this start (All mods where it counts, its own Manage mods row
  * and the mods it needs). Known once the settings are read, so a mod's init can ask. */
@@ -75,6 +86,10 @@ typedef struct PeLogLine { const char *tag, *text; } PeLogLine;
 #define PE_EVENT_SAVE_COMMITTED "save.committed"
 /* A one-line message over the game for a few seconds (interactive runs). */
 void pe_toast(const char *text);
+
+/* Stop the running mods before releasing the platform or mounted discs.
+ * The process-exit fallback can safely call this again. */
+void pe_mods_shutdown_now(void);
 
 /* host internals shared by its own files */
 /* Around every call into a mod: what crash reports name as the running mod code

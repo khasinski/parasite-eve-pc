@@ -3430,3 +3430,95 @@ static int original_spu_register_serialization(void)
     return valid;
 }
 
+
+#if defined(PE_MELEE_PROTOTYPE) && defined(PE_MODS)
+#include "pe1/battle_runtime.h"
+#include "pe1/item_ids.h"
+#include "../mods/host/pe_mod_menu.h"
+static int prototype_melee_damage_rules(const char *directory) {
+    char settings[4096],prefs[4096];
+    if(!SDL_CreateDirectory(directory))return 0;
+    snprintf(settings,sizeof(settings),"%s/pe_mods.ini",directory);
+    snprintf(prefs,sizeof(prefs),"%s/parasite-eve.toml",directory);
+    FILE *f=fopen(settings,"w");if(!f)return 0;
+    fputs("Manage mods/All mods=1\nManage mods/Melee Combat=1\n",f);fclose(f);
+    PeHookInit init={0,prefs};if(pe_host_init(&init))return 0;
+    if(!pe_mod_is_running("pe_melee"))return 0;
+    int *rear=NULL,*follow=NULL;
+    for(int i=0;i<pe_menu_row_count();++i){
+        PeMenuRow *row=pe_menu_row(i);
+        if(!row->mod_id || strcmp(row->mod_id,"pe_melee"))continue;
+        if(!strcmp(row->label,"Rear hit bonus"))rear=row->value;
+        if(!strcmp(row->label,"Flank follow-up"))follow=row->value;
+    }
+    if(!rear || !follow)return 0;
+    *follow=0;*rear=1;
+    Combatant actor={0};EnemyCombatant enemy={0};BattleEntity aya={0},target={0};BattleAction action={0};
+    g_ActiveActor=&actor;g_PlayerEntity=(FieldActor *)&aya;actor.action=&action;
+    action.actionCode.actionId=8;target.core=&enemy;enemy.hpAlive=10000;
+    target.posZ.fixed=100<<16;g_AyaSaveState.equipped_weapon_slot=0;
+    g_InventoryRuntime.slots[0]=ITEM_CLUB_1;
+    unsigned checked=0;
+    for(int yaw=0;yaw<4096;yaw+=1){
+        target.facingAngle=yaw;
+        int angle=Battle_CalcRelativeAngle(&aya,&target)&4095;if(angle>2048)angle=4096-angle;
+        for(int damage=1;damage<=25;damage+=1){
+            int expected=damage+(angle>=1366?damage/4:0);
+            if(Battle_MeleeOnDamage(&target,damage)!=expected)return 0;
+            ++checked;
+        }
+    }
+    /* Both plain item IDs and per-instance equipment records identify every club. */
+    for(int club=ITEM_CLUB_1;club<=ITEM_CLUB_5;++club){
+        g_InventoryRuntime.equipment[0].itemId=club;
+        for(int instance=0;instance<2;++instance){
+            g_InventoryRuntime.slots[0]=instance?0x100:club;
+            for(int yaw=0;yaw<4096;yaw+=127){
+                target.facingAngle=yaw;
+                int angle=Battle_CalcRelativeAngle(&aya,&target)&4095;
+                if(angle>2048)angle=4096-angle;
+                if(Battle_MeleeOnDamage(&target,23)!=(angle>=1366?28:23))return 0;
+            }
+        }
+    }
+    *rear=0;
+    for(int yaw=0;yaw<4096;yaw+=127){
+        target.facingAngle=yaw;
+        if(Battle_MeleeOnDamage(&target,23)!=23)return 0;
+    }
+    *rear=1;g_InventoryRuntime.slots[0]=0;
+    for(int yaw=0;yaw<4096;yaw+=127){
+        target.facingAngle=yaw;
+        if(Battle_MeleeOnDamage(&target,23)!=23)return 0;
+    }
+    /* Offers expire after 24 battle updates and must never follow dead, removed or reused actors. */
+    *follow=1;g_InventoryRuntime.slots[0]=ITEM_CLUB_2;actor.curHP=100;
+    actor.followUpAngleActionModes[1]=8;aya.actionMode=4;
+    g_FieldActorListHead=(FieldActor *)&target;
+    g_BattleActionQueueCount=1;g_BattleActionIndex=0;
+    g_BattleActionQueue[0].actor=&target;g_BattleActionQueue[0].command=1;
+    for(int yaw=0;yaw<4096;++yaw){
+        target.facingAngle=yaw;
+        int angle=Battle_CalcRelativeAngle(&aya,&target)&4095;if(angle>2048)angle=4096-angle;
+        if(angle>=683 && angle<1366)break;
+    }
+    for(int test=0;test<5;++test){
+        Battle_MeleeResetEncounter();enemy.hpAlive=10000;target.core=&enemy;
+        g_FieldActorListHead=(FieldActor *)&target;g_BattleModeState=0;
+        g_BattleFrameCounter=100;g_FieldPadPressed=0;
+        if(Battle_MeleeOnDamage(&target,20)!=20)return 0;
+        g_BattleFrameCounter=test==0?123:124;
+        EnemyCombatant replacement=enemy;
+        if(test==2)enemy.hpAlive=0;
+        if(test==3)g_FieldActorListHead=NULL;
+        if(test==4)target.core=&replacement;
+        /* Only the first case is still inside the offer window. */
+        if(test>1)g_BattleFrameCounter=101;
+        g_FieldPadPressed=0x200;Battle_MeleeUpdate();
+        if(!!(g_FieldPadPressed&0x200)!=(test!=0))return 0;
+        Battle_MeleeResetEncounter();
+    }
+    printf("Melee: %u rear rounding/angle cases, disabled bonus and non-club invariance passed\n",checked);
+    return 1;
+}
+#endif

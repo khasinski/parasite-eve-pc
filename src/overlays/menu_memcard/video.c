@@ -157,6 +157,7 @@ void MenuCardFirst_StopVideo(void) {
     value = *counter ? *counter - 1 : 0;
     *counter = value;
     Spu_SetVoiceVolume(0);
+    MenuCard_ClearMovieFrames();
     DecDCToutCallback(0);
 }
 

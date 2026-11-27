@@ -19,6 +19,10 @@
 #include "pe_actor_texture_pages.h"
 #include "pe_hooks.h"
 
+#ifdef PE_MODS
+#include <string.h>
+#endif
+
 /* Original USA per-type integration callbacks (800915DC). */
 FieldActorCallbacks g_FieldActorTypeCallbacks[13] = {
     {Entity_IntegratePositionFull, NULL},
@@ -62,6 +66,12 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
     if (!scene || scene[0] >= sizeof(g_FieldActorTypeCallbacks) / sizeof(*g_FieldActorTypeCallbacks)) return NULL;
     available = g_EntityFreeListHead;
     if (!available) return 0;
+    RenderObjectHeader *model = scene[0] < 10 ? g_GameState.bank_slots[scene[0]] : NULL;
+    allocation = NULL;
+    if (model) {
+        allocation = Entity_AllocBlock(Entity_ModelAllocationSize(model, allocateFull));
+        if (!allocation) return NULL;
+    }
     actor = available;
     nextFree = actor->next;
     g_EntityFreeListHead = nextFree;
@@ -103,11 +113,7 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
     }
     actor->type_id = scene[0];
     actor->sub_id = scene[1];
-    if (scene[0] < 10) {
-        actor->model_state.model_header = g_GameState.bank_slots[scene[0]];
-    } else {
-        actor->model_state.allocation_active = 0;
-    }
+    actor->model_state.model_header = model;
     serial = g_EntitySerialCounter;
     actor->flags = 0x10000000;
     actor->anim_step = 0x10000;
@@ -150,23 +156,12 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
         }
     }
 
-    if (allocateFull) {
-        allocation = Entity_AllocBlock(2 * (actor->model_state.model_header->packet34_count * sizeof(RenderPacket34) +
-            actor->model_state.model_header->packet28_count * sizeof(RenderPacket28) +
-            actor->model_state.model_header->packet24_count * sizeof(RenderPacket24) +
-            actor->model_state.model_header->packet1c_count * sizeof(RenderPacket1C)) +
-            actor->model_state.model_header->animation_entry_count * sizeof(RenderAnimationLookupEntry) +
-            actor->model_state.model_header->part_count * sizeof(RenderMatrix) + 2 * sizeof(RenderShadowQuad));
-    } else {
-        allocation = Entity_AllocBlock(actor->model_state.model_header->animation_entry_count * sizeof(RenderAnimationLookupEntry) + actor->model_state.model_header->part_count * sizeof(RenderMatrix) + 2 * sizeof(RenderShadowQuad));
-        actor->flags |= 0x600000A0;
-    }
+    if (!allocateFull) actor->flags |= 0x600000A0;
     actor->allocation_block = (uintptr_t)allocation;
 
     if (scene[0] == 0 && (areaType = &g_SceneAreaType)) {
-        Render_SetupEntityPrims(&actor->render_object, actor->model_state.model_header, allocation + 2 * sizeof(RenderShadowQuad), 0x3C0,
-                                0x100, 0, 0x1C0, 2, (s8 **)&renderSetup,
-                                allocateFull);
+        Render_SetupPlayerModel(&actor->render_object, actor->model_state.model_header,
+                                allocation + 2 * sizeof(RenderShadowQuad), allocateFull);
     } else {
         archive = *g_LoadedSceneAssetBlock;
         directory = SceneAsset_ResolveOffset(archive, archive->directoryOffset);
@@ -274,17 +269,27 @@ void Entity_FrameUpdate(void) {
         }
         Render_SetViewport(camera);
 
+#ifdef PE_MODS
+        GteMatrixStorage fixed_view = {0};
+        PeHookFieldCamera field_camera = {.player = g_PlayerEntity, .matrix = &fixed_view.matrix};
+        int fixed = PE_HOOK(PE_HOOK_FIELD_CAMERA, &field_camera) > 0;
+        int player_only = fixed && field_camera.player_only;
+#endif
         if (!(g_GameStateBlock.flags & 4)) {
             Render_SetGteScreenOffset();
             for (entity = g_FieldActorListHead; entity != 0; entity = entity->next) {
                 if (!(entity->flags & 0x10040)) {
                     GteMatrix *matrix = (GteMatrix *)&entity->render_object.model_matrix;
+                    s16 yaw = entity->rot_y;
+#ifdef PE_MODS
+                    if (player_only && entity == g_PlayerEntity) yaw = (s16)field_camera.player_yaw;
+#endif
 
                     matrix->t[0] = (s16)(entity->pos_x >> 16);
                     matrix->t[1] = (s16)(entity->pos_y >> 16);
                     matrix->t[2] = (s16)(entity->pos_z >> 16);
                     entity->render_object.table_value2c = entity->rot_x;
-                    entity->render_object.table_value2e = entity->rot_y;
+                    entity->render_object.table_value2e = yaw;
                     entity->render_object.table_value30 = entity->rot_z;
                     RotMatrix((GteShortVector *)&entity->render_object.table_value2c, matrix);
                     scale.m[0][0] = entity->move_speed;
@@ -301,7 +306,7 @@ void Entity_FrameUpdate(void) {
                     scale.m[0][1] = 0;
                     gte_CompMatrix(matrix, &scale, matrix);
                     Pgxp_StoreModelMatrix(&entity->render_object.model_matrix,
-                                          entity->rot_x, entity->rot_y, entity->rot_z,
+                                          entity->rot_x, yaw, entity->rot_z,
                                           entity->move_speed);
                     Pgxp_StoreModelPosition16(&entity->render_object.model_matrix,
                                              entity->pos_x, entity->pos_y, entity->pos_z);
@@ -310,11 +315,30 @@ void Entity_FrameUpdate(void) {
         }
 
         Render_SetGteScreenOffset();
+#ifdef PE_MODS
+        u32 saved_view[9];
+        if (fixed) {
+            /* The actor renderer and shadows share this view packet. Leave the
+             * native scroll state intact for scripts and PE field movement. */
+            memcpy(saved_view, g_EntityRenderScratch, sizeof saved_view);
+            memcpy(g_EntityRenderScratch, fixed_view.words, sizeof fixed_view.words);
+            g_EntityRenderScratch[8] = field_camera.distance;
+            gte_ctc2_26(field_camera.distance);
+            Render_ResetGteScreenOffset();
+        }
+#endif
         for (entity = g_FieldActorListHead; entity != 0; entity = entity->next) {
             RenderObjectEntity *object;
+            int draw = 1;
+#ifdef PE_MODS
+            draw = !player_only || entity == g_PlayerEntity;
+#endif
 
             if (entity == g_PlayerEntity && (g_GameState.flags & 0x40000)) {
                 continue;
+            }
+            if (draw && PE_HOOK(PE_HOOK_ACTOR_RENDER, (&(PeHookActorDraw){entity, g_EntityRenderScratch}))) {
+                continue;   /* a mod's own actor (no game model): the mod drew it */
             }
             if (entity->model_state.allocation_active != 0) {
                 entity->render_object.header->scale = entity->move_speed;
@@ -348,7 +372,7 @@ void Entity_FrameUpdate(void) {
                 }
                 Render_TransformVertices(object);
                 Render_TransformSkinnedVertices(object, g_EntityRenderScratch);
-                if (!(entity->flags & 0x20000000)) {
+                if (draw && !(entity->flags & 0x20000000)) {
                     Render_TransformMorphVertices(object, g_EntityRenderScratch);
                     PeModelTextures_Actor(entity);
                     Render_DrawEntity(object, g_EntityRenderScratch);
@@ -360,6 +384,13 @@ void Entity_FrameUpdate(void) {
             }
         }
 
+#ifdef PE_MODS
+        if (fixed) {
+            memcpy(g_EntityRenderScratch, saved_view, sizeof saved_view);
+            gte_ctc2_26(saved_view[8]);
+            Render_SetGteScreenOffset();
+        }
+#endif
         Scene_LoadEntityTextures();
         Pm_RunPrimary();
         Render_ResetGteScreenOffset();
@@ -584,6 +615,11 @@ void Entity_IntegratePositionFull(FieldActor *a)
     a->pos_x = add_word(a->pos_x, a->delta_x);
     a->pos_y = add_word(a->pos_y, a->delta_y);
     a->pos_z = add_word(a->pos_z, a->delta_z);
+    if (PE_HOOK(PE_HOOK_FIELD_MOVE, a) > 0) {
+        a->pos_x = a->base_x;
+        a->pos_y = a->base_y;
+        a->pos_z = a->base_z;
+    }
 }
 
 void Entity_IntegratePositionConditional(FieldActor *a)

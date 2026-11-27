@@ -50,6 +50,10 @@ static struct {
 } s_panel;
 
 static struct { char path[96]; int cursor; } s_remembered[MAX_REMEMBERED];
+/* A digits row (PE_ROW_DIGITS) being typed in: its digits until Enter writes them, Esc drops them. */
+static struct { int row, pos, digit[9]; } s_edit = {-1, 0, {0}};
+/* A word beside a digits row after C or Ctrl+V ("COPIED"), until the next key. */
+static struct { int row; const char *text; } s_flash = {-1, NULL};
 static PeSurface s_surface;
 static float s_scale;
 static int s_origin_x, s_origin_y, s_shown_w, s_shown_h; /* where the window is shown, in pixels */
@@ -218,6 +222,10 @@ static const char *pe_key_hints(void) {
     static char hints[128];
     const char *action = "";
     if (e && e->row < 0) action = "Enter open";
+    else if (e && pe_menu_row(e->row)->kind == PE_ROW_DIGITS) {
+        if (s_edit.row == e->row) return "0-9 type   Left/Right digit   Up/Down change   Enter done   Esc cancel";
+        action = "Enter edit   C copy   Ctrl+V paste";
+    }
     else if (e && pe_menu_row(e->row)->kind == PE_ROW_ACTION) action = "Enter run";
     else if (e && pe_menu_row_adjustable(pe_menu_row(e->row))) action = "Left/Right change";
     snprintf(hints, sizeof hints, pe_l10n_ui("Up/Down select   %s%s%s   F1 close"), action, *action ? "   " : "", back);
@@ -233,7 +241,48 @@ static const PeColor pe_look_dim = {0.55f, 0.62f, 0.74f, 1.0f};
 
 /* Whole pixels, so stacked strips meet without seams. */
 static void pe_px_rect(int x, int y, int w, int h, PeColor c) {
-    if (w > 0 && h > 0) pe_ui_fill_round_rect(&s_surface, (float)x, (float)y, (float)w, (float)h, 0, c);
+    pe_ui_fill_rect(&s_surface, x, y, w, h, c);
+}
+
+/* Two sheets, the back one peeking out top-right: a copy icon `h` tall whose left edge is x, centred on y. */
+static void pe_copy_icon(float x, float y, float h, PeColor c) {
+    const float k = h / 16.0f, t = 1.6f * k, w = 10 * k, sh = 13 * k, off = 3 * k;
+    const float fx = x, fy = y - h * 0.5f + off;                 /* front sheet */
+    pe_ui_fill_round_rect(&s_surface, fx, fy, w, t, t * 0.5f, c);
+    pe_ui_fill_round_rect(&s_surface, fx, fy + sh - t, w, t, t * 0.5f, c);
+    pe_ui_fill_round_rect(&s_surface, fx, fy, t, sh, t * 0.5f, c);
+    pe_ui_fill_round_rect(&s_surface, fx + w - t, fy, t, sh, t * 0.5f, c);
+    pe_ui_fill_round_rect(&s_surface, fx + off, fy - off, w, t, t * 0.5f, c);           /* back: top and right */
+    pe_ui_fill_round_rect(&s_surface, fx + off + w - t, fy - off, t, sh, t * 0.5f, c);
+}
+
+/* A digits row's value: a box per digit (the one being typed in lit up), the copy icon after them,
+ * and COPIED / PASTED beside it just after. `on`: the accent; `ink`: digits; `rim`: the boxes' frames. */
+enum { DIGIT_W = 22, DIGIT_H = 28, DIGIT_GAP = 4 };
+static void pe_paint_digits(int index, const PeMenuRow *row, float cx, float mid, float base, int selected, PeColor on,
+                            PeColor ink, PeColor rim) {
+    const float s = s_scale, total = (row->count * DIGIT_W + (row->count - 1) * DIGIT_GAP) * s;
+    const int editing = s_edit.row == index;
+    char value[16], one[2] = {0, 0};
+    float x = cx - 14 * s - total * 0.5f;
+    unsigned i;
+    snprintf(value, sizeof value, "%0*d", (int)row->count, *row->value);
+    for (i = 0; i < row->count; ++i, x += (DIGIT_W + DIGIT_GAP) * s) {
+        const int lit = editing && (int)i == s_edit.pos;
+        const float y = mid - DIGIT_H * 0.5f * s;
+        one[0] = editing ? (char)('0' + s_edit.digit[i]) : value[i];
+        pe_ui_fill_round_rect(&s_surface, x, y, DIGIT_W * s, DIGIT_H * s, 3 * s,
+                              lit ? on : pe_ui_alpha(rim, editing || selected ? 0.55f : 0.30f));
+        pe_ui_fill_round_rect(&s_surface, x + 1, y + 1, DIGIT_W * s - 2, DIGIT_H * s - 2, 3 * s - 1,
+                              lit ? (PeColor){on.r * 0.40f, on.g * 0.40f, on.b * 0.40f, 0.95f} : (PeColor){0.02f, 0.03f, 0.06f, 0.95f});
+        pe_ui_draw_text(&s_surface, x + DIGIT_W * 0.5f * s, base, 17 * s, one, lit ? (PeColor){1, 1, 1, 1} : ink,
+                        PE_ALIGN_CENTRE);
+        if (lit) pe_ui_fill_round_rect(&s_surface, x + 4 * s, y + DIGIT_H * s + 3 * s, (DIGIT_W - 8) * s, 2 * s, 1 * s, on);
+    }
+    x += (12 - DIGIT_GAP) * s;
+    pe_copy_icon(x, mid, 21 * s, selected && !editing ? on : pe_ui_alpha(rim, 0.9f));
+    if (s_flash.row == index && s_flash.text)
+        pe_ui_draw_text(&s_surface, x + 24 * s, base - 1 * s, 12 * s, s_flash.text, on, PE_ALIGN_LEFT);
 }
 
 static PeColor pe_mix(PeColor a, PeColor b, float t) {
@@ -336,6 +385,61 @@ static void pe_wrapped(float x, float baseline, float step, float width, float e
     }
 }
 
+/* `text` in up to `max` lines no wider than `width` at `em`, broken after a space, slash, backslash,
+ * comma or semicolon (a folder path is one long word); a piece with nowhere to break is cut. The
+ * line count, or -1 if it needs more lines (with `force`, the last line takes what fits). */
+#define PE_INFO_LINE 200
+static int pe_split(const char *text, float width, float em, int max, char lines[][PE_INFO_LINE], int force) {
+    int n = 0;
+    while (*text == ' ') ++text;
+    while (*text && n < max) {
+        char buf[PE_INFO_LINE];
+        size_t len = strlen(text), fit = 0, brk = 0, i;
+        for (i = 1; i <= len && i < sizeof buf; ++i) {
+            memcpy(buf, text, i);
+            buf[i] = '\0';
+            if (pe_ui_text_width(buf, em) > width) break;
+            fit = i;
+            if (i == len || strchr(" /\\,;", text[i - 1])) brk = i;
+        }
+        if (!fit) fit = 1;
+        if (fit < len && n == max - 1 && !force) return -1;       /* doesn't fit in `max` lines */
+        if (fit < len && brk) fit = brk;
+        memcpy(lines[n], text, fit);
+        lines[n][fit] = '\0';
+        while (fit && lines[n][fit - 1] == ' ') lines[n][--fit] = '\0';
+        ++n;
+        text += strlen(lines[n - 1]);
+        while (*text == ' ') ++text;
+        if (n == max && *text && force) break;
+    }
+    return n;
+}
+
+/* An info row's value: in the value column when it fits; else across the room after the label,
+ * smaller and on up to three lines, right-aligned, so a long folder or status reads in full. */
+static void pe_paint_info(const char *label, const char *value, float mid, PeColor c) {
+    const float s = s_scale, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
+    static const struct { float em, step; int lines; } sizes[] = {{16, 0, 1}, {13, 15, 2}, {11, 12, 3}};
+    char lines[3][PE_INFO_LINE];
+    int k, n = -1;
+    if (pe_ui_text_width(value, 16 * s) <= (VALUE_W - 12) * s) {
+        pe_ui_draw_text(&s_surface, value_x, mid + 6 * s, 16 * s, value, c, PE_ALIGN_CENTRE);
+        return;
+    }
+    {
+        const float x1 = (PANEL_W - PANEL_PAD) * s, x0 = (PANEL_PAD + 16) * s + pe_ui_text_width(label, 17 * s) + 20 * s;
+        const float width = x1 - x0;
+        for (k = 0; k < 3 && n < 0; ++k) n = pe_split(value, width, sizes[k].em * s, sizes[k].lines, lines, 0);
+        if (n < 0) k = 3, n = pe_split(value, width, sizes[2].em * s, 3, lines, 1);
+        --k;
+        for (int i = 0; i < n; ++i) {
+            const float base = mid + sizes[k].em * 0.38f * s + (i - (n - 1) * 0.5f) * sizes[k].step * s;
+            pe_ui_draw_text(&s_surface, x1, base, sizes[k].em * s, lines[i], c, PE_ALIGN_RIGHT);
+        }
+    }
+}
+
 /* A row's ground: the selected one's band and cursor, or the rule above an unselected one. */
 static void pe_paint_row_ground(int slot, int selected) {
     const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s;
@@ -359,7 +463,7 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
     const float label_x = (PANEL_PAD + 16) * s, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
     const int off = e->row >= 0 ? !pe_menu_row_active(pe_menu_row(e->row)) : !pe_page_active(e->page);
     const PeColor label = pe_ui_alpha(pe_look_text, (selected ? 1.0f : 0.78f) * (off ? 0.55f : 1.0f));
-    char value[96];
+    char value[512];
     pe_paint_row_ground(slot, selected);
     if (e->row < 0) {                                   /* link */
         pe_ui_draw_text(&s_surface, label_x, base, 17 * s, e->page + e->name_at, label, PE_ALIGN_LEFT);
@@ -374,9 +478,13 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
                                     off ? pe_look_dim : pe_look_red, PE_ALIGN_CENTRE);
             return;
         }
+        if (row->kind == PE_ROW_DIGITS) {
+            pe_paint_digits(e->row, row, value_x, mid, base, selected, pe_look_red, pe_look_text, pe_look_silver);
+            return;
+        }
         pe_menu_row_value_text(row, value, sizeof value);
         if (row->kind == PE_ROW_INFO) {
-            pe_ui_draw_text(&s_surface, value_x, base, 16 * s, value, pe_ui_alpha(pe_look_dim, 0.95f), PE_ALIGN_CENTRE);
+            pe_paint_info(row->label, value, mid, pe_ui_alpha(pe_look_dim, 0.95f));
             return;
         }
         {                                               /* a framed field for values that change */
@@ -575,7 +683,16 @@ static void pe_accept(void) {
     char page[96];
     if (!e) return;
     if (e->row >= 0) {
-        pe_menu_row_accept(pe_menu_row(e->row));
+        PeMenuRow *row = pe_menu_row(e->row);
+        if (row->kind == PE_ROW_DIGITS) {                /* type it in place */
+            unsigned i;
+            int v = *row->value;
+            for (i = row->count; i-- > 0; v /= 10) s_edit.digit[i] = v % 10;
+            s_edit.row = e->row;
+            s_edit.pos = 0;
+            return;
+        }
+        pe_menu_row_accept(row);
         return;
     }
     snprintf(page, sizeof page, "%s", e->page);
@@ -585,6 +702,76 @@ static void pe_accept(void) {
 static void pe_step(int direction) {
     const Entry *e = pe_selected();
     if (e && e->row >= 0) pe_menu_row_step(pe_menu_row(e->row), direction);
+}
+
+/* C (or Ctrl+C, or the pad's west button) copies a selected digits row, Ctrl+V pastes into it. 0: not one. */
+static int pe_clipboard(int paste) {
+    const Entry *e = pe_selected();
+    PeMenuRow *row;
+    if (!e || e->row < 0 || (row = pe_menu_row(e->row))->kind != PE_ROW_DIGITS) return 0;
+    s_flash.row = e->row;
+    if (paste) s_flash.text = pe_menu_row_paste(row) ? "PASTED" : "NO SEED TO PASTE";
+    else s_flash.text = pe_menu_row_copy(row) ? "COPIED" : "COPY FAILED";
+    return 1;
+}
+
+static void pe_edit_done(int keep) {
+    PeMenuRow *row = pe_menu_row(s_edit.row);
+    unsigned i;
+    if (keep) {
+        *row->value = 0;
+        for (i = 0; i < row->count; ++i) *row->value = *row->value * 10 + s_edit.digit[i];
+    }
+    s_edit.row = -1;
+}
+
+/* Keys while a digits row is being typed in; 1 if the key was the editor's. */
+static int pe_edit_event(const SDL_Event *ev) {
+    const int n = (int)pe_menu_row(s_edit.row)->count;
+    int *d = &s_edit.digit[s_edit.pos], typed = -1;
+    if (ev->type == SDL_EVENT_KEY_DOWN) {
+        const SDL_Scancode k = ev->key.scancode;
+        if (k >= SDL_SCANCODE_1 && k <= SDL_SCANCODE_9) typed = (int)(k - SDL_SCANCODE_1) + 1;
+        else if (k >= SDL_SCANCODE_KP_1 && k <= SDL_SCANCODE_KP_9) typed = (int)(k - SDL_SCANCODE_KP_1) + 1;
+        else if (k == SDL_SCANCODE_0 || k == SDL_SCANCODE_KP_0) typed = 0;
+        if (typed >= 0) {
+            *d = typed;
+            if (s_edit.pos < n - 1) ++s_edit.pos;
+            return 1;
+        }
+        switch (k) {
+        case SDL_SCANCODE_LEFT: case SDL_SCANCODE_BACKSPACE: if (s_edit.pos > 0) --s_edit.pos; return 1;
+        case SDL_SCANCODE_RIGHT: if (s_edit.pos < n - 1) ++s_edit.pos; return 1;
+        case SDL_SCANCODE_UP: *d = (*d + 1) % 10; return 1;
+        case SDL_SCANCODE_DOWN: *d = (*d + 9) % 10; return 1;
+        case SDL_SCANCODE_HOME: s_edit.pos = 0; return 1;
+        case SDL_SCANCODE_END: s_edit.pos = n - 1; return 1;
+        case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_SPACE:
+            if (!ev->key.repeat) pe_edit_done(1);
+            return 1;
+        case SDL_SCANCODE_ESCAPE: if (!ev->key.repeat) pe_edit_done(0); return 1;
+        case SDL_SCANCODE_V:
+            if (ev->key.mod & SDL_KMOD_CTRL) { pe_edit_done(0); pe_clipboard(1); }
+            return 1;
+        case SDL_SCANCODE_F1: pe_edit_done(0); return 0;   /* the panel closes as usual */
+        default: return 1;                                 /* nothing else reaches the list meanwhile */
+        }
+    }
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+        switch (ev->gbutton.button) {
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: if (s_edit.pos > 0) --s_edit.pos; return 1;
+        case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: if (s_edit.pos < n - 1) ++s_edit.pos; return 1;
+        case SDL_GAMEPAD_BUTTON_DPAD_UP: *d = (*d + 1) % 10; return 1;
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN: *d = (*d + 9) % 10; return 1;
+        case SDL_GAMEPAD_BUTTON_SOUTH: pe_edit_done(1); return 1;
+        case SDL_GAMEPAD_BUTTON_EAST: pe_edit_done(0); return 1;
+        case SDL_GAMEPAD_BUTTON_GUIDE: pe_edit_done(0); return 0;
+        default: return 1;
+        }
+    }
+    /* Keep pointer navigation on the edited row until accepted or cancelled. */
+    return ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+           ev->type == SDL_EVENT_MOUSE_WHEEL;
 }
 
 static int s_open_key, s_open_button = -1, s_open_trigger_held;
@@ -616,6 +803,21 @@ static void pe_panel_event(const SDL_Event *ev) {
     if (ev->type == SDL_EVENT_QUIT || ev->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         s_panel.open = 0;
         SDL_PushEvent((SDL_Event *)ev);
+        return;
+    }
+    if (ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) s_flash.row = -1;
+    if (s_edit.row >= 0 && pe_edit_event(ev)) {
+        s_panel.dirty = 1;
+        return;
+    }
+    if (ev->type == SDL_EVENT_KEY_DOWN && !ev->key.repeat &&
+        (ev->key.scancode == SDL_SCANCODE_C || (ev->key.scancode == SDL_SCANCODE_V && (ev->key.mod & SDL_KMOD_CTRL))) &&
+        pe_clipboard(ev->key.scancode == SDL_SCANCODE_V)) {
+        s_panel.dirty = 1;
+        return;
+    }
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_WEST && pe_clipboard(0)) {
+        s_panel.dirty = 1;
         return;
     }
     if (ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
@@ -698,6 +900,24 @@ static void pe_panel_event(const SDL_Event *ev) {
     s_panel.dirty = 1;
 }
 
+/* Info rows can change while the panel is open (a worker's progress, a spinner): repaint when the
+ * text of any visible one does. Cheap: their text functions only format. */
+static void pe_watch_info(void) {
+    static uint32_t s_last;
+    uint32_t h = 2166136261u;
+    char value[512];
+    int i, visible = pe_visible_rows();
+    for (i = s_panel.scroll; i < s_panel.count && i < s_panel.scroll + visible; ++i) {
+        const Entry *e = &s_panel.entries[i];
+        PeMenuRow *row;
+        if (e->row < 0 || !(row = pe_menu_row(e->row)) || row->kind != PE_ROW_INFO) continue;
+        pe_menu_row_value_text(row, value, sizeof value);
+        for (const char *p = value; *p; ++p) h = (h ^ (unsigned char)*p) * 16777619u;
+        h = (h ^ (uint32_t)i) * 16777619u;
+    }
+    if (h != s_last) s_last = h, s_panel.dirty = 1;
+}
+
 static void pe_panel_run(void) {
     const int audio_paused = Psyz_AudioIsPaused();
     if (!pe_ui_gpu_ready()) {
@@ -708,10 +928,13 @@ static void pe_panel_run(void) {
     Psyz_PauseHostClock_SDL3(true);
     Psyz_AudioPause();
     Psyz_VideoSetSpeed(1);
+    s_edit.row = -1;
+    s_flash.row = -1;
     s_panel.open = 1;
     s_panel.dirty = 1;
     pe_open_page();
     while (s_panel.open) {
+        pe_watch_info();
         pe_refresh();
         Psyz_VideoVSync(0);
     }

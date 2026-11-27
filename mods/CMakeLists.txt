@@ -3,9 +3,12 @@
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
 # pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone pe_randomizer
+    pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
-    list(APPEND pe_default_mods pe_lang pe_fonts)
+    list(PREPEND pe_default_mods pe_assets)
+    list(REMOVE_ITEM pe_default_mods pe_import)
+    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import pe_rooms)   # pe_enemy_import: F1 > Fights; pe_rooms: RE rooms (prototype); desktop only
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -42,6 +45,38 @@ if("pe_fonts" IN_LIST PE_MOD_LIST)
     add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
+# The importer core (design: Cross-Game Asset Import). Plain C, PC and PS5. Source games register
+# their readers from their own mods (pe_src_<game>); nothing here names a game.
+set(pe_import_core_sources
+    host/import/pe_imp_disc.c       # PS1 disc images: .cue / .bin / .iso, ISO 9660
+    host/import/pe_imp_rofs.c       # RE3 PC rofs*.dat archives, a game folder read like a disc
+    host/import/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
+    host/import/pe_imp_sha256.c     # store keys
+    host/import/pe_imp_model.c      # the Model type: check, store, load
+    host/import/pe_imp_fit.c        # the fit layer: a Model made fit for one use (docs/IMPORT_MODELS.md)
+    host/import/pe_imp_anim.c       # the Animation type: moves with per-frame events
+    host/import/pe_imp_sound.c      # the Sound type: bounded PCM
+    host/import/pe_imp_song.c       # the Song type: sequenced source music
+    host/import/pe_imp_imageset.c   # the ImageSet type: still pictures (room backgrounds)
+    host/import/pe_imp_spu.c        # shared PS1 sound decoder
+    host/import/pe_imp_seq.c        # PS1 sequences (SEQ + VAB) played as PCM
+    host/import/pe_imp_xa.c         # CD-XA streamed audio: decoding and playback
+    host/import/pe_imp_akao.c       # Square's AKAO sequences (FF7) played as PCM
+    host/import/pe_imp_mdec.c       # MDEC frames (room backgrounds) to RGB
+    host/import/pe_imp_rdt.c        # RE1-3 rooms: doors, trigger zones, items, camera zones
+    host/import/pe_imp_logic.c      # the RoomLogic type: what happens in a room, for the runtime
+    host/import/pe_imp_door.c       # RE door transitions as DoorScene records
+    host/import/pe_imp_items.c      # a game's item table (names, icons)
+    host/import/pe_imp_movie.c      # PS1 STR movies, copied once
+    host/import/pe_imp_pictures.c   # TIM pictures (files, maps) kept as stored, and a TIM decoder
+    host/import/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
+    host/import/pe_imp_registry.c   # readers, file patterns, naming tables
+    host/import/pe_imp_store.c      # the extract-once store and the catalog
+    host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
+    host/import/pe_imp_pe_disc.c    # Aya's bundles and rooms from the player's PE disc images
+    host/import/pe_imp_pe_model.c   # PE models and animation rows: decode, encode, pose
+    host/import/pe_imp_pe_retarget.c)   # Aya's rows on another skeleton; the rows rooms install
+
 set(pe_debug_sources
     host/pe_debug_control.c
     host/debug/pe_debug_field.c
@@ -61,8 +96,10 @@ set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
+    host/pe_combat_presets.c # combined presets; features retain their own settings
     host/pe_pages.c         # PE Enhancements page layout
     host/pe_game.c          # game access helpers
+    host/pe_encounter.c     # random encounters in room bytecode
     host/pe_game_facts.c    # game facts as tables: effect names and groups, power tags
     host/pe_main_menu.c     # extra rows in Aya's main menu, screens from game widgets
     host/pe_equip_sync.c    # edited equipment reaches the next battle
@@ -80,12 +117,14 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_import_core_sources}   # the importer core: other games' disc images, import mode only
     ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
     host/pe_model.c         # decoded game models: geometry, textures, idle animation
     host/pe_model_view.c    # a model posed, turned and drawn into a picture
+    host/pe_model_imp.c     # imported models (other games') as viewer models
     host/pe_model_stage.c   # a model on show: turning, idle animation, box or full screen
     host/ui/pe_ui_raster.c  # drawing: boxes and text
     host/ui/pe_ui_gpu.c     # the overlay quad
@@ -98,6 +137,11 @@ endif()
 set(PE_EXTRA_MODS "" CACHE STRING "Additional mods appended to the configured suite")
 set(pe_enabled_mods ${PE_MOD_LIST} ${PE_EXTRA_MODS})
 list(REMOVE_DUPLICATES pe_enabled_mods)
+# The native battle module is compiled only for an explicit prototype build.
+list(REMOVE_ITEM pe_enabled_mods pe_melee)
+if(PE_MELEE_PROTOTYPE)
+    list(APPEND pe_enabled_mods pe_melee)
+endif()
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")
@@ -123,9 +167,12 @@ if("pe_phone" IN_LIST PE_MOD_LIST)
 endif()
 
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
-target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
+target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host host/import
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
-target_compile_definitions(pe-mods PRIVATE __psyz)
+target_compile_definitions(pe-mods PRIVATE __psyz PE_COMBAT_PRESETS=1)
+if(PE_MELEE_PROTOTYPE)
+    target_compile_definitions(pe-mods PRIVATE PE_MELEE_PROTOTYPE=1)
+endif()
 target_link_libraries(pe-mods PRIVATE psyz)
 if(TARGET pe_download_json AND TARGET pe_download_zip)
     target_link_libraries(pe-mods PRIVATE pe_download_json pe_download_zip)
@@ -139,6 +186,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
         ${PROJECT_SOURCE_DIR}/tests/pe_mod_frequency_test.c
         pe_qol/pe_battle_frequency.c
+        host/pe_encounter.c
         pe_qol/pe_move.c)
     target_include_directories(pe-mod-frequency PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
@@ -194,6 +242,15 @@ if(BUILD_TESTING)
     target_compile_options(test-mod-econ-store PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
     target_link_libraries(test-mod-econ-store PRIVATE psyz)
     add_test(NAME mod-econ-store COMMAND test-mod-econ-store)
+
+    add_executable(test-mod-alone-save ${PROJECT_SOURCE_DIR}/tests/pe_mod_alone_save_test.c host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
+        host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
+    target_include_directories(test-mod-alone-save PRIVATE ${PROJECT_SOURCE_DIR}/include host
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-alone-save PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-alone-save PRIVATE psyz)
+    add_test(NAME mod-alone-save COMMAND test-mod-alone-save)
 endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
@@ -259,17 +316,12 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
         pe_rebalance/pe_atb_items.c pe_rebalance/pe_pe_balance.c host/pe_game_facts.c)
     add_executable(test-mod-combine ${PROJECT_SOURCE_DIR}/tests/pe_mod_combine_colour_test.c
         pe_rebalance/pe_combine.c pe_rebalance/pe_panacea.c)
-    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c
-        ${PROJECT_SOURCE_DIR}/src/main/item/actions.c)
+    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c)
     foreach(target test-mod-atb test-mod-combine test-mod-pe)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_rebalance)
         target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
         target_link_libraries(${target} PRIVATE psyz)
     endforeach()
-    if(MINGW)
-        # Allow unused original item-module entry points to be discarded in this fixture.
-        target_compile_options(test-mod-pe PRIVATE -fno-asynchronous-unwind-tables)
-    endif()
     add_test(NAME mod-atb COMMAND test-mod-atb)
     add_test(NAME mod-combine COMMAND test-mod-combine)
     add_test(NAME mod-panacea-off COMMAND test-mod-combine --panacea-off)
@@ -277,6 +329,243 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
     add_test(NAME mod-pe-saved-vanilla COMMAND test-mod-pe --saved-vanilla)
     add_test(NAME mod-pe-cost COMMAND test-mod-pe --cost)
     add_test(NAME mod-pe-actor COMMAND test-mod-pe --actor)
+endif()
+
+if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
+    # Every room through the real loader; the step listing feeds mods/pe_randomizer/tools.
+    add_executable(test-mod-randomizer-rooms ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_rooms_test.c
+        $<TARGET_OBJECTS:parasite-eve-test-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-camera>
+        ${PE_COMMON_GAME_OBJECTS}
+        $<TARGET_OBJECTS:pe-mods>
+        $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>
+        $<TARGET_OBJECTS:parasite-eve-original-pad>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>)
+    target_include_directories(test-mod-randomizer-rooms PRIVATE ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-randomizer-rooms PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-randomizer-rooms PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-rooms PRIVATE pe_download_json pe_download_zip)
+    endif()
+    # Second file: the randomizer's spot table against the walk (sites, and the GiveItems it leaves alone).
+    # Third: actor models, VRAM words and TIM rectangles (battle rando model swap).
+    add_test(NAME mod-randomizer-rooms COMMAND test-mod-randomizer-rooms
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-rooms.txt" "${CMAKE_CURRENT_BINARY_DIR}/randomizer-spots.txt"
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-models.txt")
+    set_tests_properties(mod-randomizer-rooms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer spots:")
+
+    # The New York map (door target M0000): destinations, their enable bits and the room each pick loads.
+    add_executable(test-mod-randomizer-exits ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_exits_test.c
+        $<TARGET_OBJECTS:parasite-eve-test-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-camera>
+        ${PE_COMMON_GAME_OBJECTS}
+        $<TARGET_OBJECTS:pe-mods>
+        $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>
+        $<TARGET_OBJECTS:parasite-eve-original-pad>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>)
+    target_include_directories(test-mod-randomizer-exits PRIVATE ${PROJECT_SOURCE_DIR}/include
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-randomizer-exits PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-randomizer-exits PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-exits PRIVATE pe_download_json pe_download_zip)
+    endif()
+    add_test(NAME mod-randomizer-exits COMMAND test-mod-randomizer-exits
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-exits.txt")
+    # Only the summary line counts as a pass: a run cut short with exit code 0 must fail.
+    set_tests_properties(mod-randomizer-exits PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer exits:")
+
+    # Battle rando models: enemy models, textures and rows swapped across rooms, through the real loader and spawn.
+    add_executable(test-mod-randomizer-models ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_models_test.c
+        $<TARGET_OBJECTS:parasite-eve-test-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-camera>
+        ${PE_COMMON_GAME_OBJECTS}
+        $<TARGET_OBJECTS:pe-mods>
+        $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>
+        $<TARGET_OBJECTS:parasite-eve-original-pad>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>)
+    target_include_directories(test-mod-randomizer-models PRIVATE ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-randomizer-models PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-randomizer-models PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-models PRIVATE pe_download_json pe_download_zip)
+    endif()
+    add_test(NAME mod-randomizer-models COMMAND test-mod-randomizer-models
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-models-swap.txt")
+    set_tests_properties(mod-randomizer-models PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer models:")
+    # Room scripts run headless at given story values: which actors a room places, what its start writes.
+    add_executable(test-mod-randomizer-run ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_run_test.c
+        ${PROJECT_SOURCE_DIR}/tests/pe_stall_stack.c
+        $<TARGET_OBJECTS:parasite-eve-test-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-camera>
+        ${PE_COMMON_GAME_OBJECTS}
+        $<TARGET_OBJECTS:pe-mods>
+        $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>
+        $<TARGET_OBJECTS:parasite-eve-original-pad>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>)
+    target_include_directories(test-mod-randomizer-run PRIVATE ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-randomizer-run PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-randomizer-run PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-run PRIVATE pe_download_json pe_download_zip)
+    endif()
+    # Without a runs file: every room once at V0x4a = 0. mods/pe_randomizer/tools/runlist.py writes a
+    # fuller runs file from the story walk; run the test binary on it by hand (into randomizer-run.txt,
+    # which this test's own output doesn't overwrite).
+    add_test(NAME mod-randomizer-run COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-run-rooms.txt")
+    set_tests_properties(mod-randomizer-run PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The spots with a seed's layout patched in (tools/giveruns.py wrote the runs): each give hands out the
+    # layout's item, and a spot's copy in another room gives nothing once its flag is set.
+    add_test(NAME mod-randomizer-gives COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-gives.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/gives-runs.txt")
+    set_tests_properties(mod-randomizer-gives PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The same on Disc 2's image (PE_TEST_DISC2; skipped without it): after the disc change the rooms load
+    # from disc 2, and every give still hands out the layout's item.
+    add_test(NAME mod-randomizer-gives-disc2 COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-gives-disc2.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/gives-runs.txt")
+    set_tests_properties(mod-randomizer-gives-disc2 PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_RUN_DISC2=1" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Story gates with the real mod (its host starts headless, files in randomizer-gate.txt.mods): a moved
+    # key's lock answers "not held" until the story bit of the key's vanilla spot is set.
+    add_test(NAME mod-randomizer-gate COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-gate.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/gate-runs.txt")
+    set_tests_properties(mod-randomizer-gate PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The enemy option end to end (tools/foegame-runs.txt): with F1 Randomize enemies on, the mod's own New Game puts
+    # in seed 123456's foe plan; each room it moves has exactly those swaps, and its fight runs them and is won.
+    add_test(NAME mod-randomizer-foegame COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-foegame.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foegame-runs.txt")
+    set_tests_properties(mod-randomizer-foegame PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The same lines in the game's own frame loop (PE_RUN_REAL): models load, the battle starts through op 85,
+    # the foes' AI, hits and deaths are the game's, and Aya shoots until the battle is over. Fails a line whose
+    # battle doesn't start or end, or where a foe leaves the room's floor; tools/realfights-known.txt lists the
+    # lines known to end another way. About five minutes.
+    add_test(NAME mod-randomizer-realfights COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-realfights.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foegame-runs.txt")
+    set_tests_properties(mod-randomizer-realfights PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_RUN_REAL=1;PE_RUN_REAL_KNOWN=${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/realfights-known.txt"
+        PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Story windows for the fill (tools/windowruns.py wrote the runs from the story walk): every table give
+    # in every walk state of its room, every walked lock with and without its key. Data, no checks;
+    # `windowruns.py table` turns the output into windows.txt.
+    add_test(NAME mod-randomizer-windows COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-windows.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/windows-runs.txt")
+    set_tests_properties(mod-randomizer-windows PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Chest revisits for Hard (tools/revisitruns.py wrote the runs): each chest of a key's day or earlier,
+    # loaded at each story value where the key's lock asks, by its usual door. Data, no checks;
+    # `revisitruns.py table` turns the output into revisit.txt.
+    add_test(NAME mod-randomizer-revisit COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-revisit.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/revisit-runs.txt")
+    set_tests_properties(mod-randomizer-revisit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Hard's moved doors with the real mod (files in randomizer-doors.txt.mods): each fires to its new room,
+    # the new room places Aya on its floor and its doors fire; on Day 1 the doors stay vanilla.
+    add_test(NAME mod-randomizer-doors COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-doors.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/door-runs.txt")
+    set_tests_properties(mod-randomizer-doors PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Hard's key walks (tools/hardwalk.sh wrote the runs, hardwalk-runs.txt in build-mods/mods): every door the
+    # walks to Hard's key chests went through, at the key's lock-time values, still fires to the same room.
+    add_test(NAME mod-randomizer-hardwalk COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-hardwalk.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/hardwalk-runs.txt")
+    set_tests_properties(mod-randomizer-hardwalk PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # Moved keys in chests on a full bag: cancelling leaves the key in the chest, the swap menu puts it in the bag.
+    add_test(NAME mod-randomizer-bag COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-bag.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/bag-runs.txt")
+    set_tests_properties(mod-randomizer-bag PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The shipped generator (key moves on; tests/run_pe_randomizer_test.ps1 builds the same), for its --layouts.
+    add_executable(test-mod-randomizer-keys ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_test.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_gen.c)
+    target_include_directories(test-mod-randomizer-keys PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer)
+    target_compile_definitions(test-mod-randomizer-keys PRIVATE PE_RAND_MOVE_KEYS=1)
+    # Hard layouts of seeds 1..300 walked by tools/keysolve.py --hard (tools/keysolve_ctest.py). Needs the
+    # story walk's outputs in build-mods/mods (tools/storyruns.sh, fixpoint.sh), else skipped.
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mod-randomizer-keysolve COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/keysolve_ctest.py $<TARGET_FILE:test-mod-randomizer-keys> 300
+            story-graph.txt randomizer-exits.txt ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_spots.h
+            --runs rwin/base-fix.txt --zones @rwin/zones.list --hard ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_randomizer.c)
+        set_tests_properties(mod-randomizer-keysolve PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900 LABELS "story-walk"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Enemy census (tools/enemyscan.py) from the rooms listing into enemies.txt, checked against the
+        # bestiary's creature keys. Reads the disc (PE_TEST_DISC) for starting actors only; no game window.
+        add_test(NAME mod-randomizer-enemies COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/enemyscan.py randomizer-rooms.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_collection/pe_collection_data.h --out enemies.txt --check)
+        set_tests_properties(mod-randomizer-enemies PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+            DEPENDS mod-randomizer-rooms WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Enemy AI scan (tools/enemyai.py): what each census actor's script needs from its room (PM slots,
+        # entity numbers, spawner events and vars) and the conflicts per pair, into enemy-ai.txt. Reads the
+        # disc for the rooms' PM slot records; no game window.
+        add_test(NAME mod-randomizer-enemyai COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/enemyai.py randomizer-rooms.txt enemies.txt
+            --source ${PROJECT_SOURCE_DIR}/src/main/scene/room_load.c --out enemy-ai.txt --check)
+        set_tests_properties(mod-randomizer-enemyai PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
+            DEPENDS mod-randomizer-enemies PASS_REGULAR_EXPRESSION "Enemy AI: 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Battle randomizer stats: fights run headless with the real mod and the enemy ops on; each room's own
+        # setup matches pe_rand_enemies.h, and a forced actor takes another's stat block, the rest unchanged.
+        add_test(NAME mod-randomizer-battlestats COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/battlestats.py randomizer-battlestats.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h
+            --run $<TARGET_FILE:test-mod-randomizer-run> ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/battlestats-runs.txt)
+        set_tests_properties(mod-randomizer-battlestats PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+            ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Battle stats: .* 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Battle randomizer AI: a forced actor runs another room's script (with its model and numbers) in a fight
+        # run headless with the real mod; the run test checks the script was given and run and the fight won.
+        add_test(NAME mod-randomizer-battleai COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/battlestats.py randomizer-battleai.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h
+            --run $<TARGET_FILE:test-mod-randomizer-run> ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/battleai-runs.txt)
+        set_tests_properties(mod-randomizer-battleai PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+            ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Battle stats: .* 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Battle randomizer seed plans (seeds 1-3, the real generator's): each room whose own fight is won headless
+        # runs it with every moved slot's foe (script and model) and must win it (tools/foeruns.py: foefights*.txt).
+        add_test(NAME mod-randomizer-foefights COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foeruns.py $<TARGET_FILE:test-mod-randomizer-keys>
+            $<TARGET_FILE:test-mod-randomizer-run> 1,2,3 enemies.txt randomizer-rooms.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h
+            --known ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foefights-known.txt)
+        set_tests_properties(mod-randomizer-foefights PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+            ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Foe fights: .* 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Every swap any seed can plan (tools/foeruns.py --pairs: each slot with each foe pe_rand_foes.h allows it),
+        # fought the same way in the rooms whose own fight is won headless. A few minutes; rerun after a change to
+        # the foe table, the AI swap or the generator's rules. foepairs-fails.txt lists the failing lines.
+        add_test(NAME mod-randomizer-foepairs COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foeruns.py $<TARGET_FILE:test-mod-randomizer-keys>
+            $<TARGET_FILE:test-mod-randomizer-run> 0 enemies.txt randomizer-rooms.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h --out foepairs
+            --pairs ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_foes.h
+            --known ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foepairs-known.txt)
+        set_tests_properties(mod-randomizer-foepairs PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600 LABELS "game-assets"
+            ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Foe fights: .* 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    endif()
 endif()
 
 # Feature regressions must run under CTest on every supported platform, rather
@@ -298,6 +587,104 @@ function(pe_feature_test name)
     endif()
     add_test(NAME mod-${name} COMMAND test-mod-${name})
 endfunction()
+if(BUILD_TESTING)
+    # Importer core and the RE2 reader on made-up data; PE_TEST_RE2_DISC adds the real disc.
+    pe_feature_test(import ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c)
+    target_include_directories(test-mod-import PRIVATE host/import pe_src_re2)
+    if(NOT PE_PS5_GAME)
+        pe_feature_test(assets ${PROJECT_SOURCE_DIR}/tests/pe_mod_assets_test.c
+            pe_assets/pe_assets.c ${pe_import_core_sources})
+        target_include_directories(test-mod-assets PRIVATE host/import)
+    endif()
+    # The RE3 reader on a made-up person; PE_TEST_RE3_DISC adds every player file on the disc.
+    pe_feature_test(re3 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_test.c ${pe_import_core_sources}
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-re3 PRIVATE host/import pe_src_re3)
+    # RE3's enemies: the PC folder (rofs archives), EMD models with their moves, enemy sound banks,
+    # on made-up data; PE_TEST_RE3_PC (the RE3 PC folder) adds Nemesis (EM34, E_34) read for real.
+    pe_feature_test(re3-enemy ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_enemy_test.c ${pe_import_core_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-re3-enemy PRIVATE host/import pe_src_re3)
+    set_tests_properties(mod-re3-enemy PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # The RE1 reader on a made-up person; PE_TEST_RE1_DISC adds the four people on the disc.
+    pe_feature_test(re1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re1_test.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c)
+    target_include_directories(test-mod-re1 PRIVATE host/import pe_src_re1)
+    # The Dino Crisis reader on a made-up archive; PE_TEST_DC1_DISC adds Regina's four outfits.
+    pe_feature_test(dc1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_dc1_test.c ${pe_import_core_sources}
+        pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c)
+    target_include_directories(test-mod-dc1 PRIVATE host/import pe_src_dc1)
+    # Music playback on made-up songs; PE_TEST_RE2_DISC adds RE2's MAIN00 (PE_TEST_SEQ_WAV writes it out).
+    pe_feature_test(seq ${PROJECT_SOURCE_DIR}/tests/pe_mod_seq_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_music.c pe_src_re1/pe_src_re1_music.c pe_src_re3/pe_src_re3_music.c)
+    target_include_directories(test-mod-seq PRIVATE host/import pe_src_re2 pe_src_re1 pe_src_re3)
+    # Streamed (CD-XA) audio on made-up sectors; PE_TEST_DC1_DISC adds Dino Crisis's music.
+    pe_feature_test(xa ${PROJECT_SOURCE_DIR}/tests/pe_mod_xa_test.c ${pe_import_core_sources}
+        pe_src_dc1/pe_src_dc1_music.c)
+    target_include_directories(test-mod-xa PRIVATE host/import pe_src_dc1)
+    # AKAO (FF7) playback on made-up songs; PE_TEST_FF7_DISC adds FF7 CD1's music.
+    pe_feature_test(akao ${PROJECT_SOURCE_DIR}/tests/pe_mod_akao_test.c ${pe_import_core_sources}
+        pe_src_ff7/pe_src_ff7.c pe_src_ff7/pe_src_ff7_music.c)
+    target_include_directories(test-mod-akao PRIVATE host/import pe_src_ff7)
+    # MDEC frames and room backgrounds; PE_TEST_RE1/2/3_DISC decode every room view on those discs
+    # (PE_TEST_ROOMS_DIR writes them out).
+    pe_feature_test(mdec ${PROJECT_SOURCE_DIR}/tests/pe_mod_mdec_test.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_rooms.c pe_src_re2/pe_src_re2_rooms.c pe_src_re3/pe_src_re3_rooms.c
+        ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
+    target_include_directories(test-mod-mdec PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
+    # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
+    pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c
+        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_music.c
+        pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
+        pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
+        pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_logic.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_pld.c
+        ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
+    target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
+    # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
+    pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_core_sources})
+    target_include_directories(test-mod-fit PRIVATE host/import)
+    # The Wardrobe's weapons on view: imported models as viewer models (made-up), and with
+    # PE_TEST_DISC / PE_TEST_RE1/2/3_DISC Aya's held gun and the RE games' weapons, listed by name and
+    # drawn as the screen draws them (PE_TEST_WEAPONS_ALL: every one).
+    pe_feature_test(weapon-view ${PROJECT_SOURCE_DIR}/tests/pe_mod_weapon_view_test.c ${pe_import_core_sources}
+        host/pe_model.c host/pe_model_view.c host/pe_model_imp.c pe_wardrobe/pe_wardrobe_weapons.c
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-weapon-view PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3 pe_wardrobe)
+    set_tests_properties(mod-weapon-view PROPERTIES TIMEOUT 600 ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
+    # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
+    pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-model-audit PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
+    # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
+    pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c pe_wardrobe/pe_skin_build.c)
+    target_include_directories(test-mod-skin-build PRIVATE host/import pe_src_re2)
+    target_compile_definitions(test-mod-skin-build PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    set_tests_properties(mod-skin-build PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)
+        # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
+        pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1_objects.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_movies.c pe_src_re3/pe_src_re3_files.c pe_src_re3/pe_src_re3_objects.c pe_src_re3/pe_src_re3.c
+            pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
+            pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
+            pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
+            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
+        target_include_directories(test-mod-import-flow PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)
+        target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+        target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
+        set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+            ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+endif()
 if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(loot ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
@@ -316,6 +703,24 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
     pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
+    pe_feature_test(combat-presets ${PROJECT_SOURCE_DIR}/tests/pe_combat_presets_test.c host/pe_combat_presets.c)
+    target_compile_definitions(test-mod-combat-presets PRIVATE PE_COMBAT_PRESETS=1)
+    pe_feature_test(encounter ${PROJECT_SOURCE_DIR}/tests/pe_encounter_test.c host/pe_encounter.c)   # random-encounter spots
+endif()
+if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
+    # Imported enemy packs: loading, refusals, posing; with PE_TEST_ENEMY_PACK also a real pack.
+    pe_feature_test(enemy-pack ${PROJECT_SOURCE_DIR}/tests/pe_enemy_pack_test.c pe_enemy_import/pe_enemy_pack.c)
+    target_include_directories(test-mod-enemy-pack PRIVATE pe_enemy_import)
+    target_link_libraries(test-mod-enemy-pack PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-pack PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # The enemies builder: a made-up model and moves -> a pack that loads back (events, sounds, hit
+    # frames); PE_TEST_RE3_PC adds Nemesis built from the RE3 PC folder through the importer's store.
+    pe_feature_test(enemy-build ${PROJECT_SOURCE_DIR}/tests/pe_enemy_build_test.c pe_enemy_import/pe_enemy_build.c
+        pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-enemy-build PRIVATE pe_enemy_import host/import pe_src_re3)
+    target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's
@@ -348,7 +753,9 @@ if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(collection ${PROJECT_SOURCE_DIR}/tests/pe_mod_collection_test.c pe_collection/pe_collection.c pe_collection/pe_profile.c pe_collection/pe_bestiary.c pe_collection/pe_pack_pe1.c
-        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c)
+        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c
+        pe_wardrobe/pe_skin_target.c pe_wardrobe/pe_skin_build.c ${pe_import_core_sources})   # the Wardrobe registers the skins target
+    target_include_directories(test-mod-collection PRIVATE host/import)
     set_tests_properties(mod-collection PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)

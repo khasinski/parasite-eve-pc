@@ -71,6 +71,20 @@ int pe_disc_player(int bank, PeRoomBlobs *out) {
     return 1;
 }
 
+int pe_disc_held_gun(PeRoomBlobs *out) {
+    PeDiscFile archive;
+    memset(out, 0, sizeof *out);
+    if (!pe_archive(&archive) ||
+        !pe_run(&archive, g_PeImageSectorTable[39], g_PeImageSectorTable[40] - g_PeImageSectorTable[39], &out->texture, &out->texture_size) ||
+        !pe_run(&archive, g_PeImageSectorTable[12], g_PeImageSectorTable[13] - g_PeImageSectorTable[12], &out->data, &out->data_size) ||
+        !out->texture || !out->data) {
+        pe_mod_log(NULL, "disc: the held gun could not be read");
+        pe_disc_room_free(out);
+        return 0;
+    }
+    return 1;
+}
+
 void pe_disc_room_free(PeRoomBlobs *room) {
     free(room->scratch);
     free(room->texture);

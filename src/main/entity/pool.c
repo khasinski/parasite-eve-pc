@@ -65,13 +65,13 @@ void Entity_InitFreePool(void)
     g_EntityFreeListHead = g_EntityPool;
     for (i = 0; i < 13; ++i) g_EntityPool[i].next = &g_EntityPool[i + 1];
     g_EntityPool[13].next = 0;
-    for (i = 0; i < 16; ++i) g_EntityAllocationTable[i].address = 0;
+    for (i = 0; i < ENTITY_ALLOCATION_SLOTS; ++i) g_EntityAllocationTable[i].address = 0;
     g_PlayerEntity = 0;
 }
 
 /* Storage formerly supplied by the PS1 linker symbol map. */
 FieldActor g_EntityPool[14];
-EntityAllocationBlock g_EntityAllocationTable[16];
+EntityAllocationBlock g_EntityAllocationTable[ENTITY_ALLOCATION_SLOTS];
 u32 g_ScriptVariableBank[512];
 int g_ScriptNodeActiveFlags[64];
 Pe1GameState g_GameState;

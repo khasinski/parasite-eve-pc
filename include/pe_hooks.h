@@ -95,11 +95,50 @@ typedef enum PeHookId {
     PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
     PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
                             * tries the medicines in may change; appended */
+    PE_HOOK_ACTOR_RENDER, /* PeHookActorDraw: Entity_FrameUpdate, before an actor's model is posed
+                           * and drawn (view set); nonzero: the actor is a mod's own and the mod
+                           * drew it: the game's posing, draw and shadow are skipped; appended */
+    PE_HOOK_FIELD_BACKGROUND, /* PeHookFieldBackground: the room picture, each field frame. Stage 0
+                               * (Render_BuildMeshList): nonzero skips the room's own background
+                               * tiles this frame. Stage 1 (Render_LinkFieldSubpixel, everything
+                               * linked, before the GPU gets it): a mod may link its own packets
+                               * into the ordering table (4095 = farthest). A nonzero stage 1
+                               * result also skips the native backdrop and its scroll offset. */
+    PE_HOOK_FIELD_CAMERA, /* PeHookFieldCamera: nonzero supplies a fixed view for native actor drawing */
+    PE_HOOK_FIELD_MOVE, /* FieldActor *: after Aya integrates a movement step; positive consumes it
+                         * in a preview and restores her host-room position */
+    PE_HOOK_ITEM_ACTIONS_READY, /* PeHookItemActions: custom actions and initial cursor are ready */
+    PE_HOOK_ITEM_ACTION_ROW, /* PeHookItemActionRow: remap or draw a popup row */
+    PE_HOOK_QUICK_SEND_STACK, /* PeHookQuickSendStack: optional storage stack transfer */
+    PE_HOOK_MIRROR_MODEL, /* FieldActor * reflected owner: return 1 to draw its current model. */
+    PE_HOOK_ENEMY_FIELD, /* PeHookEnemyField: Entity_WriteFieldByCmd entry (script ops 90 / 206 on an
+                          * actor); the value may be changed */
+    PE_HOOK_ENEMY_POWER, /* PeHookEnemyPower: an actor's script sets an attack's power (ops 112 / 183); the
+                          * power may be changed */
     PE_HOOK_FIELD_WEAPON_DRAW, /* RenderObjectEntity*: field Aya; handled replaces the stock weapon draw */
     PE_HOOK_CUTSCENE_WEAPON_POSE, /* RenderObjectEntity*: temporary Aya rotation overrides */
     PE_HOOK_FIELD_WEAPON_POSE, /* RenderObjectEntity*: decoded field Aya pose before transforms */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookFieldBackground {
+    int stage;          /* 0: may skip the room's own tiles; 1: may link packets */
+    int slot;           /* stage 1: the draw slot (0/1); packets must stay alive until it is shown */
+    void *ordering;     /* stage 1: RenderNativeTag[4096], the frame's ordering table */
+} PeHookFieldBackground;
+
+typedef struct PeHookFieldCamera {
+    const void *player;  /* FieldActor *, or NULL */
+    void *matrix;        /* output GteMatrix with Q12 rotation and integer translation */
+    int distance;        /* output GTE projection distance in pixels */
+    int player_only;     /* preview pose for Aya, with other native models hidden */
+    int player_yaw;      /* output model yaw when player_only is set */
+} PeHookFieldCamera;
+
+typedef struct PeHookActorDraw {
+    void *actor;         /* FieldActor * */
+    const void *view;    /* the entity view matrix (GteMatrix, then the projection distance) */
+} PeHookActorDraw;
 
 typedef struct PeHookStealResult {
     int item, success;
@@ -292,6 +331,17 @@ typedef enum PeNewGameKind {
     PE_NEW_GAME_TUTORIAL = 3,  /* MenuCard_RunListScreen result 3 */
 } PeNewGameKind;
 
+typedef struct PeHookEnemyField {
+    struct FieldActor *actor;
+    int code;  /* field code, 0x28+ (battle/context.c) */
+    int value;
+} PeHookEnemyField;
+
+typedef struct PeHookEnemyPower {
+    struct FieldActor *actor;
+    int power;
+} PeHookEnemyPower;
+
 typedef struct PeHookNewGame {
     int kind; /* PeNewGameKind */
 } PeHookNewGame;
@@ -340,6 +390,17 @@ typedef struct PeHookItemActions {
     int context;                  /* g_MenuItemActionContext: 0 consumables, 1 and 2 others */
     int list_id, slot;            /* g_MenuActiveItemList (0 = Aya's bag), g_MenuActiveItemSlot */
 } PeHookItemActions;
+
+typedef struct PeHookItemActionRow {
+    struct MenuWidgetNode *list;
+    int row;
+} PeHookItemActionRow;
+
+typedef struct PeHookQuickSendStack {
+    int from_mode, from_index, vacancy;
+    int amount; /* zero queries, positive commits exactly that many */
+    int count, capacity, moved;
+} PeHookQuickSendStack;
 
 /* Removing the item on slot `index` of the active list (g_InvItemPtr). A handler that keeps the
  * slot (it took one copy off a stack) sets result to the item id it gave and returns nonzero. */

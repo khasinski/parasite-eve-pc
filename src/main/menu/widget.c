@@ -748,8 +748,12 @@ void MenuWidget_DrawListRow(MenuWidgetNode *node,
             (x != node->cursor_x || row + node->scroll_y != node->cursor_y)))
             dimmed = 1;
         g_DrawTextDimmed = dimmed;
-        if (draw_callback)
-            draw_callback(node->grid_width * (node->scroll_y + row) + x);
+        if (draw_callback) {
+            PeHookItemActionRow action = {node, node->grid_width * (node->scroll_y + row) + x};
+            if ((node->selected_base != 2 && node->selected_base != 3) ||
+                !PE_HOOK(PE_HOOK_ITEM_ACTION_ROW, &action))
+                draw_callback(action.row);
+        }
         if ((VSync(-1) & 8) && x == node->appearance.cursorTargetX &&
             row + node->scroll_y == node->target_y) {
             g_TextCursorX -= 2;
