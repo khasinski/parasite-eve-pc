@@ -35,6 +35,14 @@ def nodes():
     return list(ET.fromstring(adb('shell', 'cat', '/data/local/tmp/pe-saf-test.xml')).iter('node'))
 
 
+def wait_for_save_picker():
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if any(n.get('class') == 'android.widget.EditText' for n in nodes()):
+            return
+    raise AssertionError('System save picker did not open')
+
+
 def click(text):
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -84,7 +92,7 @@ def report_test():
         adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
         launcher = adb('shell', 'pidof', pkg).strip()
         click('Export diagnostic report')
-        assert any(n.get('class') == 'android.widget.EditText' for n in nodes()), 'System save picker did not open'
+        wait_for_save_picker()
         for _ in range(3):
             adb('shell', 'input', 'keyevent', '4')
             if any(n.get('text','').casefold() == 'export diagnostic report'
@@ -232,7 +240,7 @@ def saves_test():
             owned.append(path)
         adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
         click('Export saves')
-        assert any(n.get('class') == 'android.widget.EditText' for n in nodes())
+        wait_for_save_picker()
         for _ in range(3):
             adb('shell', 'input', 'keyevent', '4')
             if any(n.get('text','').casefold() == 'export saves' and n.get('enabled') == 'true' for n in nodes()):
