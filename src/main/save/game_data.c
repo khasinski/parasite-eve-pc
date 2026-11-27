@@ -6,6 +6,7 @@
 #include "pe1/battle_cmd.h"
 #include "pe1/draw_state.h"
 #include "pe1/game_state.h"
+#include "pe1/pe_image.h"
 #include "pe1/game_timers.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/inventory_state.h"
@@ -38,8 +39,11 @@ int g_MenuScrollStep;
 
 extern int g_SaveMetadataWindowIndex;
 
+/* The language index: 0 Japanese, 1 English (the USA release always stores 1). It picks the
+ * Japanese or English name and prompt buffers, battle lines, item-message word order and the
+ * name-entry pages (kana first in Japanese). */
 void Save_ResetMetadataWindow(void) {
-    g_SaveMetadataWindowIndex = 1;
+    g_SaveMetadataWindowIndex = PE_JAPAN ? 0 : 1;
 }
 
 void Save_PostInitStub(void) {
@@ -66,7 +70,8 @@ void Save_SelectMetadataWindow(ItemDataRecord *record) {
     }
 
     g_SaveMetadataCursor = window->text;
-    g_SaveMetadataWindowLength = 8;
+    /* Japanese names are at most 6 letters (8 only for the English window). */
+    g_SaveMetadataWindowLength = PE_JAPAN ? (record == 0 && g_SaveMetadataWindowIndex ? 8 : 6) : 8;
 }
 
 void Save_AppendMetadataChar(unsigned char ch) {
@@ -110,6 +115,38 @@ void Save_AppendMetadataChar(unsigned char ch) {
     }
 
     cursor[-1] = ch;
+}
+
+/* Letter bytes a name window holds before its end byte: the save name 8 bytes (play time follows),
+ * Aya's name 13 (the menu layout follows), a weapon's or armor's 16. */
+static unsigned Save_MetadataRoom(void) {
+    if (g_SaveMetadataCursor == g_SaveRuntimeState.windows.metadata[0].text) return 7;
+    if (g_SaveMetadataCursor == g_SaveRuntimeState.windows.metadata[1].text) return 12;
+    return 15;
+}
+
+/* A grid letter of one or two bytes (pe1/text_render.h): appended whole while the name has fewer
+ * than its letters and its window keeps room for the end byte; when full, it takes the last
+ * letter's place, as Save_AppendMetadataChar does. */
+void Save_AppendMetadataLetter(const unsigned char *letter, unsigned bytes) {
+    unsigned char *cursor = g_SaveMetadataCursor;
+    unsigned room = Save_MetadataRoom(), at;
+    int used = 0;
+    if (bytes < 1 || bytes > 2) return;
+    while (*cursor != 0xFF && cursor < g_SaveMetadataCursor + 16) {
+        used += *cursor < 0xFA;
+        ++cursor;
+    }
+    at = (unsigned)(cursor - g_SaveMetadataCursor);
+    if (used >= g_SaveMetadataWindowLength || at + bytes > room) {
+        if (!Save_DeleteMetadataChar()) return;
+        cursor = g_SaveMetadataCursor;
+        while (*cursor != 0xFF) ++cursor;
+        at = (unsigned)(cursor - g_SaveMetadataCursor);
+        if (at + bytes > room) return;
+    }
+    memcpy(cursor, letter, bytes);
+    cursor[bytes] = 0xFF;
 }
 
 int Save_DeleteMetadataChar(void) {
@@ -541,7 +578,10 @@ static inline void SelectAya(void) {
 }
 
 /* Remove the selected record, preserving armor-capacity bookkeeping. */
-static inline void RemoveItem(int index) {
+static inline int RemoveItem(int index) {
+#ifdef PE_MODS
+    if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=0,.value=g_InvItemPtr[index]}))) return 0;
+#endif
     int required, id;
     if (g_InvItemPtr == g_AyaInventoryItems && g_InventoryRuntime.tracked[2] == index)
         Inv_GetActiveSlotCount(&required);
@@ -554,6 +594,7 @@ static inline void RemoveItem(int index) {
         Inv_CompactActiveListSlots();
         Inv_SetActiveList(3, 0);
     }
+    return 1;
 }
 
 static inline int FindKind(int kind, int excluded) {
@@ -580,7 +621,7 @@ void Inv_MergeStorageToSlot(void) {
         if (id - 256U < 128U &&
             g_InventoryRuntime.equipment[(short)id - 256].itemId == 0x61) break;
     }
-    if (i < g_InvSlotLimit) RemoveItem(i);
+    if (i < g_InvSlotLimit && !RemoveItem(i)) return;
     Inv_AddItem(0x93);
     g_InventoryRuntime.tracked[0] = FindKind(7, -1);
     g_MenuBattleEquipMode = 0;
@@ -719,7 +760,7 @@ static inline void CopyName(u8 *dest, u8 *source) {
 
 static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
     u8 *p, *source, *dest;
-    g_SaveMetadataWindowIndex = 1;
+    g_SaveMetadataWindowIndex = PE_JAPAN ? 0 : 1;
     g_SaveMetadataSourceRecord = item;
     g_SaveMetadataCursor = buffer;
     g_SaveMetadataWindowLength = length;
@@ -736,10 +777,17 @@ static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
 
 void Save_InitMetadataState(void) {
     memset(&g_SaveRuntimeState, 0, sizeof(g_SaveRuntimeState));
-    /* Retail initializes the same window twice, including both lookups. */
-    InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
-    InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
-    Menu_CopyPromptCodes(Text_LookupTable4(30));
+    /* Retail initializes the same window twice, including both lookups: the English name (8
+     * letters) in the USA release, the Japanese one (window 0, 6 letters) in the Japanese release. */
+    if (PE_JAPAN) {
+        InitName(g_SaveRuntimeState.windows.metadata[0].text, 6, 0);
+        InitName(g_SaveRuntimeState.windows.metadata[0].text, 6, 0);
+    } else {
+        InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
+        InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
+        /* The Japanese release keeps the dialogue name buffer's own "Aya" here. */
+        Menu_CopyPromptCodes(Text_LookupTable4(30));
+    }
     Inv_InitNewGameInventory();
     g_InventoryRuntime.specialStorage[0] = 515;
     g_AyaSaveState.blend_color = 0x404040;

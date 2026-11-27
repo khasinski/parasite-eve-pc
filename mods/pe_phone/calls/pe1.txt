@@ -1,0 +1,877 @@
+# Phone Calls: Parasite Eve's own calls
+#
+# After Aya saves at a phone, the game asks "Stay on the line?". On Yes, one of these calls plays,
+# one dialogue box per line. This file is plain text: change any line, add calls, save, then
+# F1 > Phone Calls > Reload calls (or restart the game). Mistakes are listed in pe_mods.log with
+# the file and line; a call with a mistake is left out, the rest still load.
+#
+# Where this file lives: in the game, a copy is in the "pe_calls" folder beside your preferences
+# (F1 > Phone Calls > Open calls folder). Edit that copy. Any other .txt file you put in that
+# folder is loaded too, so your own calls can live in a file of their own (mycalls.txt). Delete
+# pe1.txt there to go back to the calls built into the game.
+#
+# Updates: the copy starts with a line "# pe1 copy ...". While you leave the copy as it is, a newer
+# game replaces it with its own calls. Once you change it, it's yours and is never overwritten; a
+# newer game puts its calls beside it in pe1.txt.new (not loaded) to copy from.
+#
+# All calls are outgoing: Aya dials, the other party answers. Establish who she reached and why
+# she called before the other party responds to her situation. Make the hello earn its box: give
+# Aya a reason to call in her first line, or let her open the call herself, instead of a bare
+# "It's Aya. Just checking in."
+#
+# ---- How a call is written ----
+#
+#   [pe1/pizza]                    the call's key, in square brackets: pack/name.
+#                                  Saves remember calls by key, so don't rename one once it's played.
+#                                  Use your own pack name for your calls: [mine/landlord2]
+#   caller = John's of Times Square        the name shown for the other side
+#   tone = funny                   serious or funny (F1 > Call tone picks which can come up)
+#   day = 1                        story day it can play on: 1 to 6, a range 2-5, or any
+#   them: John's on Forty-Fourth.           a line the person Aya called says
+#   aya: Can you deliver to Carnegie Hall?   a line Aya says (shown with the name the player gave her)
+#
+# Optional settings (the default is in brackets):
+#
+#   weight = 2                     how often it comes up next to the others [1]
+#   once = yes                     at most once per playthrough [no]
+#   rooms = 32 75                  only at these phones (room numbers, see below) [any phone]
+#   priority = 10                  above 0: plays first at its phones until heard, before any random call [0]
+#   after = pe1/other              only once that call has been heard [-]
+#   story = 0x80-0xE8              finer than day: the story value range (script variable 74) [any]
+#   needs = warner.supplies        only while another mod's feature is on; several names must all
+#                                  hold. A name no running mod offers never holds [-]
+#
+# Conditions mods offer for needs:
+#   warner.supplies                Warner carries Wayne's supplies: shops mod, Economy > Warner
+#                                  helps out, and the Junk economy on
+#   phone.crossovers               F1 > Phone Calls > Crossover calls is on (on by default):
+#                                  calls to characters from other games
+#
+# Text: letters, digits, spaces and . , : ! ? ' - + * % / only (the game's font has nothing
+# else). {name} is Aya's name as the player typed it. Write a line as long as you like: it wraps
+# to the box, three lines a box, and runs on into another box if it has to.
+# F1 > Phone Calls > Writing calls: Try call picks any call by its key and Play it now plays it
+# (no save needed); Check calls measures every call with the game's font.
+#
+# ---- The phones ----
+#
+#   room               place                                      day
+#   20                 Carnegie Hall                              1
+#   32                 the sewer's emergency phone                1
+#   42                 the 17th Precinct                          2
+#   195                the museum, first visit                    2
+#   59 64 75 87        Central Park and the zoo                   2
+#   97                 the blocked-off street, morning            3
+#   99 112             the precinct after the attack              3
+#   126 138 154 325    St. Francis Hospital                       4
+#   266                the warehouse                              5
+#   163                Chinatown                                  5
+#   176 184            the sewer and subway under the city        5
+#   196 237 238 340    the museum, second visit                   5
+#   276                the Navy cruiser                           6
+#
+# Places come from the dialogue each room's script uses; rooms 32, 87 and 112 were also seen in
+# play. The room of the last phone you used is shown at F1 > Phone Calls > Last phone.
+#
+# Set calls: a call with rooms and a priority plays at those phones before any random call, once,
+# highest priority first. Give each set call a single day: a save remembers the last 16 once calls
+# it heard, and keeping set calls to one day means an old one never comes back. Chain calls with
+# after so a day's story carries on from phone to phone, whichever phone Aya uses next.
+#
+# ---- Which call plays ----
+#
+# Each time Aya stays on the line, the game:
+#   1. drops every call that doesn't fit right now: wrong day or story value, wrong phone (rooms),
+#      a tone F1 > Call tone leaves out, an after call not heard yet, a once call already heard,
+#      or a needs that doesn't hold (crossover calls with F1 > Crossover calls off);
+#   2. of the calls left with a priority above 0, plays the highest one not heard yet. On a tie,
+#      the call nearer the top of the file wins;
+#   3. if none, picks at random among the calls left with priority 0, by weight, avoiding the
+#      last five played. Calls with a priority never join this random pick, even once heard.
+#
+# Priorities in this file, highest first:
+#   13       Wayne at Central Park (only with Warner's supplies on)
+#   10 - 12  set calls at their own phones: on a day with several, the higher plays first
+#            (hospital: records 12, Maeda 11, pharmacy 10). Use after only when a call really
+#            needs the earlier one, and never make a funny call wait on a serious one (or the
+#            other way): with Call tone on one side, the waiting call could never play.
+#   5        Ruth at the precinct, from the cruiser: after Baker and Wayne's mom, before crossovers
+#   1        crossover calls: after every set call that fits, before any random call. They have no
+#            rooms, so they can come up at any phone on their day once its set calls are heard.
+#            Raccoon City sits above Final Fantasy in the file, so it plays first on a shared day.
+#   0        the random pool: everything else
+#
+# A call of your own with priority 2 to 9 plays after this file's day set calls (10 and up) and
+# before the crossovers; 14 or more plays before everything here.
+#
+# Keep it spoiler-safe: nothing from after the call's day.
+
+
+# ======== Day 1: Carnegie Hall, Christmas Eve ========
+
+[pe1/nypd_desk]
+caller = NYPD Desk
+tone = funny
+day = 1
+weight = 2
+once = yes
+them: 17th Precinct, Sergeant Hall speaking.
+aya: It's Brea. I'm at Carnegie Hall. Send everyone you've got.
+them: Brea, it's Christmas Eve. Everyone I've got is one guy.
+aya: Then send him.
+them: He's eating.
+
+[pe1/daniel_cordon]
+caller = Daniel
+tone = serious
+day = 1
+rooms = 20
+weight = 2
+once = yes
+them: Dollis.
+aya: It's me. Is the cordon holding?
+them: Barely. Two firemen want past the tape. They say it's their fire.
+aya: Hold them back. People started burning before anything else did.
+them: Then why are you still in there?
+aya: Because she is.
+
+[pe1/pizza]
+caller = John's of Times Square
+tone = funny
+day = 1
+them: John's on Forty-Fourth. We close in ten.
+aya: Daniel asked me to get six pies to Carnegie Hall for the fire crews. You still delivering?
+them: For the fire guys? Sure. How do they like them?
+aya: Anything but well done.
+
+[pe1/wrong_number]
+caller = ???
+tone = funny
+day = 1
+them: Carnegie Hall box office.
+aya: I was trying to get security. Tonight's show is over.
+them: I can exchange your tickets for tomorrow.
+aya: There's no show tomorrow either.
+them: We have excellent seats for Friday.
+aya: I bet you do.
+
+
+# ======== Day 1: the sewer's emergency phone (room 32) ========
+
+[pe1/sewer_emergency]
+caller = Emergency Line
+tone = serious
+day = 1
+rooms = 32
+priority = 10
+once = yes
+them: Emergency line. What's the situation?
+aya: Officer Brea, NYPD. I'm in the sewers under Carnegie Hall.
+them: ...The sewers? Ma'am, how did you get down there?
+aya: I followed someone. Send a unit to the gate by the Hall.
+them: Every unit is tied up at the Hall. Hold your position.
+aya: That's not really an option.
+
+[pe1/sewer_static]
+caller = Emergency Line
+tone = funny
+day = 1
+rooms = 32
+weight = 2
+them: Emergency line. Where are you calling from?
+aya: The sewer under Carnegie Hall.
+them: ...kssh... Did you say the theater?
+aya: Under it.
+them: ...kssh... Can you get to a window?
+aya: Put me down for a no.
+
+
+# ======== Any day ========
+
+[pe1/daniel_checkin]
+caller = Daniel
+tone = serious
+day = 1-5
+them: Yeah, Dollis.
+aya: It's me. I'm still in one piece.
+them: Where are you?
+aya: Still inside.
+them: You don't sound fine.
+aya: I didn't say fine. I said one piece.
+
+[pe1/precinct_quiet]
+caller = Desk Sergeant
+tone = serious
+day = any
+them: 17th Precinct.
+aya: It's Brea. Anything I should know?
+them: Phones haven't stopped. You're the first call that isn't screaming.
+aya: Give it a minute.
+
+[pe1/time_line]
+caller = Time Line
+tone = funny
+day = any
+them: At the tone, the time will be... late.
+them: Temperature: rising.
+aya: Thanks. I noticed.
+
+[pe1/landlord]
+caller = Landlord
+tone = funny
+day = any
+them: Building office.
+aya: It's Brea in 4C. Just making sure the building's still standing.
+them: It is. Your rent, however, is still late.
+aya: I'm a little busy saving New York.
+them: New York doesn't pay my rent.
+
+[pe1/salesman]
+caller = Salesman
+tone = funny
+day = any
+them: Empire Insurance, claims.
+aya: Does my policy cover fire?
+them: Great question! Have you had a fire?
+aya: Several.
+them: Then I'm afraid it's a little late for that policy. But I can offer you-
+aya: No.
+
+
+# ======== Day 1 and 2: Christmas ========
+
+[pe1/radio]
+caller = 1010 WINS
+tone = funny
+day = 1-2
+them: 1010 WINS traffic desk.
+aya: Officer Brea, NYPD. Tell your listeners to stay off Seventh Avenue.
+them: Accident?
+aya: Something like that. Only fire trucks are getting through.
+them: Got it. Traffic and weather together: jammed, and hot.
+
+
+# ======== Day 2 on: the precinct, Wayne, the Chief ========
+
+[pe1/wayne_stock]
+caller = Wayne
+tone = serious
+day = 2-6
+them: Armory, Wayne. If it's about ammo, so is everybody's.
+aya: It's Aya. I want something better than ammo.
+them: Now you're talking. Bring me junk and I'll make you something nice.
+
+[pe1/wayne_junk]
+caller = Wayne
+tone = serious
+day = 2-6
+them: Armory, Wayne.
+aya: Wayne, it's Aya. I've got a bag of junk for you.
+them: What's in it?
+aya: Mostly things that used to be guns.
+them: Used to be? What did you do to them?
+aya: I used them.
+
+[pe1/dispatch]
+caller = Dispatch
+tone = serious
+day = 2-4
+them: Dispatch. Go ahead.
+aya: Brea. What are you hearing out there?
+them: Three calls about animals at the door. Same detail in every one.
+aya: Which detail?
+them: They all thought it was a person knocking.
+
+[pe1/baker_status]
+caller = Chief Baker
+tone = serious
+day = 2-5
+them: Baker.
+aya: Brea, sir.
+them: Tell me you have good news.
+aya: I'm still standing.
+them: In this city right now, that counts.
+
+[pe1/baker_press]
+caller = Chief Baker
+tone = serious
+day = 2
+weight = 2
+once = yes
+them: Baker.
+aya: Brea, sir. You wanted my statement on the Hall.
+them: The press wants to know if it was arson. What do I tell them?
+aya: I watched people catch fire, sir. Nobody lit a match.
+them: So I tell them we're still taking statements.
+
+[pe1/coroner]
+caller = Medical Examiner
+tone = serious
+day = 2
+weight = 2
+once = yes
+them: Medical Examiner's office.
+aya: Brea, NYPD. The Carnegie Hall victims: was there smoke in their lungs?
+them: Hardly any. Most of them died before they could breathe it.
+aya: That fits. They started burning before there was any smoke.
+them: Officer, nothing in my books fits that.
+
+[pe1/hold]
+caller = Switchboard
+tone = funny
+day = 2-5
+them: You have reached the NYPD. If this is an emergency, press one.
+aya: It's a rotary phone.
+them: For all other calls, please hold.
+them: ...Your call is important to us.
+aya: I'll go find a person.
+
+[pe1/library]
+caller = The Strand
+tone = funny
+day = 2-5
+them: Strand Books. Can I help you find something?
+aya: Do you have anything on spontaneous human combustion?
+them: Fiction or nonfiction?
+aya: It was nonfiction when I saw it.
+
+
+# ======== Day 3 on ========
+
+[pe1/maeda_samples]
+caller = Maeda
+tone = serious
+day = 3-5
+them: Hello? Maeda.
+aya: It's Aya. Anything new on the sample?
+them: Aya. Did you ever feel heat before you saw the fire?
+aya: Why are you asking?
+them: I put a drop of the sample on a cold slide. The glass is warm now.
+aya: What did you put under it?
+them: Nothing. It's sitting on the table.
+
+[pe1/daniel_coffee]
+caller = Daniel
+tone = serious
+day = 3-5
+them: Dollis.
+aya: It's me. Got a minute?
+them: For you? Always. You eat anything today?
+aya: Does coffee count?
+them: Not three days running, it doesn't.
+
+
+# ======== Day 4 on ========
+
+[pe1/daniel_alone]
+caller = Daniel
+tone = serious
+day = 4-5
+weight = 2
+once = yes
+them: Dollis.
+aya: It's me. No reason. I just wanted to hear somebody normal.
+them: Normal? You must be desperate.
+them: ...Hey. Whatever happens next, don't do it alone.
+aya: I won't.
+them: I mean it.
+aya: So do I.
+
+
+# ======== Set calls: the story along the phones ========
+# Each plays once, at its own phones on its own day, before the random calls. See The phones above.
+
+# ---- Day 1: Carnegie Hall ----
+
+[pe1/hall_report]
+caller = Desk Sergeant
+tone = serious
+day = 1
+rooms = 20
+priority = 10
+once = yes
+them: 17th Precinct.
+aya: Officer Brea. I'm inside Carnegie Hall. People burned in their seats. Send medics.
+them: Brea, how many people are we talking about?
+aya: I stopped counting. One of the actresses did it. She's still in the building.
+them: Fire department's on the way. Stay where you are.
+aya: She won't.
+
+# ---- Day 2: the precinct ----
+
+[pe1/precinct_lab]
+caller = Crime Lab
+tone = serious
+day = 2
+rooms = 42
+priority = 10
+once = yes
+them: Crime lab.
+aya: Brea. Anything from Carnegie Hall?
+them: We can map where the fire reached. Not where it started.
+aya: Start with the stage.
+them: We did. The stage is the one part that didn't burn.
+
+# ---- Day 2: the museum ----
+
+[pe1/museum_records]
+caller = Records
+tone = serious
+day = 2
+rooms = 195
+priority = 10
+once = yes
+them: Records.
+aya: Brea. What do we have on the lab at the museum?
+them: One line in the directory. Second floor, Research.
+aya: Research into what?
+them: Doesn't say. The rest of the page is gift shop hours.
+
+# ---- Day 2: Central Park ----
+# With Warner's supplies on (Economy > Warner helps out, Junk economy on), Aya reaches Wayne first.
+
+[pe1/park_wayne]
+caller = Wayne
+tone = serious
+day = 2
+rooms = 59 64 75 87
+priority = 13
+once = yes
+needs = warner.supplies
+them: Armory, Wayne.
+aya: Wayne, it's {name}. I'm at Central Park and running low on ammo.
+them: Already handled. Torres had me load Warner up for you.
+aya: Where do I find him?
+them: He's on his way to you. He'll hold what you can't carry, too.
+aya: Thanks, Wayne. Tell Torres thanks too.
+them: Tell him yourself. He'll pretend he didn't hear you.
+
+[pe1/park_wall]
+caller = Cathy
+tone = serious
+day = 2
+rooms = 59 64 75 87
+priority = 11
+once = yes
+them: 17th Precinct, Cathy speaking.
+aya: It's {name}. Has anyone reached the park gate?
+them: Daniel radioed in from there. Nobody's getting through from our side.
+aya: Then ask them to keep a car at the gate for me.
+them: Will do. Anything else?
+aya: Tell them to stay back from the wall.
+
+[pe1/park_zoo]
+caller = Zoo Hotline
+tone = funny
+day = 2
+rooms = 59 64 75 87
+priority = 10
+once = yes
+them: You've reached the Central Park Zoo. We're closed for the holiday.
+aya: Security? I need another way out of the park.
+them: Please do not feed the animals.
+aya: Too late. They're feeding themselves.
+
+# ---- Day 3: the morning after ----
+
+[pe1/street_dispatch]
+caller = Warner
+tone = serious
+day = 3
+rooms = 97
+priority = 11
+once = yes
+them: Warner here.
+aya: Warner, it's Brea. I'm at the barricade. Where did everybody go?
+them: Evacuation order came down last night. We're moving people over the bridges.
+aya: Who's staying?
+them: Us. Baker volunteered the whole precinct.
+
+[pe1/street_hotel]
+caller = Hotel Desk
+tone = funny
+day = 3
+rooms = 97
+priority = 10
+once = yes
+them: Front desk.
+aya: Officer Brea, NYPD. Dr. Maeda is with me. Has anyone been in his room?
+them: Only housekeeping. They came straight back out.
+aya: Why?
+them: There's a jar on his desk. They say it moved.
+aya: Tell housekeeping to trust that instinct.
+
+[pe1/evac_callback]
+caller = Mrs. Alvarez
+tone = serious
+day = 3
+weight = 2
+once = yes
+them: Hello? Who is this?
+aya: Officer Brea, NYPD. Dispatch gave me your number. You didn't evacuate.
+them: I can't. My son's on his way home from Jersey.
+them: If I'm gone, he walks into an empty apartment.
+aya: Tape a note to the door. Tell him where you went.
+them: He's nineteen. He thinks he knows everything.
+aya: Then he knows how to read a note on his own front door.
+them: ...All right. I'll go.
+
+# ---- Day 3: the precinct after the attack ----
+
+[pe1/precinct_down]
+caller = Midtown North
+tone = serious
+day = 3
+rooms = 99 112
+priority = 10
+once = yes
+them: Midtown North.
+aya: Brea at the 17th. We were hit. We need medics and every unit you can send.
+them: Hit by who?
+aya: By what. Tell them to come in armed.
+them: Half of Manhattan's precincts called in the same thing this morning.
+
+# ---- Day 4: St. Francis Hospital ----
+
+[pe1/hospital_records]
+caller = City Records
+tone = serious
+day = 4
+rooms = 126 138 154 325
+priority = 12
+once = yes
+them: City Records.
+aya: I need to know if I was ever a patient at St. Francis Hospital.
+them: Name?
+aya: {name} Brea.
+them: Old files are in their basement. Nobody's going down there today.
+aya: I might be.
+
+[pe1/hospital_maeda]
+caller = Maeda
+tone = serious
+day = 4
+rooms = 126 138 154 325
+priority = 11
+once = yes
+after = pe1/hospital_records
+them: Hello? Maeda speaking.
+aya: It's {name}. If they kept my file, it's in the basement. I'm going down.
+them: Alone? It's still hot out here. Please be careful down there.
+aya: I'll be fine. I still have the bell.
+them: Good. I wish I had something more useful to give you.
+aya: Just stay where I can find you.
+
+[pe1/hospital_pharmacy]
+caller = Pharmacy
+tone = funny
+day = 4
+rooms = 126 138 154 325
+priority = 10
+once = yes
+them: St. Francis Pharmacy. We're closed due to... We're closed.
+aya: Officer Brea. I'm upstairs. Why'd you close the pharmacy?
+them: You're upstairs? Then you know why we're closed.
+
+# ---- Day 5: the warehouse ----
+
+[pe1/warehouse_backup]
+caller = Dispatch
+tone = funny
+day = 5
+rooms = 266
+priority = 10
+once = yes
+them: Dispatch.
+aya: Brea, at the warehouse. Where's my backup?
+them: On scene. Staging at the Westway Diner on Ninth Avenue.
+aya: That's six blocks away.
+them: They want to know if you take sugar.
+
+# ---- Day 5: Chinatown ----
+
+[pe1/chinatown_daniel]
+caller = Daniel
+tone = serious
+day = 5
+rooms = 163
+priority = 10
+once = yes
+them: Dollis.
+aya: It's me. Did Maeda reach you?
+them: Got his message. Where are you?
+aya: Under Chinatown. Whatever came out of the park is down here, and it's moving.
+them: Moving where?
+aya: I'll tell you when I catch up to it.
+
+# ---- Day 5: the sewer and subway ----
+
+[pe1/reservoir_control]
+caller = Water Control
+tone = serious
+day = 5
+rooms = 176 184
+priority = 10
+once = yes
+them: Reservoir control.
+aya: Officer Brea, NYPD. Your pumps just started. That was me.
+them: You? Then something else is in the lines with you. Something big.
+aya: Which way is it going?
+them: Uptown. Toward the park.
+
+# ---- Day 5: the museum ----
+
+[pe1/museum_guard]
+caller = Museum Security
+tone = serious
+day = 5
+rooms = 195 196 237 238 340
+priority = 11
+once = yes
+them: Museum security. We're closed.
+aya: Officer Brea. I'm inside. Which halls did your people clear?
+them: All of them. I did the fossil hall last.
+aya: Did you see anything?
+them: No. Something scraped behind me. It stopped whenever I stopped.
+aya: Where were you standing when it started?
+them: By the big skeleton. I didn't look up.
+
+[pe1/museum_daniel]
+caller = Daniel
+tone = serious
+day = 5
+rooms = 195 196 237 238 340
+priority = 10
+once = yes
+after = pe1/museum_guard
+them: Dollis.
+aya: It's me. A guard heard something follow him through the fossil hall. I'm heading there.
+them: Don't. I'm on my way with Maeda. Don't go any deeper without us.
+aya: I'll call you when I get there.
+them: Call me before you do anything stupid.
+aya: Then I'd better call you now.
+
+# ---- Day 6: the Navy cruiser ----
+
+[pe1/cruiser_mom]
+caller = Wayne's Mom
+tone = funny
+day = 6
+rooms = 276
+priority = 10
+once = yes
+them: Hello?
+aya: Is this Wayne's mother? Officer Brea, NYPD. He asked me to call. He's all right.
+them: Oh, thank God. He told me he was going on a cruise.
+aya: It's a Navy cruiser, ma'am.
+them: He said there'd be a buffet.
+aya: ...There's a mess hall.
+them: Make sure he eats something green.
+
+[pe1/cruiser_baker]
+caller = Chief Baker
+tone = serious
+day = 6
+rooms = 276
+priority = 11
+once = yes
+them: Baker.
+aya: Brea, sir. I'm on the cruiser. Is everyone off the waterfront?
+them: Battery Park's clear. The whole city is watching that harbor.
+aya: Then they can see we're still here, sir.
+them: Bring it home, Brea. That's an order.
+
+[pe1/precinct_names]
+caller = 17th Precinct
+tone = serious
+day = 6
+rooms = 276
+priority = 5
+once = yes
+them: 17th Precinct... I mean, hello?
+aya: This is Officer Brea. I need the desk sergeant, or Chief Baker.
+them: There's nobody here. Just me. Ruth. I clean the building.
+them: The phone kept ringing, so I answered it.
+aya: What have you been telling them?
+them: Nothing. I've been writing down names. Who they're looking for.
+aya: How many?
+them: Four pages. I didn't know what else to do.
+aya: That's more than most of us did, Ruth.
+
+
+# ======== Raccoon City, December 24-29, 1997 ========
+# Crossover calls (F1 > Phone Calls > Crossover calls, on by default). One call per story day.
+# The sewer emergency call still takes precedence at its phone.
+
+[pe1/raccoon_irons]
+caller = Chief Irons
+tone = serious
+day = 1
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Raccoon City Police. Chief Irons speaking.
+aya: Brea, NYPD. Dispatch said you had officers in town. Can you spare them?
+them: That little fire at the opera? Surely New York has a fire department.
+aya: We do. They're asking for backup too.
+them: In my city, Officer, we'd have had it out before the first call.
+aya: I'll tell them you said that.
+
+[pe1/raccoon_umbrella]
+caller = Umbrella Hotline
+tone = funny
+day = 2
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Thank you for calling Umbrella. How can we help you feel better?
+aya: Can a drug make your own cells turn on you?
+them: Let me transfer you to Product Safety.
+aya: What if it happens to everyone in the room?
+them: Product Safety. How many doses were administered?
+aya: One. That's what I'm trying to tell you.
+them: For a group rate, let me transfer you to Sales.
+
+[pe1/raccoon_annette]
+caller = Annette Birkin
+tone = serious
+day = 3
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Who gave you this number?
+aya: Dr. Maeda. He wanted a second opinion from your husband.
+them: My husband doesn't take calls.
+aya: The cells on his slide changed in seconds.
+them: Was he wearing gloves?
+aya: He was just looking through the scope.
+them: That wasn't what I asked.
+
+[pe1/raccoon_chris]
+caller = Chris Redfield
+tone = funny
+day = 4
+priority = 1
+once = yes
+needs = phone.crossovers
+them: S.T.A.R.S. office. Redfield. If it's the cat again, try tuna.
+aya: Brea, NYPD. I heard your unit handles strange animal attacks.
+them: Strange? We get cats up trees. How's New York?
+aya: I chased something up a tree. Then it chased me down.
+them: See, that's the kind of call I signed up for.
+aya: I'll trade you. How much tuna have you got?
+
+[pe1/raccoon_kendo]
+caller = Robert Kendo
+tone = serious
+day = 5
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Kendo Gun Shop. Robert speaking.
+aya: Wayne at the NYPD armory says you might have recoil springs.
+them: Tell Wayne I've got a drawer full. What's he building?
+aya: Whatever he can get out of a bag of junk.
+them: My kind of guy. I'll ship today. Nothing ever happens here anyway.
+
+[pe1/raccoon_wesker]
+caller = Albert Wesker
+tone = serious
+day = 6
+priority = 1
+once = yes
+needs = phone.crossovers
+them: S.T.A.R.S. office. Wesker.
+aya: Officer Brea, NYPD. We asked your unit for backup.
+them: Officer Brea. The one who walked out of Carnegie Hall without a burn.
+aya: How do you know that?
+them: I've read your blood work. Fascinating.
+aya: That report isn't public.
+them: No. We'll be in touch.
+
+
+# ======== Final Fantasy, December 24-29, 1997 ========
+# Crossover calls, as above. One call per story day. Matching Raccoon City calls have first pick
+# when both are eligible.
+
+[pe1/ff_celes]
+caller = Celes
+tone = serious
+day = 1
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Celes. If this is about the encore, the answer is still no.
+aya: It's about the stage. With the house lights down, can you see the back row?
+them: I can barely see the first. The lights blind you. Why?
+aya: The actress tonight looked straight at me.
+them: Then she wasn't looking with her eyes.
+
+[pe1/ff_red_xiii]
+caller = Red XIII
+tone = funny
+day = 2
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Cosmo Canyon Observatory.
+aya: They told me to ask for the animal expert.
+them: They told you to ask for the animal.
+aya: Then maybe you can tell me why the tracks stop at the fence.
+them: Because whatever made them went up. You might want to look up.
+
+[pe1/ff_yuffie]
+caller = Yuffie
+tone = funny
+day = 3
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Yuffie! Lost something? I probably found it.
+aya: Somebody got into our evidence locker last night. Your name came up.
+them: Mine? I'm hurt. And your lock only takes twelve seconds.
+aya: That's oddly specific.
+them: Relax, I put the jar back! It was moving.
+
+[pe1/ff_tifa]
+caller = Tifa
+tone = serious
+day = 4
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Seventh Heaven. Kitchen's closed, bar's open.
+aya: Officer Brea. I need somewhere that will take people in off the street.
+them: Then you found it. How many?
+aya: A dozen, maybe. They're scared.
+them: Back door's unlocked. Tell them to knock twice.
+
+[pe1/ff_cloud]
+caller = Cloud
+tone = funny
+day = 5
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Cloud here.
+aya: Cloud, it's Aya. I'm checking on that pickup.
+them: You said one scientist and one case.
+aya: That's right. Don't open the case.
+them: Does it open from the inside?
+aya: ...I'll get you a different case.
+them: I'll wait.
+
+[pe1/ff_sephiroth]
+caller = Sephiroth
+tone = serious
+day = 6
+priority = 1
+once = yes
+needs = phone.crossovers
+them: Sephiroth.
+aya: Officer Brea. I was told you knew something about the fire.
+them: I've watched a town burn. The ones it spares always ask the same question.
+aya: Which is?
+them: Why the heat never touched them.
+aya: I never told anyone it didn't.
+them: You just did.

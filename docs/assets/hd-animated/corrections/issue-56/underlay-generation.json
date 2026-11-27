@@ -1,0 +1,25 @@
+{
+  "status": "development review; not published",
+  "images": [
+    {
+      "room": "M239",
+      "tool": "built-in image_gen.imagegen",
+      "prompt": "Use case: precise-object-edit. Asset: hidden reconstructed background underlay for an existing fixed-camera game scene. Edit this exact image. Remove ONLY the large foreground laboratory counter running diagonally across the bottom-right, its microscope, scanner/book, papers and objects on that counter, and the printer immediately behind that counter on the right. Reconstruct the continuous brown/beige carpet floor beneath these removed objects, matching the existing carpet grain, perspective, soft window-blind shadows, brightness and color. Keep the rear desk, rear chair, cart, bookcase, back walls, posters, window, all remaining architecture and existing visible floor exactly aligned and unchanged. No people, no new furniture, no new details. Same framing, same camera, same full-image aspect ratio (11:9), do not crop or zoom. This is an invisible underlay; preserve the scene lighting, do not make the room brighter. Return the whole scene with only this foreground removal.",
+      "source": "composites/M239-g00-cbase-p00-hd.png",
+      "source_sha256": "dbca0fde89bc7aad2027038fb1f2f6b1c016788cf41b9c41d5b9a0d71f347146",
+      "output": "corrections/issue-56/M239-floor-underlay-v1.png",
+      "output_sha256": "c5736a9358ded6fff5ca5ba336c93801ab34af647567ee82eb5d9b2969d96b7f",
+      "scope": "Hidden reconstructed floor; final pack exposes only foreground boundary holes, not the whole generated image"
+    },
+    {
+      "room": "M097",
+      "tool": "built-in image_gen.imagegen",
+      "prompt": "Use case: precise-object-edit. Asset: hidden background underlay for this exact fixed-camera game room. Remove ONLY the curved/L-shaped cashier counter across the bottom-left/center foreground, its cash registers/papers/objects, and the office chairs immediately inside it. Reconstruct the pale dirty tiled floor underneath that counter, continuing the existing floor tile grid in precisely the same perspective, soft bright/dark lighting and dirt. Preserve the shelves and long aisle displays, scattered cans and baskets away from this counter, the entrance, walls, lower-right queue rails, room silhouette and black outside area exactly in place. Do not clean up the room. Do not move, crop, rotate, zoom, or change camera perspective. Same complete image canvas and aspect ratio as the input (512:496). No new objects, people, signs, letters or different tile pattern. The result will be hidden beneath original foreground geometry; retain scene color and illumination and exact placement of all remaining content.",
+      "source": "composites/M097-g00-cbase-p00-hd.png",
+      "source_sha256": "dd058e4ed73f932bb16a92f13fd3caac8ea511bca203216107e7ceca7704d28d",
+      "output": "corrections/issue-56/M097-floor-underlay-v1.png",
+      "output_sha256": "512f8f06f666e5f349743ad071525998bbe9ce431253a52ccda6ba33668ece5b",
+      "scope": "Hidden reconstructed floor; final pack exposes only foreground boundary holes, not the whole generated image"
+    }
+  ]
+}

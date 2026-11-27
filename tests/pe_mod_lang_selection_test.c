@@ -28,6 +28,12 @@ int main(void) {
     assert(!read.lang[0] && !read.name[0]);
     remove(path);
     assert(pe_lang_selection_load(path, &read));
-    puts("Passed stable language identity, reorder, missing pack and preference storage checks.");
+    /* The first-start question: only with nothing saved, packs to offer and someone to answer. */
+    assert(pe_lang_selection_ask(0, 5, 1));
+    assert(pe_lang_selection_ask(0, 1, 1));           /* one pack is enough: it or English */
+    assert(!pe_lang_selection_ask(1, 5, 1));          /* answered once (English too): never again */
+    assert(!pe_lang_selection_ask(0, 0, 1));          /* no packs: nothing to ask */
+    assert(!pe_lang_selection_ask(0, 5, 0));          /* headless, or the language mod off */
+    puts("Passed stable language identity, reorder, missing pack, preference storage and first-start question checks.");
     return 0;
 }

@@ -18,13 +18,4 @@ typedef struct RoomSpraySpark {
 
 PE1_STATIC_ASSERT(sizeof(RoomSpraySpark) == 0x14, room_spray_spark_size);
 
-/* First object of the primary channel's pool: its packet flags. */
-typedef struct RoomSprayHitObject {
-    u32 flags;
-} RoomSprayHitObject;
-
-typedef struct RoomSprayHitPool {
-    RoomSprayHitObject *object;
-} RoomSprayHitPool;
-
 #endif

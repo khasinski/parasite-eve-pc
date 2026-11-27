@@ -21,6 +21,10 @@ Keys:
                                           and descriptions, the rest); NNN is the table index
   dlg/MNNN/PPP   room dialogue: the message bank first used by room MNNN (banks are shared by
                  rooms of an area), page PPP
+  dlg/MAP/PPP    the city map's bank (PE.IMG entry 76): the place title shown on arrival, the
+                 map's narration
+  battle/NNN     the battle messages the boot program holds itself (the Scan panel's lines,
+                 running away), in the order they sit there (petext/battle.py)
 Boxes: "default" is the standard dialogue box (style 0, x 20, y 174); "styled x,y,w,h" is a box
 whose rectangle the script set with opcode 208 before opening it with 209.
 """
@@ -39,7 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import gametext as gt, jatext as ja, menu  # noqa: E402
+from petext import battle, citymap, gametext as gt, jatext as ja, menu  # noqa: E402
 from petext.disc import Game  # noqa: E402
 from petext.script import MODE_IMMEDIATE, Instr, opcodes, task_block, walk  # noqa: E402
 
@@ -299,6 +303,8 @@ def main():
                 key = f"item/{pack[rec + 4] - 1:03d}"
                 if pack[rec + 4] and key in entries:
                     entries[key]["item_kind"] = pack[rec + 6]
+            for key, raw in battle.english(g.disc.file(g.exe_name)).items():
+                entries[key] = {"key": key, "raw": raw, "end": 0xFF, "rooms": [], "boxes": []}
         for m in range(1, 451):
             room = g.room(m)
             if not room:
@@ -353,6 +359,16 @@ def main():
                                        "why": f"page {page} not in the room's bank"})
                     continue
                 b.setdefault("boxes", defaultdict(set))[page].add(box)
+        en = citymap.english_bank(citymap.entry_bytes(g))
+        pages, used = gt.pages(en)
+        h = hashlib.sha1(en[:used]).hexdigest()
+        if h not in banks:
+            # The city map's bank (petext/citymap.py). No room's script opens these pages: the map's
+            # own code does, in box style 3, which draws at the standard box's place without its dark
+            # band, so they are measured as the default box.
+            banks[h] = {"key": citymap.BANK_KEY, "rooms": [], "pages": pages, "crc32": zlib.crc32(en[:used]),
+                        "size": used, "possible": {"default"}, "complete": True,
+                        "boxes": {p: {"default"} for p in pages}}
 
     for b in banks.values():
         for pid, (raw, end) in sorted(b["pages"].items()):
@@ -378,7 +394,7 @@ def main():
     for e in entries.values():
         e["text"] = gt.decode(e["raw"])
         e["lines_px"] = gt.lines(e["raw"])
-        if not e["key"].startswith("dlg/"):
+        if not e["key"].startswith(("dlg/", "battle/")):        # battle lines draw as dialogue
             e["menu_px"] = menu.width(e["raw"], metrics)
         if gt.encode(e["text"]) != e["raw"]:
             bad.append(e["key"])

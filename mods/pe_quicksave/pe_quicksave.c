@@ -2,25 +2,35 @@
  *
  * A quick save is the game's own memory-card save, made anywhere in the free field: the same 8 KB
  * card file Save_BuildCardFile writes (with every mod's save records), kept beside the user's
- * preferences as quicksave_<slot>.mcd. Loading one is the card load (Save_LoadCardFileIntoRuntime
+ * preferences as quicksave_<slot>.pec with its companion data. A slot with only an older
+ * quicksave_<slot>.mcd still loads; saving to it leaves that file in place, no longer used.
+ * Loading one is the card load (Save_LoadCardFileIntoRuntime
  * without its dialogs) followed by the field script's own room transfer to the saved room, so the
  * game restarts that room the way a loaded save does. A quick save holds what a save holds:
  * Aya, items, storage, story and the room, not her place in it or a fight in progress.
  *
- * F10 saves to the slot, F11 loads it, F12 picks the next slot; also F1 > Quick save. Both run on
- * the next free field frame: never in a battle, an event, a room change, a menu or a movie. */
+ * F10 saves to the slot, F11 loads it, F12 picks the next slot; also F1 > Quick save, which closes
+ * the panel. Both run on the next frame of any scene once a game is running (a load also from the
+ * title): a battle, an event, a menu or a movie is left for the saved room. Only a room change
+ * already under way is waited for. */
 #include <stdio.h>
 #include <string.h>
 #include <SDL3/SDL.h>
 
 #include "pe_game.h"
+#include "pe_extension_store.h"
+#include "pe_checkpoint_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe1/battle_modifiers.h"
 #include "pe1/battle_saved_state.h"
 #include "pe1/game_state.h"
 #include "pe1/inventory.h"
+#include "pe1/boot.h"
+#include "pe1/akao_send.h"
 #include "pe1/memcard.h"
+#include "pe1/menu_memcard_display.h"
+#include "pe1/menu_widget.h"
 #include "pe1/save.h"
 #include "pe1/save_blob.h"
 #include "pe1/scene_dispatch.h"
@@ -33,7 +43,6 @@
 #define PE_CARD_CRC (0x100 + 0x12E4 + 0x8A8)   /* the checksum after the tail */
 #define PE_RELOAD_SAME 0x800u                  /* g_GameState.flags: the same room again */
 
-#define PE_TOKEN_TITLE    0xA9400048u
 #define PE_TOKEN_NEW_GAME 0xAA108448u
 #define PE_TOKEN_BOOT     0xA8000048u
 #define PE_TOKEN_PROLOGUE 0xA80830C8u
@@ -44,16 +53,28 @@ static bool s_keys_down[3];
 
 static void pe_slot_path(char *out, size_t size, int slot) {
     char name[32];
-    snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
+    snprintf(name, sizeof name, PE_JAPAN ? "quicksave_jp_%d.pec" : "quicksave_%d.pec", slot);   /* own slots per release */
     if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
 }
 
-static int pe_field_ready(void) {
+static void pe_legacy_path(char *out, size_t size, int slot) {
+    char name[32];
+    snprintf(name, sizeof name, PE_JAPAN ? "quicksave_jp_%d.mcd" : "quicksave_%d.mcd", slot);
+    if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
+}
+
+static int pe_slot_state(int slot) {
+    char path[1024], legacy[1024];
+    pe_slot_path(path, sizeof path, slot);
+    pe_legacy_path(legacy, sizeof legacy, slot);
+    return pe_checkpoint_slot_state(path, legacy);
+}
+
+static int pe_ready(int load) {
     const unsigned token = (unsigned)g_SceneDispatchToken;
-    if (!pe_game_loaded() || !token || token == PE_TOKEN_TITLE || token == PE_TOKEN_NEW_GAME ||
-        token == PE_TOKEN_BOOT || token == PE_TOKEN_PROLOGUE) return -1;
-    return (unsigned)g_SceneDispatchCur == token && pe_free_field() &&
-           !g_GameState.scene_audio.tracks.movie_active;
+    if (!token || token == PE_TOKEN_BOOT) return -1;
+    if (!load && (!pe_game_loaded() || token == PE_TOKEN_NEW_GAME || token == PE_TOKEN_PROLOGUE)) return -1;
+    return (unsigned)g_SceneDispatchCur == token;
 }
 
 static u32 pe_card_crc(const u8 *card) {
@@ -69,89 +90,74 @@ static u32 pe_card_crc(const u8 *card) {
 /* The card file of a save made now, into g_MemCardFileBuffer, as the crash report's room snapshot
  * makes it: the save menu's header fields for the copy only, and Aya's two record links set back
  * to the saved records for the copy when something changed them. */
-static int pe_build_card(void) {
-    static SaveRuntimeState header;
-    char path[0x40];
-    BattleStateTail *action = g_AyaBattleState.action;
-    BattleAttributes *attributes = g_AyaBattleState.attributes;
-    const int transfer = D_800A5D50;
-    int r;
-
-    memset(path, ' ', sizeof path);
-    path[0x18] = 'A';                       /* the title's slot letter */
-    path[sizeof path - 1] = 0;
-    memcpy(&header, &g_SaveRuntimeState, sizeof header);
-    Save_BuildHeader();
-    if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
-    if (attributes && attributes != &g_BattleEquipStateBlock) g_AyaBattleState.attributes = &g_BattleEquipStateBlock;
-    r = Save_BuildCardFile(path);
-    g_AyaBattleState.action = action;
-    g_AyaBattleState.attributes = attributes;
-    memcpy(&g_SaveRuntimeState, &header, sizeof header);
-    D_800A5D50 = transfer;
-    return r;
-}
-
 static void pe_save(int slot) {
-    char path[1024], temp[1040], msg[64];
-    FILE *f;
+    char path[1024], msg[64];
     int ok;
-    if (pe_build_card() < 0) { pe_toast("Quick save failed: the game can't be saved right now"); return; }
-    pe_slot_path(path, sizeof path, slot);
-    snprintf(temp, sizeof temp, "%s.tmp", path);
-    f = fopen(temp, "wb");
-    ok = f && fwrite(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f) == PE_CARD_SIZE;
-    if (f) ok = fclose(f) == 0 && ok;
-    if (ok) {
-        SDL_RemovePath(path);
-        ok = SDL_RenamePath(temp, path);
+    if (pe_checkpoint_build_card() < 0) {
+        pe_mod_save_cancelled();
+        pe_toast("Quick save failed: the game can't be saved right now"); return;
     }
+    pe_slot_path(path, sizeof path, slot);
+    ok = pe_checkpoint_write(path, g_MemCardFileBuffer) == 0;
+    pe_mod_save_cancelled();
     if (!ok) {
-        SDL_RemovePath(temp);
-        pe_mod_log(MOD_ID, "slot %d: can't write %s", slot, path);
-        pe_toast("Quick save failed: the file couldn't be written");
-        return;
+        pe_toast("Quick save failed: the previous checkpoint was kept"); return;
     }
     snprintf(msg, sizeof msg, "Quick saved to slot %d", slot);
     pe_toast(msg);
     pe_log("quicksave", "slot=%d room=%d", slot, pe_room_number());
 }
 
-static void pe_load(int slot) {
+/* title: from the title menu, which then goes on as Continue does. 1 when the save was loaded. */
+static int pe_load(int slot, int title) {
     char path[1024], msg[64];
-    FILE *f;
-    size_t n;
     u32 crc;
-    int token, *args[1] = {&token};
+    int token;
+    const int state = pe_slot_state(slot);
 
-    pe_slot_path(path, sizeof path, slot);
-    f = fopen(path, "rb");
-    if (!f) { snprintf(msg, sizeof msg, "Slot %d is empty", slot); pe_toast(msg); return; }
-    n = fread(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f);
-    fclose(f);
+    if (state == PE_CHECKPOINT_SLOT_EMPTY) {
+        snprintf(msg, sizeof msg, "Slot %d is empty", slot);
+        pe_toast(msg);
+        return 0;
+    }
+    if (state == PE_CHECKPOINT_SLOT_CURRENT) {
+        pe_slot_path(path, sizeof path, slot);
+        if (pe_checkpoint_read(path, PE_CHECKPOINT_BINDING, g_MemCardFileBuffer)) {
+            pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return 0;
+        }
+    } else {
+        pe_legacy_path(path, sizeof path, slot);
+        if (pe_checkpoint_read_legacy(path, g_MemCardFileBuffer)) {
+            snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
+            pe_toast(msg);
+            return 0;
+        }
+    }
     memcpy(&crc, g_MemCardFileBuffer + PE_CARD_CRC, sizeof crc);
-    if (n != PE_CARD_SIZE || pe_card_crc(g_MemCardFileBuffer) != crc ||
+    if (!pe_checkpoint_native_valid(g_MemCardFileBuffer) || pe_card_crc(g_MemCardFileBuffer) != crc ||
         !Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
         snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
         pe_toast(msg);
-        return;
+        return 0;
     }
-    /* Save_LoadCardFileIntoRuntime's commit, without the card menu's dialogs. */
-    g_SaveIoCursor = g_MemCardFileBuffer + 0x100 + 0x12E4;
-    if (Save_DeserializeTail() != 0) { pe_toast("Quick load failed: the save's records don't match"); return; }
-    memcpy(&g_SaveRuntimeState, &g_MemCardSaveStateBuffer, sizeof g_SaveRuntimeState);
-    g_SaveIoCursor += 4;
-    Save_RestoreHeader();
-    PE_HOOK(PE_HOOK_SAVE_READ, g_MemCardFileBuffer);
-    /* Into the saved room, the way a field script changes rooms. The frame loop only ends for a
-     * new token, so a save of the room Aya is in also asks for the game's same-room reload (the
-     * Wardrobe's, script command 2101). */
-    token = g_SceneDispatchToken;
-    (void)Script_EncodeBarcode(args);
-    if (token == g_SceneDispatchCur) g_GameState.flags |= PE_RELOAD_SAME;
+    /* A movie stops as a skipped one does; open menus go with the scene. */
+    if (!title) {
+        if (Draw_CheckDrawStatus() != 0) {
+            MenuCardFirst_StopVideo();
+            Script_StopMovieMusic();
+        }
+        MenuWidget_InitPool();
+    }
+    /* Native checks first, as a checkpoint's are: admission runs the records' load preparation. */
+    if (state == PE_CHECKPOINT_SLOT_LEGACY && pe_mod_load_admit(path, g_MemCardFileBuffer)) {
+        pe_toast("Older quick save can't be loaded: its mod data was refused"); return 0;
+    }
+    if(pe_checkpoint_commit_portable())return 0;
+    token=g_SceneDispatchToken;
     snprintf(msg, sizeof msg, "Quick loaded slot %d", slot);
     pe_toast(msg);
     pe_log("quickload", "slot=%d token=%08X", slot, (unsigned)token);
+    return 1;
 }
 
 static void pe_keys(void) {
@@ -179,10 +185,23 @@ static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     pe_keys();
     if (!s_pending) return 0;
-    ready = pe_field_ready();
-    if (ready < 0) { pe_toast("Quick save: only in the field"); s_pending = PE_NONE; return 0; }
-    if (!ready) return 0;                   /* a battle, an event or a room change: wait */
-    if (s_pending == PE_SAVE) pe_save(s_slot); else pe_load(s_slot);
+    ready = pe_ready(s_pending == PE_LOAD);
+    if (ready < 0) {
+        pe_toast(s_pending == PE_LOAD ? "Quick load: after the title screen appears" : "Quick save: start or load a game first");
+        s_pending = PE_NONE;
+        return 0;
+    }
+    if (!ready) return 0;
+    if (s_pending == PE_SAVE) pe_save(s_slot); else pe_load(s_slot, 0);
+    s_pending = PE_NONE;
+    return 0;
+}
+static int pe_on_title(void *ctx, void *user) {
+    int *loaded = ctx;
+    (void)user;
+    pe_keys();
+    if (s_pending == PE_SAVE) pe_toast("Quick save: start or load a game first");
+    else if (s_pending == PE_LOAD && pe_load(s_slot, 1)) *loaded = 1;
     s_pending = PE_NONE;
     return 0;
 }
@@ -192,27 +211,25 @@ static int pe_on_new_game(void *ctx, void *user) {
     return 0;
 }
 
-static void pe_ask_save(void) { s_pending = PE_SAVE; }
-static void pe_ask_load(void) { s_pending = PE_LOAD; }
+static void pe_ask_save(void) { s_pending = PE_SAVE; pe_mod_panel_close(); }
+static void pe_ask_load(void) { s_pending = PE_LOAD; pe_mod_panel_close(); }
 static void pe_slot_info(char *out, unsigned size) {
-    char path[1024];
-    FILE *f;
-    pe_slot_path(path, sizeof path, s_slot);
-    f = fopen(path, "rb");
-    snprintf(out, size, "%s", f ? "Saved" : "Empty");
-    if (f) fclose(f);
+    const int state = pe_slot_state(s_slot);
+    snprintf(out, size, "%s", state == PE_CHECKPOINT_SLOT_CURRENT ? "Saved" :
+                              state == PE_CHECKPOINT_SLOT_LEGACY ? "Saved, older format" : "Empty");
 }
 
 static int quicksave_init(void) {
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
+    pe_hook_add(PE_HOOK_TITLE_FRAME, pe_on_title, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
 
     pe_menu_begin(PE_PAGE_QUICKSAVE);
-    pe_menu_top_page(PE_PAGE_QUICKSAVE, "Save anywhere in the field, 10 slots.", 40);
+    pe_menu_top_page(PE_PAGE_QUICKSAVE, "Save and load at any moment, 10 slots.", 40);
     pe_menu_register_int(0, "Slot", "Which of the 10 slots F10 / F11 and the rows below use.",
                          &s_slot, 0, PE_SLOTS - 1, 1);
     pe_menu_register_info(0, "This slot", "Whether the slot holds a quick save.", pe_slot_info);
-    pe_menu_register_action(0, "Save", "Save to the slot (once the panel closes, from the field).", pe_ask_save);
+    pe_menu_register_action(0, "Save", "Save to the slot and return to the game.", pe_ask_save);
     pe_menu_register_action(0, "Load", "Load the slot: the saved room starts again, as a loaded save does.",
                             pe_ask_load);
     pe_menu_register_toggle(0, "Hotkeys", "F10 saves, F11 loads, F12 picks the next slot.", &s_hotkeys, NULL);

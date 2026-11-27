@@ -18,7 +18,17 @@
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_present.h"
+#include "pe_registry.h"
 #include "pe_save.h"
+#include "pe_save_dispatch.h"
+#include "pe_recovery_snapshot.h"
+#include "pe_extension_store.h"
+#include "pe_inventory_api.h"
+#include "pe_api_native.h"
+#include "pe_shop_api.h"
+#include "pe_profile_transactions.h"
+#include "pe_economy_policy.h"
+void pe_debug_control_install(void);   /* pe_debug_control.c */
 
 #define PE_INV_CMD_START_NEW_GAME 1117   /* the EX Game's start (Inv_DispatchCommand) */
 
@@ -50,6 +60,7 @@ static int s_service_count;
 static const PeMod *s_running[PE_MAX_MODS];
 static int s_running_count;
 static int s_started, s_interactive;
+static int s_dispatch_depth, s_dispatch_ids[8];
 static char s_prefs_dir[1024];
 static FILE *s_log;
 
@@ -105,6 +116,18 @@ void pe_log(const char *tag, const char *fmt, ...) {
 }
 
 int pe_mod_interactive(void) { return s_interactive; }
+static int pe_manage_requested(int i, unsigned visiting);
+static int s_manage_count;
+int pe_mod_requested(const char *mod_id) {
+    for (int i = 0; mod_id && i < s_manage_count; i++)
+        if (!strcmp(g_pe_mods[i]->id, mod_id)) return pe_manage_requested(i, 0);
+    return 0;
+}
+
+static int s_save_committed_event = -1;
+static void pe_announce_save_committed(const char *path) {
+    if (s_save_committed_event >= 0) pe_event_emit(s_save_committed_event, (void *)path);
+}
 
 /* ---- what mod code is running, for crash reports ----
  * Each call into a mod (start, shutdown, a hook or event handler, a per-frame tick, an F1 row)
@@ -130,6 +153,7 @@ void pe_mod_call_end(void) {
 
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id) {
     int i;
+    if (s_dispatch_depth || pe_reg_callback_active()) return -1; /* registration is structural: never change an in-flight table */
     if (!fn || id < 0 || id >= PE_HOOK_COUNT + s_event_count || s_handler_count >= PE_MAX_HANDLERS)
         return -1;
     /* Keep the table sorted by (id, priority, registration order). */
@@ -147,6 +171,7 @@ int pe_hook_dispatch(int id, void *ctx);
 
 int pe_event_id(const char *name) {
     int i;
+    if(pe_reg_callback_active())return -1;
     for (i = 0; i < s_event_count; i++)
         if (strcmp(s_events[i], name) == 0) return PE_HOOK_COUNT + i;
     if (s_event_count >= PE_MAX_EVENTS) return -1;
@@ -161,6 +186,7 @@ int pe_event_emit(int id, void *ctx) {
 /* ---- services ---- */
 
 int pe_service_publish(const char *name, int version, const void *api, const char *mod_id) {
+    if(pe_reg_callback_active())return -1;
     if (pe_service_get(name, version) || s_service_count >= PE_MAX_SERVICES) return -1;
     s_services[s_service_count++] = (PeService){name, version, api, mod_id};
     pe_mod_log(mod_id, "service %s v%d", name, version);
@@ -172,7 +198,7 @@ const void *pe_service_get(const char *name, int version) {
     int i;
     for (i = 0; i < s_service_count; i++)
         if (s_services[i].version == version && strcmp(s_services[i].name, name) == 0)
-            return pe_mod_active(s_services[i].mod_id) ? s_services[i].api : NULL;
+            return pe_mod_active(s_services[i].mod_id) && pe_save_owner_available(s_services[i].mod_id) && pe_extension_owner_available(s_services[i].mod_id) ? s_services[i].api : NULL;
     return NULL;
 }
 
@@ -248,12 +274,18 @@ static int s_all_on;
 static int s_mod_on[PE_MAX_MODS];
 static char s_mod_note[PE_MAX_MODS][192];
 static char s_all_note[192];
-static int s_manage_count, s_manage_ready, s_boot_all;
+static int s_manage_ready, s_boot_all;
 static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
 enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
+/* Language packs and the font are the mods All mods doesn't hold back: a player who picks a
+ * language or a font gets it with every gameplay mod still off. Their own Manage mods rows turn
+ * them off, and with no language picked, or the Original font, the game's text stays as it is. */
+static int pe_mod_needs_master(const PeMod *mod) {
+    return strcmp(mod->id, "pe_lang") != 0 && strcmp(mod->id, "pe_fonts") != 0;
+}
 static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
-    if(!s_all_on || !s_mod_on[i] || (visiting & (1u << i)))return 0;
+    if((!s_all_on && pe_mod_needs_master(g_pe_mods[i])) || !s_mod_on[i] || (visiting & (1u << i)))return 0;
     visiting |= 1u << i;
     for(req=g_pe_mods[i]->requires;req && *req;req++) {
         for(j=0;j<s_manage_count;j++)if(!strcmp(*req,g_pe_mods[j]->id))break;
@@ -276,7 +308,7 @@ void pe_mod_manage_refresh(void) {
     snprintf(s_all_note,sizeof(s_all_note),"Master now: %s. Next launch: %s. %s",s_boot_all?"On":"Off",s_all_on?"On":"Off",pending?"Restart game to apply.":"No pending change.");
     for(i=0;i<s_manage_count;i++) {
         int requested=pe_manage_requested(i,0);
-        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
+        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on&&pe_mod_needs_master(g_pe_mods[i])?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
     }
 #ifdef PE_PS5_PLUGINS
     if(changed && log_budget) {
@@ -324,7 +356,7 @@ static void pe_start_mods(void) {
 
     while (g_pe_mods[mod_count] && mod_count < PE_MAX_MODS) mod_count++;
     pe_manage_register(mod_count);
-    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original");
+    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original (a picked language or font aside)");
     /* Init every mod once the mods it needs have, in that order; active only if on and every mod
      * it needs is active. */
     while (progress) {
@@ -341,7 +373,7 @@ static void pe_start_mods(void) {
             s_current_mod = NULL;
             if (!ok) { state[i] = PE_MOD_FAILED; pe_mod_log(mod->id, "init failed, mod off"); continue; }
             s_inited_ids[s_inited_count++] = mod->id;
-            if (!s_all_on) state[i] = PE_MOD_ALL_OFF;
+            if (!s_all_on && pe_mod_needs_master(mod)) state[i] = PE_MOD_ALL_OFF;
             else if (!s_mod_on[i]) state[i] = PE_MOD_OFF;
             else if (!pe_requires_met(mod)) state[i] = PE_MOD_NEEDS;
             else {
@@ -357,6 +389,7 @@ static void pe_start_mods(void) {
             state[i] = PE_MOD_NEEDS;
             pe_mod_log(g_pe_mods[i]->id, "missing a required mod, mod off");
         }
+    pe_registry_seal();          /* every mod has started: the definitions they declared are judged now */
     pe_manage_notes(mod_count, state);
     atexit(pe_shutdown_mods);
 }
@@ -389,7 +422,30 @@ static void pe_host_start(const PeHookInit *init) {
 #endif
     pe_mod_log(NULL, "mod host started (mod API %d, %s)", PE_MOD_API_VERSION, s_interactive ? "interactive" : "headless");
     pe_menu_load_settings();
+    /* The Wardrobe left the Collection (November 2026): a player who turned the Collection off
+     * keeps the Wardrobe off too. */
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: wardrobe", PE_MENU_MANAGE "/PE Enhancements: collection");
+    /* The battle rewards left the economy mod (bridge findings D10): the same for them. */
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: battle rewards", PE_MENU_MANAGE "/PE Enhancements: economy");
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: Mod Catalog", PE_MENU_MANAGE "/PE Enhancements: economy");
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: shops", PE_MENU_MANAGE "/PE Enhancements: economy");
     pe_pages_describe();
+    pe_registry_reset(); /* bind registry affinity before any provider initialization */
+    pe_extension_install();
+    pe_inventory_api_install();
+    pe_shop_api_install();
+    pe_profile_transactions_install();
+    pe_service_publish("profile_transactions",1,&g_pe_profile_transactions_api,NULL);
+    pe_service_publish("content_registry",1,&g_pe_content_registry_api,NULL);
+    pe_service_publish("inventory_actions",1,&g_pe_inventory_actions_api,NULL);
+    pe_service_publish("equipment_effects",1,&g_pe_equipment_effects_api,NULL);
+    extern const PeEquipmentGuardApi g_pe_equipment_guard_api;
+    pe_service_publish("equipment_guard",1,&g_pe_equipment_guard_api,NULL);
+    pe_service_publish("catalog_entries",1,&g_pe_catalog_entries_api,NULL);
+    pe_service_publish("economy_shop",1,&g_pe_economy_shop_api,NULL);
+    pe_service_publish("economy_policy",1,&g_pe_economy_policy_api,NULL);
+    s_save_committed_event = pe_event_id(PE_EVENT_SAVE_COMMITTED);
+    pe_save_committed_listener = pe_announce_save_committed;
     pe_start_mods();
     if (s_all_on) {                              /* off: nothing but F1 touches the game */
         pe_main_menu_init();
@@ -397,6 +453,7 @@ static void pe_host_start(const PeHookInit *init) {
         pe_present_install();
     }
     pe_save_install();                           /* always: a save made with mods off keeps their data too */
+    pe_debug_control_install();                  /* only with PE_DEBUG_CONTROL set: test scripts */
     if (s_interactive) pe_panel_install();
     s_started = 1;
     {                                            /* inactive mods' handlers stay registered, skipped */
@@ -443,6 +500,11 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_INVENTORY_REBUILD] = "inventory rebuild",
         [PE_HOOK_STORAGE_TRANSFER] = "storage transfer",
         [PE_HOOK_SLOT_DRAWN] = "slot drawn",
+        [PE_HOOK_TITLE_FRAME] = "title frame",
+        [PE_HOOK_TEXT_STRETCH] = "text stretch",
+        [PE_HOOK_TEXT_LETTER] = "text letter",
+        [PE_HOOK_DISC_READ] = "disc read",
+        [PE_HOOK_AUTO_MEDICINE] = "auto medicine",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";
@@ -451,26 +513,60 @@ static const char *pe_hook_name(int id) {
 int pe_hook_dispatch(int id, void *ctx) {
     int i, handled = 0;
     if (!s_started) return 0;
+    if(pe_reg_callback_active())return -1;
+    if (s_dispatch_depth == (int)(sizeof s_dispatch_ids / sizeof s_dispatch_ids[0])) return -1;
+    for (i = 0; i < s_dispatch_depth; ++i) if (s_dispatch_ids[i] == id) return -1;
+    s_dispatch_ids[s_dispatch_depth++] = id;
+    if (id == PE_HOOK_FRAME && pe_free_field()) {
+        const PeApiNative *native = pe_api_native();
+        if(native->inventory && native->bag_limit) {
+            short *lists[3] = {native->inventory->slots, native->inventory->storage, native->inventory->specialStorage};
+            int limit = native->bag_limit();
+            unsigned sizes[3] = {limit < 0 ? 0u : limit > 50 ? 50u : (unsigned)limit, 100, 82};
+            pe_extension_refill_stacks(lists, sizes);
+            if (!pe_mod_is_running("pe_stacks")) pe_save_refill_legacy_stacks(lists, sizes);
+        }
+    }
+    if (id == PE_HOOK_SAVE_WRITE && ctx) {
+        int result = pe_save_begin_write();
+        if (result < 0) { --s_dispatch_depth; pe_save_report_refusal(result); return result; }
+    }
     /* The mods' saved records go back before any mod's own load handler sees the save. */
-    if (id == PE_HOOK_SAVE_READ && ctx) pe_save_on_read((const uint8_t *)ctx);
+    if (id == PE_HOOK_SAVE_READ && ctx) {
+        pe_save_on_read((const uint8_t *)ctx);
+        pe_extension_apply_load();
+        pe_inventory_api_loaded(); pe_shop_api_loaded(); pe_economy_policy_reset();
+        pe_profile_transactions_loaded();
+    }
     /* A new game: every record resets, and nothing carries over, before any mod hears of it. */
-    if (id == PE_HOOK_NEW_GAME) pe_save_new_game();
+    if (id == PE_HOOK_NEW_GAME) { pe_save_new_game(); pe_extension_new_game(); pe_shop_api_loaded(); pe_economy_policy_reset(); }
     for (i = 0; i < s_handler_count; i++) {
         int result;
         if (s_handlers[i].id < id) continue;
         if (s_handlers[i].id > id) break;
         if (!s_handlers[i].active) continue;
+        if (id != PE_HOOK_NEW_GAME && (!pe_save_owner_available(s_handlers[i].mod_id) ||
+            !pe_extension_owner_available(s_handlers[i].mod_id))) continue;
         pe_mod_call_begin(s_handlers[i].mod_id, id < PE_HOOK_COUNT ? "hook" : "event", pe_hook_name(id));
         result = s_handlers[i].fn(ctx, s_handlers[i].user);
         pe_mod_call_end();
         if (result) handled = 1;
     }
     /* After every mod's own save handler: the records go into the save. */
-    if (id == PE_HOOK_SAVE_WRITE && ctx) pe_save_on_write((uint8_t *)ctx);
+    if (id == PE_HOOK_SAVE_WRITE && ctx) {
+        pe_inventory_api_before_save();
+        if (pe_extension_stage() < 0) {
+            pe_save_abort_write(); --s_dispatch_depth;
+            pe_toast("Cannot save mod extension data; previous save kept"); return -1;
+        }
+        int result = pe_save_finish_write((uint8_t *)ctx);
+        if (result < 0) { pe_extension_cancel(); --s_dispatch_depth; pe_save_report_refusal(result); return result; }
+    }
     /* The EX Game starts with this script command; the title's New Game sends PE_HOOK_NEW_GAME
      * itself. Mods hear both the one way. */
     if (!handled && id == PE_HOOK_INV_COMMAND && ctx && ((const PeHookInvCommand *)ctx)->command == PE_INV_CMD_START_NEW_GAME)
         pe_hook_dispatch(PE_HOOK_NEW_GAME, &(PeHookNewGame){PE_NEW_GAME_EX});
+    --s_dispatch_depth;
     return handled;
 }
 
@@ -481,8 +577,7 @@ int pe_hook_dispatch(int id, void *ctx) {
  * may be half changed. */
 int pe_mod_snapshot_save_tail(unsigned char *block) {
     if (s_call_depth) return -1;
-    pe_save_crash_tail(block);
-    return 0;
+    return pe_save_try_crash_tail(block);
 }
 
 /* ---- crash report Mods section (runs inside the crash handler: reads only) ---- */
@@ -505,7 +600,7 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     } while (0)
 
     PE_OUT("Mod API %d, mod host %s, All mods %s\r\n", PE_MOD_API_VERSION, s_started ? "started" : "not started yet",
-           s_all_on ? "on" : "off (mods did not touch the game)");
+           s_all_on ? "on" : s_running_count ? "off (only Language packs and Font ran)" : "off (mods did not touch the game)");
     for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
         PE_OUT("  %s: %s\r\n", g_pe_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : g_pe_mods[i]->id);
 
@@ -557,6 +652,11 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     PE_OUT("Mods' save data (the room snapshot): ");
     pe_save_crash_describe(out, size, &n);
 #undef PE_OUT
+}
+
+int pe_mod_snapshot_recovery(const unsigned char*native,unsigned size,PeModRecoverySnapshot*out){
+    if(s_call_depth||s_dispatch_depth||!s_started||pe_reg_callback_active())return -1;
+    return pe_recovery_snapshot_capture(native,size,out);
 }
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS
@@ -707,3 +807,7 @@ int pe_mod_master_requested(void){return s_all_on;}
 void pe_mod_master_toggle_next_launch(void){if(!s_manage_ready)return;s_all_on=!s_all_on;pe_mod_manage_refresh();pe_menu_save_settings();}
 int pe_mod_request_assists_only(void){if(!s_manage_ready)return 0;int found=0;for(int i=0;i<s_manage_count;i++)if(!strcmp(g_pe_mods[i]->id,"pe_assists"))found=1;if(!found)return 0;for(int i=0;i<s_manage_count;i++)s_mod_on[i]=!strcmp(g_pe_mods[i]->id,"pe_assists");s_all_on=1;pe_mod_manage_refresh();pe_menu_save_settings();return 1;}
 #endif
+
+int pe_mod_data_available(const char *owner) {
+    return pe_mod_active(owner)&&pe_save_owner_available(owner)&&pe_extension_owner_available(owner);
+}

@@ -92,7 +92,7 @@ int main(int argc,char **argv) {
 #include <stdio.h>
 #include <string.h>
 #include "../mods/host/pe_mod_host.h"
-static int save_fault, save_errors;
+static int save_fault, save_errors, mod_data_available = 1;
 static const char *mod_test_directory;
 static SDL_IOStream *ModTestOpen(const char *path, const char *mode) {
     if (save_fault == 1) { SDL_SetError("injected open failure"); return NULL; }
@@ -131,6 +131,7 @@ void pe_mod_log(const char *id, const char *format, ...) {
 }
 void pe_toast(const char *text) { (void)text; }
 int pe_mod_active(const char *id) { (void)id; return 1; }
+int pe_mod_data_available(const char *id) { return !id || mod_data_available; }
 const char *pe_mod_current(void) { return NULL; }
 void pe_mod_call_begin(const char *mod_id, const char *what, const char *detail) {
     (void)mod_id; (void)what; (void)detail;
@@ -148,6 +149,21 @@ int main(int argc, char **argv) {
     pe_menu_load_settings();
     static int enabled = 1;
     assert(!pe_menu_register_toggle(NULL, "Test option", "", &enabled, NULL));
+    static int applied=15,existing=15;
+    assert(!pe_menu_bind_setting("PE Enhancements/Bonus Points/Applied feature flags",&applied,0,15));
+    assert(!pe_menu_bind_setting("Old/Option",&existing,0,15)&&existing==7);
+    assert(pe_menu_bind_setting("Old/Option",&existing,0,15)==-1);
+    assert(pe_menu_bind_setting(NULL,&existing,0,15)==-1);
+    applied=8; /* only a confirmed apply would update the bound value */
+    /* Menu availability includes save/extension admission, even when the mod
+     * itself is running. Keep this host dependency in the standalone fixture. */
+    PeMenuRow owned = {0}; owned.mod_id = "test_mod";
+    assert(pe_menu_row_active(&owned));
+    mod_data_available = 0;
+    assert(!pe_menu_row_active(&owned));
+    owned.mod_id = NULL;
+    assert(pe_menu_row_active(&owned));
+    mod_data_available = 1;
     for (save_fault = 1; save_fault <= 5; ++save_fault) {
         int before = save_errors;
         pe_menu_save_settings();
@@ -160,7 +176,7 @@ int main(int argc, char **argv) {
     }
     save_fault = 0; pe_menu_save_settings();
     size_t bytes; char *data = SDL_LoadFile(path, &bytes);
-    assert(data && strstr(data, "Old/Option=7") && strstr(data, "Test option=1")); SDL_free(data);
+    assert(data && strstr(data, "Old/Option=7") && strstr(data, "Test option=1") && strstr(data,"Bonus Points/Applied feature flags=8")); SDL_free(data);
     assert(SDL_RemovePath(path));
     save_fault = 2; pe_menu_save_settings();
     SDL_PathInfo info; assert(!SDL_GetPathInfo(path, &info));
@@ -688,6 +704,12 @@ static int SDLCALL DriveScreenshotModal(void *unused) {
     return 0;
 }
 
+/* A string member of the screenshot metadata, or "" (builds without downloads have no HdString). */
+static const char *TestJsonString(const cJSON *object, const char *name) {
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    return cJSON_IsString(item) && item->valuestring ? item->valuestring : "";
+}
+
 static void TestScreenshotFeature(void) {
     /* 1. Screenshot binding defaults, rebinding, clearing, and TOML persistence. */
     assert(host_options.keys[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_KEY);
@@ -861,11 +883,11 @@ static void TestScreenshotFeature(void) {
 
     cJSON *meta = cJSON_ParseWithLength(json_data, json_len);
     assert(meta);
-    assert(!strcmp(HdString(meta, "issue_tag"), "Background hallucination"));
-    assert(!strcmp(HdString(meta, "note"), "seam on left door"));
+    assert(!strcmp(TestJsonString(meta, "issue_tag"), "Background hallucination"));
+    assert(!strcmp(TestJsonString(meta, "note"), "seam on left door"));
     const cJSON *bg_meta = cJSON_GetObjectItemCaseSensitive(meta, "background");
     assert(bg_meta);
-    assert(!strcmp(HdString(bg_meta, "hd_geometry_key"), expected_geom_hex));
+    assert(!strcmp(TestJsonString(bg_meta, "hd_geometry_key"), expected_geom_hex));
     const cJSON *entries_meta = cJSON_GetObjectItemCaseSensitive(bg_meta, "active_entry_keys");
     assert(cJSON_IsArray(entries_meta) && cJSON_GetArraySize(entries_meta) == 1);
     assert(!strcmp(cJSON_GetArrayItem(entries_meta, 0)->valuestring, expected_entry_hex));
@@ -926,6 +948,7 @@ static int SDLCALL DriveFocus(void *window) {
     return 0;
 }
 
+#if PE_DESKTOP_MOD_DOWNLOADS
 /* The production boot-module downloader must reject a broken pack before
  * activation. These fixtures use the real ZIP parser, SHA and file verifier. */
 static void TestHdInstaller(void) {
@@ -967,6 +990,7 @@ static void TestHdInstaller(void) {
     memset(&host_hd,0,sizeof(host_hd));
     puts("HD installer: SHA vectors, paths, valid extraction, ZIP CRC failure and cancellation passed");
 }
+#endif
 
 int main(int argc, char **argv) {
 #ifdef _WIN32
@@ -981,7 +1005,9 @@ int main(int argc, char **argv) {
     assert(SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software"));
     assert(SDL_Init(SDL_INIT_VIDEO));
     Host_InitOptions(0);
+#if PE_DESKTOP_MOD_DOWNLOADS
     TestHdInstaller();
+#endif
     TestKeyboardLayoutLabels();
     Psyz_VideoSetVsyncMode(PSYZ_VSYNC_OFF);
     unsigned frozen = (unsigned)Psyz_VideoVSync(-1);
@@ -1363,10 +1389,16 @@ int main(int argc, char **argv) {
     SDL_DestroySurface(analog_image);OverlaySurfaceRelease(&analog_surface);
 
 
+    /* HD backgrounds, pack, integrity check; modded builds add the "Mods menu" row. */
+#if defined(PE_MODS) && !defined(PE_PS5)
+    assert(Host_SettingsPureRowCount(HOST_PAGE_MODS)==4);
+#else
     assert(Host_SettingsPureRowCount(HOST_PAGE_MODS)==3);
+#endif
     char invalid_hd_value[]="-1";assert(!Host_ParseOptionValue("mods","hd_backgrounds",invalid_hd_value));
     assert(Host_ParseOptionValue("mods","hd_backgrounds","false"));assert(!host_options.hd_backgrounds);
     assert(Host_ParseOptionValue("mods","hd_backgrounds","true"));assert(host_options.hd_backgrounds);
+#if PE_DESKTOP_MOD_DOWNLOADS   /* the HD pack download's progress and cancel row */
     SDL_SetAtomicInt(&host_hd.busy,1);SDL_SetAtomicInt(&host_hd.progress,42);
     HostOverlayState mod_state={.open=1,.page=OVERLAY_PAGE_MODS,.row=1};OverlaySurface mod_surface={0};
     OverlayLayout mod_layout;OverlayComputeLayout(OVERLAY_PAGE_MODS,1280,720,&mod_layout);
@@ -1377,6 +1409,7 @@ int main(int argc, char **argv) {
         mod_layout.y+mod_layout.scale*(OVERLAY_HEADER_H+OVERLAY_ROW_H+20),1,NULL,NULL);
     assert(SDL_GetAtomicInt(&host_hd.cancel)==1);SDL_SetAtomicInt(&host_hd.cancel,0);
     assert(mod_image);char mod_image_path[4096];snprintf(mod_image_path,sizeof(mod_image_path),"%s/mod-download.bmp",test_directory);assert(SDL_SaveBMP(mod_image,mod_image_path));SDL_DestroySurface(mod_image);OverlaySurfaceRelease(&mod_surface);SDL_SetAtomicInt(&host_hd.busy,0);
+#endif
 
     /* Issue #2: All settings tabs share a fixed panel height and top Y anchor. */
     OverlayLayout base_layout = {0};

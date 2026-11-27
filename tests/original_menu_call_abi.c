@@ -15,6 +15,8 @@
 #include "pe1/draw_state.h"
 #include "pe1/mod_text.h"
 #include "pe1/bounds_check.h"
+#include "pe1/field_bg_load.h"
+#include "pe1/textbox.h"
 #include "pe_hooks.h"
 
 void Menu_DrawArmorEquipItem(int index);
@@ -90,6 +92,15 @@ static void pointer_identity(void) {
 u8 *g_DrawPacketCursor,*g_DrawPacketArenaBase;
 u32 g_DrawPrimColor,g_DrawColorShaded,*g_DrawOrderingTableEntry;
 int g_DrawTextDimmed;
+/* The text renderer's dialogue state (textbox.c, text/tables.c); menus only read the font page. */
+unsigned char g_TextboxKernGlyph0F;
+static const TextboxGlyphSpacing s_textbox_widths[78];
+const TextboxGlyphSpacing *g_TextboxGlyphWidths = s_textbox_widths;
+unsigned g_TextboxGlyphCount = 78;
+/* The USA release unless a case sets the Japanese one (pe1/pe_image.h). */
+u8 g_GameRegion;
+const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60];
+FieldFontTextureState g_FieldFontTextureState;
 extern int g_TextCursorStackBottom[28];
 static u8 *format_text;
 static int extended_provider;

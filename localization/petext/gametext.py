@@ -30,10 +30,47 @@ ADVANCE = [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 8, 11, 14, 9, 8, 7, 8, 7, 7, 8
 # What the English box moves its pen: with the English text flag the game sets
 # g_TextboxKernGlyph0F, and the box pulls every space (code 0x0F) back 7 px (textbox.c).
 BOX_ADVANCE = ADVANCE[:0x0F] + [ADVANCE[0x0F] - 7] + ADVANCE[0x10:]
+# The codes those tables measure: the game's own letters, 00-4C. The table's last entry, 4D, is a
+# 0 the game never draws; with a pack in use the language mod puts its first Latin Extended letter
+# there ("à") with its base letter's width, as it does every code from 4D on (install_widths in
+# mods/pe_lang/pe_lang.c), so those are measured as the mod draws them (_latin_advance).
+GAME_CODES = 0x4D
 WIDE = 12          # a glyph from the extra pages, a symbol, a digit of a number
 LINE_HEIGHT = 12
 
 FB_TAGS = {4: "{red}", 5: "{/red}", 6: "{pause}", 8: "{num}"}
+
+# The pack being built: its own letters by code (petext/letters.py), measured before any fixed
+# letter that code would otherwise be.
+PACK_LETTERS: dict = {}
+PACK_EXTRA: dict = {}
+# The pack's own pictures of letters whose meaning stays (petext/letters.py Letters.draw: a fan
+# patch's look): code -> letter, measured with the widths the pack brings, as pe_lang installs them.
+PACK_DRAWN: dict = {}
+
+
+def base_advance(code: int) -> int:
+    """A fixed code's dialogue width, the space's before the box pulls it back: the pack's own
+    picture's, else the game's (g_TextboxGlyphSpacing)."""
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance()
+    return ADVANCE[code] if code < GAME_CODES else (_latin_advance(code) or WIDE)
+
+
+def box_advance(code: int) -> int:
+    """How far the English box moves its pen after a game code (BOX_ADVANCE), a fixed code the
+    pack draws itself, or a code from 4D on as the language mod draws it (GAME_CODES)."""
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance() - (ADVANCE[0x0F] - BOX_ADVANCE[0x0F] if code == 0x0F else 0)
+    return BOX_ADVANCE[code] if code < GAME_CODES else (_latin_advance(code) or WIDE)
+
+
+def base_metric(code: int, metrics: bytes) -> int:
+    """A fixed code's menu metrics byte: the pack's own picture's, else the game's."""
+    return PACK_DRAWN[code].metric(metrics) if code in PACK_DRAWN else metrics[code]
+
+
+RTL = False                 # the pack being built reads right to left (petext/rtl.py)        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
 
 
 def decode(b: bytes) -> str:
@@ -120,6 +157,17 @@ def encode(text: str, extended: bool = False, cjk_codes=None) -> bytes:
     return bytes(out)
 
 
+def letter_of(c: bytes) -> str | None:
+    """The Unicode letter one command (validation.commands) draws in the pack being built, or None."""
+    if c[:2] == b"\xf1\xc7" and c[:4] in PACK_EXTRA:
+        return PACK_EXTRA[c[:4]].char
+    if len(c) == 1 and c[0] in PACK_LETTERS:
+        return PACK_LETTERS[c[0]].char
+    if len(c) == 1 and c[0] in CHARS:
+        return CHARS[c[0]]
+    return None
+
+
 def _latin_codes() -> dict[str, int]:
     from . import latin
     from . import cyrillic
@@ -129,12 +177,16 @@ def _latin_codes() -> dict[str, int]:
 def _latin_advance(code: int) -> int | None:
     from . import latin
     from . import cyrillic
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance()
+    if code in PACK_LETTERS:
+        return PACK_LETTERS[code].advance()
     if code in cyrillic.BY_CODE:
         return cyrillic.BY_CODE[code].advance
     g = latin.BY_CODE.get(code)
     if not g:
         return None
-    return latin.advance(g, ADVANCE[CODE_OF[g.base]] if g.base else None)
+    return latin.advance(g, base_advance(CODE_OF[g.base]) if g.base else None)
 
 
 def lines(b: bytes) -> list[int]:
@@ -145,7 +197,7 @@ def lines(b: bytes) -> list[int]:
         if c in (0xF7, 0xF8):
             widths.append(w); w = 0
         elif c == 0xFA:
-            w += ADVANCE[0x10] + ADVANCE[0x48] + ADVANCE[0x30]  # "Aya", the default name (petext/layout.py)
+            w += base_advance(0x10) + base_advance(0x48) + base_advance(0x30)  # "Aya", the default name (petext/layout.py)
         elif c == 0xFB and i + 1 < len(b):
             sub = b[i + 1]
             if sub <= 3:
@@ -153,11 +205,17 @@ def lines(b: bytes) -> list[int]:
             elif sub == 8:
                 w += WIDE * 5      # TextboxNumber has up to five rendered digits
             i += 1 + (1 if sub in (7, 9) else 0)
+        elif c == 0xF1 and b[i:i+4] in PACK_EXTRA:
+            w += PACK_EXTRA[b[i:i+4]].advance(); i += 3
         elif c == 0xF1 and b[i:i+2] == b"\xf1\xc5":
             w += WIDE; i += 3
         elif c in (0xFC, 0xFD):
             w += WIDE; i += 1
-        elif c < len(BOX_ADVANCE):
+        elif c in PACK_DRAWN:
+            w += box_advance(c)
+        elif c in PACK_LETTERS:
+            w += PACK_LETTERS[c].advance()
+        elif c < GAME_CODES:
             w += BOX_ADVANCE[c]
         elif c < 0xF1:
             w += _latin_advance(c) or WIDE

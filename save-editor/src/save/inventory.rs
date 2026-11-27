@@ -71,6 +71,18 @@ impl PeSaveSlot {
     /// Adds an item to the first empty slot in Aya's inventory.
     /// If `item_id` is a weapon or armor (`0x3F..=0xC7`), automatically allocates an `EquipmentRecord`!
     pub fn add_item_to_inventory(&mut self, item_id: u8) -> Result<usize> {
+        if crate::stacks::stackable(item_id as i16) && crate::stacks::read(self)?.is_some() {
+            if let Some(index) = self
+                .inventory_items
+                .iter()
+                .position(|&v| v == item_id as i16)
+            {
+                let quantity = self.stack_quantity(0, index)?;
+                anyhow::ensure!(quantity < 99, "Stack is full (99 copies)");
+                self.set_stack_quantity(0, index, quantity + 1)?;
+                return Ok(index);
+            }
+        }
         let empty_slot = self
             .inventory_items
             .iter()

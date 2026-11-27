@@ -13,8 +13,11 @@ Download the game from [GitHub Releases](https://github.com/khasinski/parasite-e
 This is an early alpha; see the release notes for available platforms and known issues.
 See the [changelog](CHANGELOG.md) for changes.
 
-You need your own **North American CUE/BIN images**. Game data is not included.
-Keep each CUE file next to its BIN file.
+Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
+
+You need your own **North American CUE/BIN or CHD images**, or the **Japanese** ones (SLPS-01230/01231). Game data is not included.
+With the Japanese discs the game plays as the Japanese release does: Japanese text, kana name entry, its balance, Circle to confirm and its own memory card files. Don't mix discs of the two releases.
+Keep each CUE file next to its BIN file. A CHD is a single file (its first track must be the data track, as `chdman createcd` makes from a CUE/BIN).
 
 1. Launch Parasite Eve and select your disc images. Selecting both discs enables automatic switching.
 2. You can start with either disc. If the other is needed, the game asks for it by name.
@@ -22,16 +25,24 @@ Keep each CUE file next to its BIN file.
 
 **HD backgrounds:** open **Escape → Mods → Background pack** to download or update the optional artwork.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
-You can also [download the pack manually](https://pe.polanka.ovh/).
+You can also [download the pack manually](https://pe.polanka.ovh/). Widescreen uses the artwork available for each room; some rooms still have black borders.
 
 **Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. Choose **Fast forward** there to assign a key or controller button: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Fast-forward button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
 Settings and selected disc paths are saved automatically. Memory cards are kept in `memory-cards` beside your user preferences. Older `bu00`/`bu10` cards from the launch or executable folder are imported once, keeping the original files.
 
 For portable storage, create an empty `portable.txt` beside the executable (beside the `.app` on macOS), or launch with `--portable`. Settings, memory cards, mods and downloaded backgrounds then use the `userdata` folder there. Keep the application in a writable folder. An explicit `PE_CONFIG_HOME` takes precedence. Existing user saves remain in their original location; copy your preferences folder into `userdata` to move them.
+The game ships with no translations. Put a `.pelang` language pack in the `lang` folder beside the game and start it: the first start that finds packs asks which language to use. To change it later, choose it under **F1 → Language** and restart. Language packs work with **All mods** off. Missing translations use the original text.
+
+Translators can try the [Simplified Chinese rendering pilot](localization/pilots/zh-Hans/README.md). It demonstrates Chinese fonts and dialogue; it is not a complete translation.
+
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
+
+**Escape → Graphics → VSync** offers Auto, On and Off. Auto synchronizes near 60 Hz and uses a frame limiter on other displays; On prevents tearing at any refresh rate. Game speed stays the same.
+
+For text, **F1 → Font** offers Original, Pixel Sans, Departure Mono and Plain Sans. The separate [Translator](localization/translator/README.md) can create and edit language packs.
 
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
@@ -40,13 +51,15 @@ If the game crashes, it saves a report and shows where to find it. Attach that f
 Downloads include an optional mod host. When building from source, enable it with `-DPE_MODS=ON`. Without it, the
 `PE_HOOK(...)` lines in the game compile to nothing. In a mod build, **F1** opens the Mods panel;
 mods start only after **F1 → Manage mods → All mods** is turned on and the game restarted.
-Settings are saved in `pe_mods.ini`. See [the mod guide](mods/README.md) for writing a mod.
+Settings are saved in `pe_mods.ini`. [Built-in mods](docs/MODS.md) describes each mod, its F1 settings and defaults,
+and what the `mods` folder is for: the mods are built into the game, so that folder holds only the developer
+guide. See [the mod guide](mods/README.md) for writing a mod.
 
 ### PE Enhancements
 
 Open **F1 → PE Enhancements** to configure them.
 
-- **Movement** (`pe_qol`): Always Run and configurable walk, run, combat and battle-entry speeds
+- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, hold a button to skip dialogue, Always Run and configurable walk, run, combat and battle-entry speeds
   (walking and running default to 1.75×).
 - **Encounters** (`pe_qol`): no random battles, or Normal, 2×, 4× or Every Check frequency. Story
   and room rules still apply; this changes how often fights happen, not their size.
@@ -71,14 +84,15 @@ Open **F1 → PE Enhancements** to configure them.
 - **Requisition and Wayne's Workshop** (`pe_economy`): buy medicine, ammo, Smoke Grenades,
   Revive and Tools with Junk, from F1 or Wayne's own menu (also Mod Permit Cards); Warner offers
   storage and the Workshop where he stands guard on Day 4. Smoke Grenades escape ordinary battles.
-- **Bestiary and Wardrobe** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk;
-  Aya's outfits and character skins to unlock and wear. Skins are built from your own disc with
-  the decomp bridge tools and stay hidden until present. Unlocks are kept across games in
-  `pe_collection.ini`; other mods can register their own creatures and costumes.
+- **Bestiary** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk, kept across games
+  in `pe_collection.ini`.
+- **Wardrobe** (`pe_wardrobe`): Aya's outfits and character skins to unlock and wear. Skins are
+  built from your own disc with the decomp bridge tools and stay hidden until present. Unlocks are
+  kept across games in `pe_wardrobe.ini` (imported once from `pe_collection.ini`). Other mods can
+  register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
-  are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
-  way a loaded save does. Works in the free field, outside battles, movies and room changes.
+  are kept beside the preferences as `quicksave_<slot>.pec`; quick load also works from the title screen. Quick saves work during battles, events and movies.
 - **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
   and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
   writes nothing to the game state.
@@ -110,7 +124,7 @@ cmake --build build-mods --parallel
 ./build-mods/parasite-eve-pc
 ```
 
-`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
+`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
 
 ### PS5 payload & native GPU options
 

@@ -36,6 +36,8 @@ typedef int (*PeHookFn)(void *ctx, void *user);
 
 enum { PE_PRIORITY_EARLY = -100, PE_PRIORITY_NORMAL = 0, PE_PRIORITY_LATE = 100 };
 
+/* Registration while dispatching is refused (-1). Same-event recursion and nesting beyond eight
+ * dispatches are refused (-1); distinct nested events remain supported. Save requests cannot nest. */
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
 
 int pe_event_id(const char *name);
@@ -46,12 +48,17 @@ const void *pe_service_get(const char *name, int version);
 
 int pe_mod_is_running(const char *mod_id);
 /* Every mod's init runs (its F1 pages exist), but only active mods touch the game: off in Manage
- * mods, with All mods off, or needing an inactive mod, a mod's handlers, ticks, services and
- * main-menu rows are skipped. pe_mod_current(): the mod whose init is running (owner of what it
+ * mods, with All mods off (Language packs aside: a language the player picked is no gameplay
+ * change), or needing an inactive mod, a mod's handlers, ticks, services and main-menu rows are
+ * skipped. pe_mod_current(): the mod whose init is running (owner of what it
  * registers), else NULL. pe_mod_active(): NULL and the host's own are always active. */
 const char *pe_mod_current(void);
+int pe_mod_data_available(const char *mod_id);
 int pe_mod_active(const char *mod_id);
 int pe_mod_interactive(void);
+/* Whether `mod_id` is set to run at this start (All mods where it counts, its own Manage mods row
+ * and the mods it needs). Known once the settings are read, so a mod's init can ask. */
+int pe_mod_requested(const char *mod_id);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */
 void pe_mod_manage_refresh(void);
 int pe_mod_path(char *out, size_t size, const char *file);
@@ -62,6 +69,10 @@ void pe_mod_log(const char *mod_id, const char *fmt, ...);
 void pe_log(const char *tag, const char *fmt, ...);
 #define PE_EVENT_LOG_LINE "play.log"
 typedef struct PeLogLine { const char *tag, *text; } PeLogLine;
+/* A card save was written and published (the game's own save screen; not the quick save or the
+ * room checkpoint, which never commit). ctx: the save's mapped path (const char *). Announced
+ * after the companion file is committed, while the save screen is still open. */
+#define PE_EVENT_SAVE_COMMITTED "save.committed"
 /* A one-line message over the game for a few seconds (interactive runs). */
 void pe_toast(const char *text);
 
@@ -71,6 +82,7 @@ void pe_toast(const char *text);
 void pe_mod_call_begin(const char *mod_id, const char *what, const char *detail);
 void pe_mod_call_end(void);
 void pe_menu_load_settings(void);
+void pe_menu_alias_setting(const char *key, const char *legacy);
 void pe_menu_save_settings(void);
 /* Explicit UI requests only; running mod set stays unchanged until restart. */
 int pe_mod_master_active_now(void);

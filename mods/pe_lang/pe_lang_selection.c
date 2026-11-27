@@ -11,6 +11,10 @@ int pe_lang_selection_find(const PeLangSelection *id, const PeLangPack *packs, u
     return 0; /* Missing pack: game text; don't substitute another language. */
 }
 
+int pe_lang_selection_ask(int saved, unsigned packs, int can_ask) {
+    return !saved && can_ask && packs > 0;
+}
+
 int pe_lang_selection_load(const char *path, PeLangSelection *id) {
     unsigned char record[52];
     memset(id, 0, sizeof *id);

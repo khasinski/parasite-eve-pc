@@ -1,6 +1,7 @@
 /* Decoded game models. See pe_model.h. Mirrors the decomp bridge's renderer
  * (tools/pe_assets/render_models.py: records, upload_tims, model, relocate, anim_frame_at), which
  * renders every Bestiary form correctly; every read here is bounds-checked. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -183,6 +184,63 @@ static int pe_decode(const PeRoomBlobs *room, int slot, int player, PeModel *out
 
 int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) { return pe_decode(room, slot, 0, out); }
 int pe_model_decode_player(const PeRoomBlobs *room, PeModel *out) { return pe_decode(room, 0, 1, out); }
+
+/* ---- a player skin's structure (the bridge's check_skins_struct.py) ---- */
+#define PE_AYA_PARTS 29
+
+/* Every animation row of a container has one channel set per part (a row's byte 1 is parts - 1). */
+static int pe_rows_fit(PeBuf b, int parts, const char *what, char *why, size_t size) {
+    uint32_t at, n, i;
+    if (!pe_records(b, PE_DIR_ROWS, &at, &n)) return 1;
+    for (i = 0; i < n; ++i) {
+        const uint32_t off = pe_u32(b, at + 12 * i + 4) & 0xFFFFFFu;
+        if (!pe_has(b, off, 2) || (int)pe_u8(b, off + 1) + 1 != parts) {
+            snprintf(why, size, "%s row %u has %u parts, not %d", what, i, pe_u8(b, off + 1) + 1, parts);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int pe_model_check_skin(const PeSkinFiles *f, char *why, size_t size) {
+    const PeRoomBlobs bundle = {NULL, (uint8_t *)f->texture, (uint8_t *)f->model, 0, f->texture_size, f->model_size};
+    PeModel m;
+    int i, next = 0, ok = 1;
+    if (!pe_decode(&bundle, 0, 1, &m)) { snprintf(why, size, "model.bin doesn't decode"); return 0; }
+    if (m.parts < PE_AYA_PARTS) { snprintf(why, size, "only %d parts (not Aya's layout)", m.parts); ok = 0; }
+    for (i = 0; ok && i < m.commands; ++i) {       /* matrices are stored in command order: part i uses matrix i */
+        if (m.command[i] < 0) continue;
+        if (m.command[i] != next) { snprintf(why, size, "commands visit part %d where %d belongs", m.command[i], next); ok = 0; }
+        ++next;
+    }
+    if (ok && next != m.parts) { snprintf(why, size, "commands reach %d of %d parts", next, m.parts); ok = 0; }
+    if (ok) ok = pe_rows_fit((PeBuf){f->model, f->model_size}, m.parts, "model.bin", why, size);
+    for (i = 0; ok && i < 8; ++i) {
+        char what[16];
+        snprintf(what, sizeof what, "day%d.bin", i + 1);
+        if (!f->day[i]) { snprintf(why, size, "%s missing", what); ok = 0; }
+        else ok = pe_rows_fit((PeBuf){f->day[i], f->day_size[i]}, m.parts, what, why, size);
+    }
+    if (ok && f->rooms) {                            /* "PERR", count, then (fingerprint, offset, size) */
+        const PeBuf r = {f->rooms, f->rooms_size};
+        const uint32_t count = pe_u32(r, 4);
+        uint32_t k;
+        if (pe_u32(r, 0) != 0x52524550u || !pe_has(r, 8, count * 12u)) { snprintf(why, size, "rooms.bin isn't PERR"); ok = 0; }
+        for (k = 0; ok && k < count; ++k) {
+            const uint32_t off = pe_u32(r, 8 + 12 * k + 4);
+            if (!pe_has(r, off, 2) || (int)pe_u8(r, off + 1) + 1 != m.parts) {
+                snprintf(why, size, "rooms.bin row %u has %u parts, not %d", k, pe_u8(r, off + 1) + 1, m.parts);
+                ok = 0;
+            }
+        }
+    }
+    if (ok && f->meta) {                             /* "PEMT", the part the weapon follows */
+        const PeBuf t = {f->meta, f->meta_size};
+        if (pe_u32(t, 0) != 0x544D4550u || (int)pe_u8(t, 4) >= m.parts) { snprintf(why, size, "meta.bin's gun part isn't a part"); ok = 0; }
+    }
+    pe_model_free(&m);
+    return ok;
+}
 
 void pe_model_free(PeModel *m) {
     free(m->part); free(m->vert); free(m->face); free(m->command); free(m->vram); free(m->anim);

@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.15
+
+- Added **Hold to skip dialogue** under Movement: hold Square, R1 or L1 to turn dialogue pages quickly. Questions still wait for your answer. Off by default.
+- Added **Auto Medicine order** under Combat: the Auto Medicine armor effect can use the weakest medicine first instead of Full Recover.
+- Added **Departure Mono** and **Plain Sans** to **F1 → Font**, beside Original and Pixel Sans.
+- Fixed the warehouse Crab's bubbles and eye beams doing no damage to Aya.
+- Fixed a save whose mods' data another build partly overwrote being refused as unreadable. It now loads, and only the lost mod records start over.
+- An update to the optional HD background pack fixes the restaurant and hanging signs in Chinatown, which were drawn over the street with black dots along their edges. Update the pack through **Escape → Mods → Background pack**.
+- Added more diagnostics to the opt-in debug controls and a headless test harness for automated gameplay checks.
+
+## 0.14
+
+- Fixed opened chest interiors shifting out of sync with the rest of the chest at 60 Hz.
+- Added **Quick hand-in** under Economy: Wayne can count Junk in batches of 100. Turn it off for the original pace.
+- Added opt-in headless debug controls for automated gameplay tests, save export, RNG and battle tracing.
+- An update to the optional HD background pack fixes the open passage and landing upstairs at the NYPD. Update the pack through **Escape → Mods → Background pack**.
+
+## 0.13
+
+- Improved HD widescreen layer alignment and filtering. Adding side artwork no longer changes the scale of the original picture. Coverage still depends on the installed background pack.
+
+- Added the **Japanese release**: select your own Japanese discs (SLPS-01230/01231) and the game plays as it does there, in Japanese with its own font, kana name entry and balance (its weapon, enemy and boss numbers come from the disc), Circle to confirm, and its own memory card files. Disc 1 and Disc 2 must come from the same release. Language packs are for the USA discs and stay off with the Japanese ones.
+- Fixed **Always run** (`pe_qol`) making Aya walk while the action button (Cross / A) is held, which slowed her down whenever **Repeat interact** was used. Only the run button walks now, with the d-pad and the stick, and examining works while running. With the stick, holding the run button now also walks on diagonals, and with Always run off the stick is left exactly as the original reads it.
+
+- Improved HD background layer edges and widescreen sampling, keeping the original 4:3 picture stable and preserving foreground depth. Newer background packs are offered only to clients that support their layer format.
+- Reduced vertical camera jitter with widescreen and 60 Hz interpolation.
+- Fixed missing or displaced parts of Aya's dress when Wardrobe animations use a different skeleton.
+- Fixed dropped armor upgrades and stacked Tools / Mod Permits being counted incorrectly by economy mods.
+- Added optional mouse controls, a VSync setting and an Original / Pixel Sans font choice.
+- Expanded optional costume styles, challenge settings and the BP overhaul; improved Bestiary details and phone-call cancellation.
+- Added the Translator desktop tool, with headless batch editing and automated checks that do not open windows.
+
+## 0.12
+
+- Added **language packs**: put a `.pelang` file in the new `lang` folder beside the game, or pick one with **F1 → Language → Add a translation**. The first start that finds a pack asks which language to use; to change it later, pick another under F1 → Language and restart. A pack can replace the game's text, letters and pictures with words, and works with All mods off. Releases contain no translations: packs made from fan translations (German, French, Spanish, Italian, Simplified Chinese) are shared separately.
+- Widescreen: HD packs can now give the side art depth, so things like cars at the screen edge hide characters walking behind them, as they do in the 4:3 picture.
+- Fixed a thin dark line where the widescreen side art meets the right edge of the 4:3 picture.
+- Fixed critical hits and long-range grazes never happening: every gun hit landed as a normal hit with base damage, which also left the rebalance mod's **Critical** effect with nothing to do.
+- Added a first-launch **setup wizard** (storage, discs, settings and mods), available again from **Escape → Discs**.
+- **Quick save** and **quick load** now work at any moment of a running game, including battles, events and movies, and quick load also works from the title screen.
+- Added optional controller shortcuts for the Settings menu (a two-button combo) and the Mods menu in **Escape → Controls**; both start unbound.
+- Added CHD disc images (Disc 1 and Disc 2) next to CUE/BIN, read with libchdr.
+- Added `--game <path>`: Disc 1 for this run, keeping a saved Disc 2. Releases include a `recomplauncher.json` for RecompLauncher.
+- Added an optional **Phone Calls** mod (`pe_phone`): after saving at a phone, "Stay on the line?" plays a short call. Calls are plain text files players can edit or add to.
+- Reworked the economy mods: rewards, Mod Catalog, shops and Wardrobe are separate mods, with Workshop, Requisition, Rebuild and Mod Permit screens from Wayne's menu, opt-in Economy playstyles, and mod data kept in a companion file beside each save (also carried by the save editor).
+- Added the **Challenges** mod (`pe_challenges`) for custom builds: harder per-run rules such as No PE, Glass cannon and Hardcore. It is not in the default mod list.
+- Fixed every **pe_qol** feature (Always run, speeds, key item pocket, repeat interact) silently turning off after loading a save made from a fresh New Game.
+- Fixed Warner opening the item storage for equipment and the reverse.
+- Wardrobe character skins keep Aya's own movement clearance, so wider NPC bodies no longer get stuck in narrow passages.
+- Rebalance: Club 1 gets a +8 attack bonus, and weapons held as plain item ids now receive their bonuses.
+- Fixed builds with GCC 14 and newer, and builds without the desktop download services.
+
+## 0.11
+
+- Improved model rendering, polygon edges, texture gradients and frame pacing across graphics backends.
+- Fixed distorted Wardrobe skins during Aya’s long-dress scenes.
+- Fixed several crashes involving missing animation poses and targets that have already disappeared.
+- Fixed save errors leaving the save screen waiting, and cleaned up interrupted movie playback.
+- Corrected Bestiary species and boss records.
+- Added portable storage, clearer fast-forward controls, a refined Mods menu and optional held-button interaction retries.
+- Improved HD background layer edges and pack compatibility checks. Background pack 0.2 provides reviewed artwork corrections.
+- Parked experimental language packs and translation tools for further development.
+
 ## 0.10
 
 - Added an optional **Screenshot** binding in **Escape → Controls** for keyboard and controller, opening an in-game modal with issue tags, a note field (with an on-screen controller keyboard), PNG + JSON metadata export (including exact background and widescreen IDs) and optional automatic webhook upload.

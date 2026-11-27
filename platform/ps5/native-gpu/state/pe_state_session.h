@@ -7,7 +7,7 @@
 #endif
 typedef struct PeCpuStateSession {
     PeStateIdentity identity;PeStateRegistry registry;PeWorldState world;PeBattleNumeric battle;
-    int initialized,pending,result,boundaryReason;size_t used;
+    int initialized,pending,result,boundaryReason,portableRestored;size_t used;
 #if PE_NATIVE_STATE_CHANGED_COHORTS
     PeStateGraphArchive graphArchive;PeWorldState targetWorld;PeBattleNumeric targetBattle;PeStateRegistry targetRegistry;int topologyFailed;
 #endif

@@ -49,9 +49,42 @@ pub struct MemoryCardContainer {
 }
 
 impl MemoryCardContainer {
+    #[cfg(test)]
+    pub(crate) fn raw_container_bytes_for_test(&mut self, bytes: Vec<u8>) {
+        self.raw_container_bytes = bytes;
+    }
     /// Opens a PsyZ directory (`bu00`/`bu10`), a raw PsyZ slot file, a `.mcs` single save,
     /// or a full PS1 memory card image (`.srm`, `.mcr`, `.mcd`, `.gme`).
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let mut card = Self::open_inner(path)?;
+        let aggregate = !matches!(
+            card.kind,
+            ContainerKind::PsyzDirectory | ContainerKind::RawSlotFile
+        );
+        for slot in card.slots.iter_mut().flatten() {
+            let native = if card.kind == ContainerKind::PsyzDirectory {
+                card.path.join(&slot.filename)
+            } else {
+                card.path.clone()
+            };
+            let name = if card.kind == ContainerKind::RawSlotFile {
+                native
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .context("Invalid save name")?
+            } else {
+                &slot.filename
+            };
+            slot.companion = crate::companion::load(
+                &slot.raw_bytes,
+                &crate::companion::directory(&native, aggregate),
+                name,
+            )?;
+            slot.validate_mod_inventory()?;
+        }
+        Ok(card)
+    }
+    fn open_inner(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         if path.is_dir() {
             return Self::open_psyz_dir(path);
@@ -59,8 +92,8 @@ impl MemoryCardContainer {
         if !path.exists() {
             bail!("Path does not exist: {}", path.display());
         }
-        let bytes = fs::read(&path)
-            .with_context(|| format!("Failed to read file {}", path.display()))?;
+        let bytes =
+            fs::read(&path).with_context(|| format!("Failed to read file {}", path.display()))?;
 
         match bytes.len() {
             SAVE_BLOCK_SIZE => {
@@ -197,7 +230,11 @@ impl MemoryCardContainer {
                 || fname.is_empty()
             {
                 let slot_idx = slot_index_from_filename(&fname).unwrap_or(i);
-                let target_idx = if slots[slot_idx].is_none() { slot_idx } else { i };
+                let target_idx = if slots[slot_idx].is_none() {
+                    slot_idx
+                } else {
+                    i
+                };
                 let normalized_name = if fname.is_empty() {
                     format!("BASLUS-006620000000{}", (b'A' + target_idx as u8) as char)
                 } else {
@@ -220,153 +257,132 @@ impl MemoryCardContainer {
 
     /// Saves all modified slots back to the current container on disk (`bu00` directory, `.srm`, `.mcr`, `.gme`, `.mcs`, or raw file).
     pub fn save(&mut self) -> Result<()> {
-        self.validate_slots()?;
-        match self.kind {
+        let mut staged = self.clone();
+        staged.validate_slots()?;
+        match staged.kind {
             ContainerKind::PsyzDirectory => {
-                fs::create_dir_all(&self.path)?;
                 for i in 0..MAX_CARD_SLOTS {
-                    let slot_letter = (b'A' + i as u8) as char;
-                    let path_normal = self
-                        .path
-                        .join(format!("BASLUS-006620000000{}", slot_letter));
-                    let path_clear = self
-                        .path
-                        .join(format!("BASLUS-006620000001{}", slot_letter));
-
-                    if let Some(slot) = &mut self.slots[i] {
+                    if let Some(slot) = &mut staged.slots[i] {
                         slot.slot_index = i;
-                        let data = slot.to_bytes();
-                        let target_path = self.path.join(&slot.filename);
-                        // Remove alternate style file if it existed
-                        if path_normal != target_path && path_normal.exists() {
-                            let _ = fs::remove_file(&path_normal);
+                        slot.to_bytes();
+                        let target = staged.path.join(&slot.filename);
+                        write_slot(slot, &target, true)?;
+                        // Retire the alternate only after successful publication.
+                        for style in ['0', '1'] {
+                            let other = staged.path.join(format!(
+                                "BASLUS-00662000000{}{}",
+                                style,
+                                (b'A' + i as u8) as char
+                            ));
+                            if other != target && other.exists() {
+                                fs::remove_file(&other).with_context(|| {
+                                    format!(
+                                        "Saved {}, but could not retire {}",
+                                        target.display(),
+                                        other.display()
+                                    )
+                                })?;
+                            }
                         }
-                        if path_clear != target_path && path_clear.exists() {
-                            let _ = fs::remove_file(&path_clear);
-                        }
-                        fs::write(&target_path, &data).with_context(|| {
-                            format!("Failed to write PsyZ slot file {}", target_path.display())
-                        })?;
                     }
                 }
-                Ok(())
             }
             ContainerKind::RawSlotFile => {
-                let active_slot = self
+                let slot = staged
                     .slots
                     .iter_mut()
-                    .find_map(|s| s.as_mut())
-                    .ok_or_else(|| anyhow::anyhow!("No active save slot to write"))?;
-                let bytes = active_slot.to_bytes();
-                self.raw_container_bytes = bytes.clone();
-                fs::write(&self.path, &bytes)
-                    .with_context(|| format!("Failed to write {}", self.path.display()))
+                    .flatten()
+                    .next()
+                    .context("No active save")?;
+                write_slot(slot, &staged.path, true)?;
             }
-            ContainerKind::McsSingleFile => {
-                let active_slot = self
-                    .slots
-                    .iter_mut()
-                    .find_map(|s| s.as_mut())
-                    .ok_or_else(|| anyhow::anyhow!("No active save slot to write"))?;
-                let bytes = active_slot.to_bytes();
-                if self.raw_container_bytes.len() < MCS_SAVE_SIZE {
-                    self.raw_container_bytes.resize(MCS_SAVE_SIZE, 0);
-                }
-                write_ps1_dir_frame(
-                    &mut self.raw_container_bytes[0..0x80],
-                    &active_slot.filename,
-                );
-                self.raw_container_bytes[0x80..MCS_SAVE_SIZE].copy_from_slice(&bytes);
-                fs::write(&self.path, &self.raw_container_bytes)
-                    .with_context(|| format!("Failed to write {}", self.path.display()))
-            }
-            ContainerKind::Ps1CardImage | ContainerKind::DexDriveGmeImage => {
-                let card_offset = if self.kind == ContainerKind::DexDriveGmeImage {
-                    GME_HEADER_SIZE
-                } else {
-                    0
-                };
-                if self.raw_container_bytes.len() < card_offset + PS1_CARD_SIZE {
-                    self.raw_container_bytes = create_blank_ps1_card();
-                }
-                let card =
-                    &mut self.raw_container_bytes[card_offset..card_offset + PS1_CARD_SIZE];
-                for i in 0..MAX_CARD_SLOTS {
-                    if let Some(slot) = &mut self.slots[i] {
-                        slot.slot_index = i;
-                        let block_bytes = slot.to_bytes();
-                        let dir_offset = (i + 1) * 0x80;
-                        write_ps1_dir_frame(
-                            &mut card[dir_offset..dir_offset + 0x80],
-                            &slot.filename,
-                        );
-                        let data_offset = (i + 1) * SAVE_BLOCK_SIZE;
-                        card[data_offset..data_offset + SAVE_BLOCK_SIZE]
-                            .copy_from_slice(&block_bytes);
-                    }
-                }
-                fs::write(&self.path, &self.raw_container_bytes)
-                    .with_context(|| format!("Failed to write {}", self.path.display()))
+            _ => {
+                staged.write_aggregate(&staged.path.clone())?;
             }
         }
+        *self = staged;
+        Ok(())
     }
 
-    /// Exports all active slots into a PsyZ memory card directory (`bu00/` or `bu10/`).
-    /// Also writes a 19-char fallback copy (`BASLUS-006620000000`) for Slot A if requested,
-    /// though standard 20-char `BASLUS-00662000000<0|1><A..O>` files are always written.
     pub fn export_to_psyz_dir(&mut self, target_dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
         self.validate_slots()?;
-        let target_dir = target_dir.as_ref();
-        fs::create_dir_all(target_dir).with_context(|| {
-            format!(
-                "Failed to create target PsyZ directory {}",
-                target_dir.display()
-            )
-        })?;
-
-        let mut written_files = Vec::new();
-        for i in 0..MAX_CARD_SLOTS {
-            if let Some(slot) = &mut self.slots[i] {
+        let mut staged = self.clone();
+        let mut written = vec![];
+        for (i, slot) in staged.slots.iter_mut().enumerate() {
+            if let Some(slot) = slot {
                 slot.slot_index = i;
-                let data = slot.to_bytes();
-                let out_path = target_dir.join(&slot.filename);
-                fs::write(&out_path, &data).with_context(|| {
-                    format!("Failed to write PsyZ slot file {}", out_path.display())
-                })?;
-                written_files.push(out_path);
+                slot.to_bytes();
+                let path = target_dir.as_ref().join(&slot.filename);
+                write_slot(slot, &path, true)?;
+                written.push(path);
             }
         }
-        Ok(written_files)
+        Ok(written)
     }
 
-    /// Exports all active slots into a standard 128 KB PS1 Memory Card image (`.srm` / `.mcr` / `.mcd`).
     pub fn export_to_ps1_card_image(&mut self, target_file: impl AsRef<Path>) -> Result<()> {
         self.validate_slots()?;
-        let target_file = target_file.as_ref();
-        let mut card = create_blank_ps1_card();
-        for i in 0..MAX_CARD_SLOTS {
-            if let Some(slot) = &mut self.slots[i] {
-                slot.slot_index = i;
-                let block_bytes = slot.to_bytes();
-                let dir_offset = (i + 1) * 0x80;
-                write_ps1_dir_frame(&mut card[dir_offset..dir_offset + 0x80], &slot.filename);
-                let data_offset = (i + 1) * SAVE_BLOCK_SIZE;
-                card[data_offset..data_offset + SAVE_BLOCK_SIZE].copy_from_slice(&block_bytes);
-            }
-        }
-        if let Some(parent) = target_file.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
-        }
-        fs::write(target_file, &card)
-            .with_context(|| format!("Failed to write PS1 card image {}", target_file.display()))
+        let mut staged = self.clone();
+        staged.kind = ContainerKind::Ps1CardImage;
+        staged.raw_container_bytes = create_blank_ps1_card();
+        staged.write_aggregate(target_file.as_ref())
     }
 
+    // Whole-card companions live in <card-file>.pe-ext, keyed by logical slot name.
+    // This keeps multiple card images in one folder independent.
+    fn write_aggregate(&mut self, path: &Path) -> Result<()> {
+        let single = self.kind == ContainerKind::McsSingleFile;
+        let offset = if self.kind == ContainerKind::DexDriveGmeImage {
+            GME_HEADER_SIZE
+        } else {
+            0
+        };
+        let mut bytes = self.raw_container_bytes.clone();
+        let required = if single {
+            MCS_SAVE_SIZE
+        } else {
+            offset + PS1_CARD_SIZE
+        };
+        if bytes.len() != required {
+            bail!("Invalid card container size")
+        }
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            if let Some(slot) = slot {
+                slot.slot_index = i;
+                slot.to_bytes();
+                slot.prepare_companion_inventory()?;
+                if let Some(c) = &mut slot.companion {
+                    crate::companion::publish(
+                        c,
+                        &mut slot.raw_bytes,
+                        &crate::companion::directory(path, true),
+                        &slot.filename,
+                    )?;
+                }
+                let block = slot.to_bytes();
+                if single {
+                    write_ps1_dir_frame(&mut bytes[..0x80], &slot.filename);
+                    bytes[0x80..].copy_from_slice(&block);
+                } else {
+                    let dir = offset + (i + 1) * 0x80;
+                    write_ps1_dir_frame(&mut bytes[dir..dir + 0x80], &slot.filename);
+                    let data = offset + (i + 1) * SAVE_BLOCK_SIZE;
+                    bytes[data..data + SAVE_BLOCK_SIZE].copy_from_slice(&block);
+                }
+            }
+        }
+        crate::companion::atomic_write(path, &bytes, true)?;
+        self.raw_container_bytes = bytes;
+        Ok(())
+    }
     fn validate_slots(&self) -> Result<()> {
         for (i, slot) in self.slots.iter().enumerate() {
             if let Some(slot) = slot {
-                slot.validate_inventory().with_context(|| format!("Save slot {}", i + 1))?;
+                slot.validate_inventory()
+                    .with_context(|| format!("Save slot {}", i + 1))?;
+                slot.clone()
+                    .prepare_companion_inventory()
+                    .with_context(|| format!("Save slot {}", i + 1))?;
             }
         }
         Ok(())
@@ -473,4 +489,26 @@ pub fn create_blank_ps1_card() -> Vec<u8> {
     card[f63 + 0x7F] = b'M' ^ b'C';
 
     card
+}
+
+/// Shared native-save publication for the editor and old-save importer.
+pub(crate) fn write_slot(slot: &mut PeSaveSlot, path: &Path, replace: bool) -> Result<()> {
+    slot.validate_inventory()?;
+    slot.prepare_companion_inventory()?;
+    let mut block = slot.to_bytes();
+    if let Some(c) = &mut slot.companion {
+        let name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .context("Invalid save name")?;
+        crate::companion::publish(
+            c,
+            &mut block,
+            &crate::companion::directory(path, false),
+            name,
+        )?;
+        slot.raw_bytes = block;
+    }
+    let block = slot.to_bytes();
+    crate::companion::atomic_write(path, &block, replace)
 }

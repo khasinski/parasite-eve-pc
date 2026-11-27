@@ -37,7 +37,7 @@ python -I localization/pelang.py template localization/out/text/strings.json --m
 Copy the compiled `es-pilot.pelang` to `lang/` beside the localization executable, or to `lang/`
 beside the user preferences. Build with `pe_lang` in `PE_MOD_LIST`, enable All mods and Language
 packs, then select **Español - piloto (es)** in F1 > Language. It is not selected automatically.
-Choose Game text to restore the original text. Keep the language code and edition name stable so
+Choose English to restore the original text. Keep the language code and edition name stable so
 the saved selection follows pack updates.
 
 The `pe-native-debug` harness keeps test sessions, cards, logs and screenshots local. Its existing

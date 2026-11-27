@@ -1,0 +1,128 @@
+/* Challenges: the info rows. On the Challenges page: Run (Clean / Assisted) and Warnings (other
+ * mods that can work around a challenge; never blocked). On Run summary: the run's status,
+ * challenges on / used / lowered, cheats, battles won, knockouts and time. */
+#include <stdio.h>
+#include <string.h>
+
+#include "pe_challenges.h"
+#include "pe_game.h"
+#include "pe_mod_host.h"
+#include "pe_mod_menu.h"
+
+/* One wording for the run's status, here and on the Challenges screen. */
+const char *pe_ch_status_text(void) {
+    static char text[48];
+    const char *hardcore = pe_ch_on(CH_HARDCORE) ? ", Hardcore (locked)" : pe_ch_run_locked() ? ", locked" : "";
+    if (!pe_save_loaded()) snprintf(text, sizeof text, "No game loaded");
+    else if (!g_ch_run.ever) snprintf(text, sizeof text, "No challenges");
+    else snprintf(text, sizeof text, "%s%s", pe_ch_assisted() ? "Assisted" : "Clean", hardcore);
+    return text;
+}
+
+static void pe_info_status(char *out, unsigned size) { snprintf(out, size, "%s", pe_ch_status_text()); }
+static void pe_info_cleared(char *out, unsigned size) {
+    snprintf(out, size, "%d of %u", pe_ch_records_cleared(), g_ch_def_count);
+}
+
+/* The challenges on now; a level row shows its level ("Tough crowd 2x HP"). */
+static void pe_info_active(char *out, unsigned size) {
+    size_t used = 0;
+    out[0] = 0;
+    for (unsigned i = 0; i < g_ch_def_count && used + 1 < size; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        const int level = pe_ch_level(d->id);
+        if (!level) continue;
+        used += (size_t)snprintf(out + used, size - used, "%s%s", used ? ", " : "", d->short_name);
+        if (used < size && d->levels && level < (int)d->level_count)
+            used += (size_t)snprintf(out + used, size - used, " %s", d->levels[level]);
+        if (used >= size) used = size - 1;
+    }
+    if (!out[0]) snprintf(out, size, "None");
+}
+
+static void pe_info_ever(char *out, unsigned size) { pe_ch_names(g_ch_run.ever, out, size); }
+static void pe_info_dropped(char *out, unsigned size) { pe_ch_names(g_ch_run.dropped, out, size); }
+static void pe_info_cheats(char *out, unsigned size) {
+    snprintf(out, size, "%s", g_ch_run.flags & CH_FLAG_CHEATS ? "Yes" : "No");
+}
+static void pe_info_battles(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)g_ch_run.battles); }
+static void pe_info_knockouts(char *out, unsigned size) { snprintf(out, size, "%u", pe_ch_knockouts()); }
+static void pe_info_time(char *out, unsigned size) {
+    const unsigned s = g_ch_run.seconds;
+    snprintf(out, size, "%u:%02u:%02u", s / 3600, s / 60 % 60, s % 60);
+}
+
+/* A warning: the challenge, the mod (and optionally its row) that works around it, and what it
+ * does. Another mod's warning is one line here; nothing in that mod changes. */
+typedef struct PeChallengeWarning {
+    int challenge;     /* -1: any challenge */
+    const char *mod;   /* NULL: a cheat row is on */
+    const char *row;   /* NULL: the mod running is enough; else that row of it must be on */
+    const char *text;
+} PeChallengeWarning;
+
+static const PeChallengeWarning kWarnings[] = {
+    {CH_NO_ITEMS, "pe_shops", NULL, "shops still sell items"},
+    {CH_NO_ESCAPE, "pe_economy", NULL, "Smoke Grenades still escape"},
+    {CH_NO_EXP, "pe_rewards", NULL, "battle Junk scales with EXP, so less Junk"},
+    {-1, "pe_qol", "No random battles", "No random battles is on"},
+    {-1, NULL, NULL, "a cheat is on (run assisted)"},
+};
+
+static int pe_warning_applies(const PeChallengeWarning *w) {
+    if (!w->mod) return pe_ch_cheat_row_on() != NULL;
+    if (!pe_mod_active(w->mod)) return 0;
+    return w->row ? pe_ch_row_on(w->mod, w->row) : 1;
+}
+
+static void pe_info_warnings(char *out, unsigned size) {
+    const unsigned want = pe_ch_rows_mask();
+    size_t used = 0;
+    out[0] = 0;
+    for (size_t i = 0; i < sizeof kWarnings / sizeof kWarnings[0] && used + 1 < size; ++i) {
+        const PeChallengeWarning *w = &kWarnings[i];
+        const int wanted = w->challenge < 0 ? want != 0 : (want & CH_BIT(w->challenge)) != 0;
+        if (!wanted || !pe_warning_applies(w)) continue;
+        used += (size_t)snprintf(out + used, size - used, "%s%s", used ? "; " : "", w->text);
+        if (used >= size) used = size - 1;
+    }
+    if (!out[0]) snprintf(out, size, "None");
+}
+
+/* The top page's "On now": the run's challenges in a game, the pick for the next New Game at the title. */
+static void pe_info_on_now(char *out, unsigned size) {
+    char names[96];
+    if (pe_game_loaded()) { pe_info_active(out, size); return; }
+    pe_ch_names(pe_ch_rows_mask(), names, sizeof names);
+    snprintf(out, size, "Next New Game: %s", names);
+}
+
+/* The top page is an overview; the challenges themselves are on their category pages. */
+int pe_ch_summary_register(void) {
+    int failed = 0;
+    failed |= pe_menu_register_info(0, "Run", "Clean, or Assisted once a challenge was lowered or a cheat used.",
+        pe_info_status);
+    failed |= pe_menu_register_info(0, "On now", "This run's challenges; at the title, the pick for the next New Game.",
+        pe_info_on_now);
+    failed |= pe_menu_register_info(0, "Cleared",
+        "Challenges beaten the game with, on to the end and never lowered (Aya's menu > Challenges > Records).",
+        pe_info_cleared);
+    failed |= pe_menu_register_info(0, "Warnings", "Other mods that can work around a challenge (never blocked).",
+        pe_info_warnings);
+
+    pe_menu_page(CH_PAGE_RUN, "This game's run: challenges, battles won, knockouts and time.", CH_ORDER_RUN);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Status", "Clean, Assisted, or No challenges.", pe_info_status);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "On now", "The challenges on now.", pe_info_active);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Used this run", "Every challenge that was on at some point.",
+        pe_info_ever);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Lowered mid-run",
+        "Challenges turned off or lowered after the start.", pe_info_dropped);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Cheats used",
+        "A cheat or playtest assist while a challenge was on.", pe_info_cheats);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Battles won", "Battles won with a challenge on.", pe_info_battles);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Knockouts",
+        "Times Aya fell in battle this run (kept across reloads).", pe_info_knockouts);
+    failed |= pe_menu_register_info(CH_PAGE_RUN, "Time", "Play time with a challenge on (pauses left out).",
+        pe_info_time);
+    return failed ? -1 : 0;
+}

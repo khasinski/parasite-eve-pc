@@ -42,6 +42,8 @@ int Save_DeleteMetadataChar(void);
 char *Save_GetActiveMetadataBuffer(void);
 u8 *Save_GetMetadataCursor(void);
 u32 Save_GetMetadataRemainingChars(void);
+/* A name entry grid letter of one or two bytes (pe1/text_render.h). */
+void Save_AppendMetadataLetter(const unsigned char *letter, unsigned bytes);
 void Save_SelectMetadataWindow(ItemDataRecord *record);
 void Save_LoadMetadataWindowText(void);
 

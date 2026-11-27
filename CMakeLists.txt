@@ -17,7 +17,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
-project(parasite-eve-pc VERSION 0.10.0 LANGUAGES C)
+project(parasite-eve-pc VERSION 0.15.0 LANGUAGES C)
 if(PE_PS5_GAME)
     include(cmake/ps5/game.cmake)
 endif()
@@ -55,6 +55,13 @@ if(NOT PE_PS5_GAME)
 endif()
 add_subdirectory(${PSYZ_DIR}/psyz ${CMAKE_CURRENT_BINARY_DIR}/psyz)
 target_compile_definitions(psyz PRIVATE __psyz)
+
+# CHD disc images are read with libchdr (BSD-3-Clause, with its bundled lzma, zstd,
+# miniz and dr_flac), vendored in third_party/libchdr. Linking it through psyz gives
+# every target that links the disc reader the library and its headers.
+set(CHDR_WANT_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/libchdr EXCLUDE_FROM_ALL)
+target_link_libraries(psyz PUBLIC chdr-static)
 
 # The original actor/task workspaces are shared by distinct layout views.
 # Preserve those accesses instead of assuming different struct tags cannot alias.
@@ -107,9 +114,8 @@ if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
     message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
 endif()
 add_library(pe_download_deps INTERFACE)
-if(PE_DESKTOP_MOD_DOWNLOADS)
-    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
-# Desktop mod downloads use native TLS through libcurl and a bounded ZIP reader.
+# cJSON and miniz are built in every configuration: screenshots (PNG, JSON metadata) and Wardrobe
+# packs use them. Only libcurl, for HD pack downloads and webhook uploads, follows the option.
 include(FetchContent)
 FetchContent_Declare(pe_json URL https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.19.tar.gz
     URL_HASH SHA256=7fa616e3046edfa7a28a32d5f9eacfd23f92900fe1f8ccd988c1662f30454562 SOURCE_SUBDIR pe-unused)
@@ -123,7 +129,14 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
     ${pe_zip_SOURCE_DIR}/miniz_tinfl.c ${pe_zip_SOURCE_DIR}/miniz_tdef.c)
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+# -std=c11 hides fseeko/ftello, which miniz needs; GCC 14 and newer reject the implicit declaration.
+if(NOT WIN32)
+    target_compile_definitions(pe_download_zip PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
+if(PE_DESKTOP_MOD_DOWNLOADS)
+    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
+# Desktop mod downloads use native TLS through libcurl.
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
 elseif(WIN32)
@@ -201,7 +214,14 @@ else()
 endif()
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
-set(PE_BUILD_ID "8c52cdd-field-hd-integration-20261030")
+set(PE_BUILD_ID "0.15-source")
+execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE PE_GIT_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET RESULT_VARIABLE PE_GIT_RESULT)
+if(PE_GIT_RESULT EQUAL 0)
+    set(PE_BUILD_ID "${PE_GIT_REVISION}")
+endif()
 target_compile_definitions(parasite-eve-pc PRIVATE __psyz PE_VERSION="${PROJECT_VERSION}" PE_BUILD_ID="${PE_BUILD_ID}")
 if(APPLE AND PE_MACOS_BUNDLE)
     set_target_properties(parasite-eve-pc PROPERTIES
@@ -302,6 +322,7 @@ add_library(parasite-eve-original OBJECT
     src/main/battle/phase.c
     src/main/battle/enemy_slots.c
     src/main/battle/enemy_movement.c
+    src/main/battle/enemy_entity_anim.c
     src/main/entity/combat.c
     src/main/aya/stats.c
     src/main/item/active_list.c
@@ -349,6 +370,7 @@ add_library(parasite-eve-original OBJECT
     src/main/render/frame_update.c
     src/main/entity/frame_update.c
     src/main/boot/init.c
+    src/main/boot/mouse_input.c
     src/main/boot/frame_loop.c
     src/main/draw/pipeline.c
     src/main/draw/gpu_regs.c
@@ -356,6 +378,7 @@ add_library(parasite-eve-original OBJECT
     src/main/draw/prim_color.c
     src/main/draw/frame.c
     src/main/draw/text.c
+    src/main/draw/text_render.c
     src/main/draw/textbox.c
     src/overlays/menu_memcard/list_screen.c
     src/overlays/menu_memcard/video_playback.c
@@ -472,7 +495,7 @@ add_library(parasite-eve-original OBJECT
     src/overlays/room_lib/script_args.c)
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
-set_property(SOURCE src/main/boot/init.c APPEND PROPERTY INCLUDE_DIRECTORIES
+set_property(SOURCE src/main/boot/init.c src/main/boot/mouse_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 
 set(PE_COMMON_GAME_OBJECTS
@@ -485,6 +508,12 @@ set(PE_COMMON_GAME_OBJECTS
 if(PE_MODS)
     add_subdirectory(mods)
     list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods>)
+endif()
+# What the shared game objects need beyond psyz: zipped .pelang files are read with the mod
+# downloads' zip reader (mods/pe_lang/pe_lang_bundle.c).
+set(PE_COMMON_GAME_LIBS)
+if(PE_MODS AND TARGET pe_download_zip AND "pe_lang" IN_LIST PE_MOD_LIST)
+    list(APPEND PE_COMMON_GAME_LIBS pe_download_zip)
 endif()
 
 target_sources(parasite-eve-pc PRIVATE ${PE_COMMON_GAME_OBJECTS})
@@ -520,14 +549,43 @@ endforeach()
 function(pe_add_common_unit_test target_name test_name source_file)
     add_executable(${target_name} ${source_file} ${ARGN} ${PE_COMMON_GAME_OBJECTS})
     target_include_directories(${target_name} PRIVATE include)
-    target_link_libraries(${target_name} PRIVATE psyz)
+    target_link_libraries(${target_name} PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME ${test_name} COMMAND ${target_name})
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(test-skin-gown tests/pe_skin_gown_test.c)
+    if(MSVC)
+        target_compile_options(test-skin-gown PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-skin-gown PRIVATE -UNDEBUG)
+        target_link_libraries(test-skin-gown PRIVATE m)
+    endif()
+    add_test(NAME wardrobe-skin-gown COMMAND test-skin-gown)
+
+    add_executable(test-skin-collision tests/pe_skin_collision_test.c)
+    if(MSVC)
+        target_compile_options(test-skin-collision PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-skin-collision PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME wardrobe-skin-collision COMMAND test-skin-collision)
+
+    add_executable(test-text-render tests/text_render_test.c src/main/draw/text_render.c)
+    target_include_directories(test-text-render PRIVATE include)
+    target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
+    target_link_libraries(test-text-render PRIVATE psyz)
+    add_test(NAME text-render COMMAND test-text-render ${CMAKE_SOURCE_DIR}/tests/text_render_rtl_cases.txt)
+    # Mouse support: window points on the game's screen, menus, dialogue choices, the title.
+    add_executable(test-mouse-input tests/mouse_input_test.c src/main/boot/mouse_input.c)
+    target_include_directories(test-mouse-input PRIVATE include)
+    target_compile_definitions(test-mouse-input PRIVATE __psyz)
+    target_link_libraries(test-mouse-input PRIVATE psyz)
+    add_test(NAME host-mouse-input COMMAND test-mouse-input)
+    set_tests_properties(host-mouse-input PROPERTIES TIMEOUT 30)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
-        src/main/draw/text.c src/main/psyq/libds/dssys_3.c)
+        src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
     target_include_directories(test-menu-call-abi PRIVATE include)
     target_compile_definitions(test-menu-call-abi PRIVATE __psyz PE_MODS)
     target_link_libraries(test-menu-call-abi PRIVATE psyz)
@@ -555,6 +613,29 @@ if(BUILD_TESTING)
 
     pe_add_common_unit_test(test-original-math original-game-math tests/original_math.c)
     pe_add_common_unit_test(test-original-gte original-game-gte tests/original_gte.c)
+    add_executable(test-psyz-gte-ownership
+        ${PSYZ_DIR}/psyz/tests/test_main.c
+        ${PSYZ_DIR}/psyz/tests/test_libgte.c
+        ${PSYZ_DIR}/ztest/ztest.c)
+    target_compile_definitions(test-psyz-gte-ownership PRIVATE __psyz)
+    target_include_directories(test-psyz-gte-ownership PRIVATE ${PSYZ_DIR}/ztest)
+    target_link_libraries(test-psyz-gte-ownership PRIVATE psyz)
+    add_test(NAME original-game-gte-pgxp-ownership COMMAND test-psyz-gte-ownership
+        --filter=gte_pgxp_store::* --output=plain)
+    set_tests_properties(original-game-gte-pgxp-ownership PROPERTIES TIMEOUT 60
+        FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
+    add_executable(test-psyz-cd-media
+        ${PSYZ_DIR}/psyz/tests/test_main.c
+        ${PSYZ_DIR}/psyz/tests/test_libcd.c
+        ${PSYZ_DIR}/ztest/ztest.c)
+    target_compile_definitions(test-psyz-cd-media PRIVATE __psyz PSYZ_TEST_CD_IO=1 _FILE_OFFSET_BITS=64)
+    target_include_directories(test-psyz-cd-media PRIVATE ${PSYZ_DIR}/ztest)
+    target_link_libraries(test-psyz-cd-media PRIVATE psyz)
+    add_test(NAME original-game-cd-media COMMAND test-psyz-cd-media --output=plain)
+    set_tests_properties(original-game-cd-media PROPERTIES TIMEOUT 60
+        FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
     pe_add_common_unit_test(test-original-animation original-game-animation tests/original_animation.c)
     pe_add_common_unit_test(test-original-transforms original-game-transforms tests/original_transforms.c)
     pe_add_common_unit_test(test-original-projection original-game-projection tests/original_projection.c)
@@ -574,12 +655,23 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy"
         LABELS "audio")
 
-    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c)
+    # The frame's pad mapping reads the mouse (mouse_input.c), whose menu pointing plays the
+    # menu's move sound (Akao_SendTableCommand, in the disc objects).
+    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>)
 
     add_executable(test-host-settings tests/original_input_rules.c ${PE_COMMON_GAME_OBJECTS})
     target_compile_definitions(test-host-settings PRIVATE PE_HOST_SETTINGS_TEST=1 __psyz)
     target_include_directories(test-host-settings PRIVATE include)
     target_link_libraries(test-host-settings PRIVATE psyz pe_download_deps)
+    # The host links mods whose quick load stops movies and music, so it needs the same
+    # AKAO, actor and disc objects as the game; unreachable ones are stripped as there.
+    target_sources(test-host-settings PRIVATE $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>)
     add_test(NAME host-settings COMMAND test-host-settings "${CMAKE_CURRENT_BINARY_DIR}/host-settings-evidence")
     set_tests_properties(host-settings PROPERTIES TIMEOUT 30)
 
@@ -616,7 +708,7 @@ if(BUILD_TESTING)
         ${PE_COMMON_GAME_OBJECTS}
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
-    target_link_libraries(test-original-actor-animation PRIVATE psyz)
+    target_link_libraries(test-original-actor-animation PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
     set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)
@@ -655,24 +747,366 @@ if(BUILD_TESTING)
                 ${CMAKE_C_COMPILER})
             set_tests_properties(vsync-display-selection PROPERTIES TIMEOUT 30)
         endif()
+        add_test(NAME original-game-m273-reported-crash COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/m273_crash_replay.py
+            $<TARGET_FILE:parasite-eve-pc> ${CMAKE_BINARY_DIR}/m273-crash-evidence)
+        set_tests_properties(original-game-m273-reported-crash PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;mods")
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
-        add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
-        set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")
+        if(PE_DESKTOP_MOD_DOWNLOADS)   # the HD pack downloader itself
+            add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
+            set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")
+        endif()
         add_test(NAME original-game-frame-interpolation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        # Mouse support on the disc: the title, dialogue, the name entry, the Triangle and battle menus.
+        add_test(NAME original-game-mouse COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mouse_game.py $<TARGET_FILE:parasite-eve-pc>
+            ${CMAKE_BINARY_DIR}/mouse-evidence)
+        set_tests_properties(original-game-mouse PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 900 LABELS "game-assets")
+        if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
+            # The text renderer with language packs made from the disc: stretches, name letters,
+            # a saved name read back, and English as the game drew it before the renderer.
+            add_test(NAME original-game-text-renderer COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-evidence)
+            set_tests_properties(original-game-text-renderer PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+            # A right-to-left battle line on screen: the recorded route into the first battle, then Escape.
+            add_test(NAME original-game-text-renderer-battle COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
+            set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods")
+            # The Japanese release from its own Disc 1 (PE_TEST_JA_DISC): its tables, title, Japanese
+            # text bank and card files, language packs left out, and no mixing with USA discs.
+            add_test(NAME original-game-japanese-release COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/japanese_release.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/japanese-release-evidence)
+            set_tests_properties(original-game-japanese-release PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+            # The Chinese pack made from a fan patch, its letters the patch's own pictures, on screen
+            # on Disc 1 and Disc 2. The pack stays out of the repository: PE_TEST_ZH_PACK names it,
+            # PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-chinese COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-chinese-evidence chinese)
+            set_tests_properties(original-game-text-renderer-chinese PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The Spanish pack from the USA-disc fan patch on screen, on Disc 1 and Disc 2: its letters
+            # (the patch's own pictures and widths), its name grid and its pictures. The pack stays out
+            # of the repository: PE_TEST_ES_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-spanish COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-spanish-evidence spanish)
+            set_tests_properties(original-game-text-renderer-spanish PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the Italian pack from the USA-disc fan patch: its six accented letters in the
+            # patch's pictures and widths, the rest the game's own, on Disc 1 and Disc 2. PE_TEST_IT_PACK
+            # names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-italian COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-italian-evidence italian)
+            set_tests_properties(original-game-text-renderer-italian PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the German pack from the USA-disc fan patch: every letter in the patch's
+            # pictures and widths, its name grid (ä ö ü Ä Ö Ü ß), its pictures, on Disc 1 and Disc 2.
+            # PE_TEST_DE_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-german COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-german-evidence german)
+            set_tests_properties(original-game-text-renderer-german PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the French pack from the USA-disc fan patch: its own letters in the patch's
+            # pictures and widths, the game's other letters as the game draws them, its name grid, its
+            # pictures, and the menus' spaces the patch's 5 px. PE_TEST_FR_PACK names it, PE_TEST_DISC2
+            # adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-french COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-french-evidence french)
+            set_tests_properties(original-game-text-renderer-french PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the Czech pack from the USA-disc fan patch: the patch's own style of the game's
+            # letters and its Czech ones in its pictures and widths, its pictures, on Disc 1 and Disc 2.
+            # PE_TEST_CS_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-czech COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-czech-evidence czech)
+            set_tests_properties(original-game-text-renderer-czech PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The English pack (the game's own text as a pack, made here from the disc: where a new
+            # language starts) chosen in the game: every frame of a New Game through the name entry
+            # to the status panel, and of the Disc 2 route, is the game's own. PE_TEST_DISC2 adds
+            # Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-english-pack COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-english-pack-evidence english-pack)
+            set_tests_properties(original-game-text-renderer-english-pack PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # A file the Translator (localization/translator/) saved, chosen in the game: the game's
+            # own text typed into a new translation and saved, work part and all. The game must open
+            # it and be the game on the english-pack routes. PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-translator-file COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-file-evidence translator)
+            set_tests_properties(original-game-translator-file PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # Title screen pictures redrawn in the Translator (saved from the disc as PNGs, redrawn,
+            # loaded back, saved): the title screen with the file chosen is the one of a disc with the
+            # file's pieces written in, on each disc. Needs Pillow; PE_TEST_DISC2 adds Disc 2.
+            add_test(NAME original-game-translator-pictures COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-pictures-evidence translator-pictures)
+            set_tests_properties(original-game-translator-pictures PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # The city map's place names redrawn in the Translator (PNG out, redrawn, loaded back,
+            # saved): the map (Day 5 sample save) with the file chosen is the one of a copy of Disc 1
+            # with the file's pieces written in. Needs Pillow. Disc 1 only: no sample save reaches the
+            # map on Disc 2, whose PE.IMG is the same bytes.
+            add_test(NAME original-game-translator-map COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-map-evidence translator-map)
+            set_tests_properties(original-game-translator-map PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # The city map's place titles as text: a title typed as words in the Translator is centred on
+            # the box's third line, and on the map (Day 5 sample save, Central Park chosen) the title with
+            # the file is the one of a copy of Disc 1 whose bank holds that line; with the English pack the
+            # game's own; with PE_TEST_PLAYER_PACKS each player pack's line likewise. Disc 1 only.
+            add_test(NAME original-game-translator-place-title COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-place-title-evidence translator-place-title)
+            set_tests_properties(original-game-translator-place-title PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The battle words redrawn in the Translator (PNG out, every grey step turned over, loaded
+            # back, saved): the first fight (Melissa) with the file chosen is the one on a copy of Disc 1
+            # with the file's pieces written in. Needs Pillow. Disc 1 only: the route starts a New Game;
+            # Disc 2's PE.IMG is the same bytes.
+            add_test(NAME original-game-translator-battle COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-battle-evidence translator-battle)
+            set_tests_properties(original-game-translator-battle PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The day title cards redrawn in the Translator: Days 2-5 (Disc 1) and Day 6 (Disc 2, with
+            # PE_TEST_DISC2), each Continued from its sample save, are on the screen the Translator's
+            # pictures, pixel for pixel, and the cards on copies of the discs with the pieces written in.
+            add_test(NAME original-game-translator-cards COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-cards-evidence translator-cards)
+            set_tests_properties(original-game-translator-cards PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 2400 LABELS "game-assets;mods;localization")
+            # The Tutorial redrawn in the Translator (all 30 screens: PNG out, redrawn, loaded back, saved):
+            # on the pad route of original-game-tutorial every screen with the file chosen is the
+            # Translator's picture of it, pixel for pixel, and the one on a copy of Disc 1 with the file's
+            # pieces written in. Needs Pillow. Disc 1 only.
+            add_test(NAME original-game-translator-tutorial COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-tutorial-evidence translator-tutorial)
+            set_tests_properties(original-game-translator-tutorial PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 2400 LABELS "game-assets;mods;localization")
+            # The Game Over words redrawn in the Translator: on part battle's route, with Aya's HP set to 1
+            # by the game's test switch, the still Game Over (both of its brightnesses) with the file chosen
+            # is the Translator's picture of it, pixel for pixel, and the one on a copy of Disc 1 with the
+            # file's pieces written in. Needs Pillow. Disc 1 only.
+            add_test(NAME original-game-translator-game-over COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-game-over-evidence translator-game-over)
+            set_tests_properties(original-game-translator-game-over PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The menus' words redrawn in the Translator (eight the status menu shows, saved as PNGs by the
+            # tool, redrawn, loaded back): the status menu with the file chosen is, pixel for pixel, the
+            # Translator's pictures of them and the menu on a copy of Disc 1 with the file's pieces written
+            # in. Needs Pillow. Disc 1 only.
+            add_test(NAME original-game-translator-menu-words COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-menu-words-evidence translator-menu-words)
+            set_tests_properties(original-game-translator-menu-words PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview of the menus' help line against the game's own
+            # frames: a file the Translator saved (four help lines in Spanish) and the game's own text, on
+            # the menus' route into the item list, the help window pixel for pixel; the item list and the
+            # Parasite Energy list (from the save editor's Day 5 sample save) likewise; the menus' boxes
+            # (an item's actions, a confirm box, Loading, File loaded) and the config menu with its
+            # choices likewise. Needs Pillow. Disc 1.
+            add_test(NAME original-game-translator-menu-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-menu-look-evidence translator-menu-look)
+            set_tests_properties(original-game-translator-menu-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview of the battle lines against the game's own frames:
+            # "Can't escape!" in the first fight, with a file the Translator saved (that line in Spanish)
+            # and with the game's own text, the battle bar and the room under it pixel for pixel. The other
+            # battle lines: the tool's unit tests only. Needs Pillow. Disc 1.
+            add_test(NAME original-game-translator-battle-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-battle-look-evidence translator-battle-look)
+            set_tests_properties(original-game-translator-battle-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview against the game's own frames: the first box
+            # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
+            # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.
+            add_test(NAME original-game-translator-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-look-evidence translator-look)
+            set_tests_properties(original-game-translator-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # Letters the game can't draw yet, painted in the Translator's letters PNG: Greek, Hebrew and
+            # Arabic files the Translator saved with every letter painted. The pack holds each as painted
+            # (with its shadow), and the first box on Disc 1 and the five ship boxes on Disc 2 are, pixel
+            # for pixel, the Translator's "As in the game" drawing (right to left, Arabic joined). Needs
+            # Pillow; PE_TEST_DISC2 for Disc 2 (else 77 after Disc 1).
+            add_test(NAME original-game-translator-letters COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-letters-evidence translator-letters)
+            set_tests_properties(original-game-translator-letters PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # F1 > Font on the real discs: Original draws the first box as the game does; Pixel Sans puts
+            # exactly its picture's letters in the font page and changes the dialogue and the load
+            # screen, on Disc 1 and Disc 2 (PE_TEST_DISC2, else skipped after Disc 1).
+            if("pe_fonts" IN_LIST PE_MOD_LIST)
+                add_test(NAME original-game-font COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/font_game.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/font-evidence)
+                set_tests_properties(original-game-font PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 600 LABELS "game-assets;mods")
+            endif()
+        endif()
+        # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
+        # own bytes, only empty pages and four known rows are left to the game, and one pack serves
+        # both discs. Needs PE_TEST_DISC; PE_TEST_DISC2 adds Disc 2 (else skipped).
+        add_test(NAME localization-english-pack COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_en_pack.py)
+        set_tests_properties(localization-english-pack PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # Headless editor/core suite: Tk imports are forbidden. Visual/layout tests run separately
+        # in translator.yml (Linux uses Xvfb). A .pelang in,
+        # rows a person edits, a .pelang out. Its rule tests need nothing; PE_TEST_DISC (and
+        # PE_TEST_DISC2) adds the real English pack, every row; PE_TEST_PLAYER_PACKS (a folder of
+        # .pelang translations) adds real packs. 77 when any of those was skipped.
+        add_test(NAME localization-translator COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_translator.py)
+        set_tests_properties(localization-translator PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
+        # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
+        add_test(NAME localization-japanese-patch-import COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_ja_patch_import.py)
+        set_tests_properties(localization-japanese-patch-import PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
+        # Naming a Chinese patch's letter pictures: letters drawn from the PC's Chinese font
+        # (SimSun, or PE_TEST_CJK_FONT), no disc. Not isolated (-I): Pillow may be a user install.
+        add_test(NAME localization-chinese-letter-naming COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_hanzi.py)
+        set_tests_properties(localization-chinese-letter-naming PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 120 LABELS "localization")
+        # A fan patch's letter pictures as a pack's Chinese letters, and the build options its pack uses.
+        add_test(NAME localization-chinese-pack COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cjk_pictures.py)
+        set_tests_properties(localization-chinese-pack PROPERTIES TIMEOUT 120 LABELS "localization")
+        # The Chinese pack's dialogue stays on screen wherever the English does, also on the pages no
+        # script ties to a box. Needs PE_TEST_DISC (USA disc 1) and PE_TEST_ZH_PACK, else skipped.
+        add_test(NAME localization-chinese-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_box_fit.py)
+        set_tests_properties(localization-chinese-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Chinese pack's pictures with words (title menu, map names) on the USA discs against the
+        # patched Japanese game itself: the real patch laid over the Japanese disc, each picture the
+        # pack carries byte for byte the patched one, every piece landing, nothing else changed.
+        # Needs PE_TEST_ZH_PACK (the player file), PE_TEST_ZH_PATCH_DIR (the folder with the patch's
+        # SLPS_012.30 and SLPS_012.31), PE_TEST_JA_DISC and PE_TEST_DISC (PE_TEST_JA_DISC2 and
+        # PE_TEST_DISC2 add the second discs), else skipped.
+        add_test(NAME localization-chinese-pictures COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_pictures.py)
+        set_tests_properties(localization-chinese-pictures PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The same for the Spanish pack from the USA-disc fan patch, measured with the patch's own
+        # letter widths the pack carries. Needs PE_TEST_DISC and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_box_fit.py)
+        set_tests_properties(localization-spanish-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Spanish pack on both USA discs: every picture piece lands on them, and Disc 2's
+        # dialogue is Disc 1's (so the box-fit check covers it). Needs PE_TEST_DISC, PE_TEST_DISC2
+        # and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-both-discs COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_both_discs.py)
+        set_tests_properties(localization-spanish-both-discs PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;localization")
+        # The Italian pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_IT_PACK, else skipped.
+        add_test(NAME localization-italian-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_box_fit.py)
+        set_tests_properties(localization-italian-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Italian pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row, the six accented letters and every picture piece as the patched PS1 game
+        # has them. Needs PE_TEST_IT_PATCH, PE_TEST_IT_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds
+        # Disc 2), else skipped.
+        add_test(NAME localization-italian-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_matches_patch.py)
+        set_tests_properties(localization-italian-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
+        # The German pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_DE_PACK, else skipped.
+        add_test(NAME localization-german-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_de_box_fit.py)
+        set_tests_properties(localization-german-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The German pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row (its letter pairs written out), every letter, every picture piece, and
+        # nothing else changed but the text and two script boxes. Needs PE_TEST_DE_PATCH_DIR (the
+        # folder with PE_GER100B_D1/_D2.xdelta), PE_TEST_DE_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds
+        # Disc 2), else skipped.
+        add_test(NAME localization-german-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_de_matches_patch.py)
+        set_tests_properties(localization-german-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # The French pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_FR_PACK, else skipped.
+        add_test(NAME localization-french-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_fr_box_fit.py)
+        set_tests_properties(localization-french-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The French pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row (its two-letter codes written out), every letter and pair, every picture
+        # piece, and nothing else changed but the text. Needs PE_TEST_FR_PATCH_DIR (the folder with
+        # PE_CD1.ppf and PE_CD2.ppf), PE_TEST_FR_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds Disc 2),
+        # else skipped.
+        add_test(NAME localization-french-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_fr_matches_patch.py)
+        set_tests_properties(localization-french-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # The Czech pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_CS_PACK, else skipped.
+        add_test(NAME localization-czech-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cs_box_fit.py)
+        set_tests_properties(localization-czech-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Czech pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row, every letter the patch draws and every picture piece as the patched PS1
+        # game has them. Needs PE_TEST_CS_PATCH_DIR (the folder with CD1_pv3.ppf and CD2_pv3.ppf),
+        # PE_TEST_CS_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds Disc 2), else skipped.
+        add_test(NAME localization-czech-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cs_matches_patch.py)
+        set_tests_properties(localization-czech-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+        add_test(NAME original-game-hd-inactive-atlas COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc> --inactive-atlas-only)
+        set_tests_properties(original-game-hd-inactive-atlas PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
         add_test(NAME original-game-hd-widescreen COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_widescreen.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-widescreen PROPERTIES SKIP_RETURN_CODE 77
-            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+            TIMEOUT 480 LABELS "game-assets;gpu;hd-assets")
     endif()
     add_test(NAME original-game-live-graphics-controls COMMAND test-original-actor-animation --native-graphics-controls $<TARGET_FILE:parasite-eve-pc>)
     set_tests_properties(original-game-live-graphics-controls PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu" ENVIRONMENT "SDL_AUDIO_DRIVER=dummy")
@@ -762,6 +1196,21 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-m023-melissa PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets;gpu;audio")
     add_test(NAME original-game-m022-keys COMMAND test-original-actor-animation --native-m022 $<TARGET_FILE:parasite-eve-pc>)
     set_tests_properties(original-game-m022-keys PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio")
+    add_test(NAME original-game-carnegie-interaction-timing COMMAND test-original-actor-animation --native-carnegie-interaction-timing $<TARGET_FILE:parasite-eve-pc>)
+    set_tests_properties(original-game-carnegie-interaction-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio")
+    foreach(variant IN ITEMS early late)
+        if(variant STREQUAL "early")
+            set(offset -3)
+        else()
+            set(offset 7)
+        endif()
+        add_test(NAME original-game-carnegie-interaction-timing-${variant} COMMAND test-original-actor-animation --native-carnegie-interaction-timing $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-carnegie-interaction-timing-${variant} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio" ENVIRONMENT "PE_TEST_CARNEGIE_PRESS_OFFSET=${offset}")
+    endforeach()
+    foreach(side IN ITEMS left center right away)
+        add_test(NAME original-game-carnegie-diary-${side} COMMAND test-original-actor-animation --native-carnegie-diary-range $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-carnegie-diary-${side} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio" ENVIRONMENT "PE_TEST_CARNEGIE_DIARY_SIDE=${side}")
+    endforeach()
     add_dependencies(test-original-actor-animation parasite-eve-pc)
     add_test(NAME original-game-fx-frames COMMAND test-original-actor-animation --fx-frames)
     set_tests_properties(original-game-fx-frames PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120 LABELS "game-assets;gpu")
@@ -789,9 +1238,12 @@ if(BUILD_TESTING)
     add_test(NAME original-widescreen-rooms COMMAND test-original-actor-animation --widescreen-rooms)
     set_tests_properties(original-widescreen-rooms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
         LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy")
+    add_test(NAME original-widescreen-camera-grid COMMAND test-original-actor-animation --widescreen-rooms)
+    set_tests_properties(original-widescreen-camera-grid PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_CAMERA_GRID=1")
     add_test(NAME original-widescreen-animations COMMAND test-original-actor-animation --widescreen-rooms)
     set_tests_properties(original-widescreen-animations PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
-        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_ANIMATIONS=1")
+        LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_WS_ANIMATIONS=1;PE_WS_CAMERA_GRID=1")
     add_test(NAME original-m417-chrysler-load COMMAND test-original-actor-animation --m417-load)
     set_tests_properties(original-m417-chrysler-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         LABELS "game-assets;room" ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy")
@@ -808,6 +1260,9 @@ if(BUILD_TESTING)
     set_tests_properties(original-m273-attack-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;fieldfx")
     add_test(NAME original-m273-liberty-load COMMAND test-original-actor-animation --m273-load)
+    add_test(NAME original-m273-action-poses COMMAND test-original-actor-animation --m273-action-poses)
+    set_tests_properties(original-m273-action-poses PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;battle")
     set_tests_properties(original-m273-liberty-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;render")
     add_test(NAME original-m245-trail-burst-load COMMAND test-original-actor-animation --m245-load)
@@ -818,6 +1273,9 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
     add_test(NAME original-m221-spark-ring-burst-load COMMAND test-original-actor-animation --m221-load)
     set_tests_properties(original-m221-spark-ring-burst-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
+    add_test(NAME original-grab-attack-hits COMMAND test-original-actor-animation --grab-attack-hits)
+    set_tests_properties(original-grab-attack-hits PROPERTIES TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
     add_test(NAME original-m269-grab-load COMMAND test-original-actor-animation --m269-load)
     set_tests_properties(original-m269-grab-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
@@ -925,6 +1383,39 @@ if(BUILD_TESTING)
         target_include_directories(test-psyz-interpolation PRIVATE third_party/psyz/ztest)
         target_compile_definitions(test-psyz-interpolation PRIVATE __psyz PSYZ_TEST_SDL_GPU=1)
         target_link_libraries(test-psyz-interpolation PRIVATE psyz)
+        add_test(NAME original-gpu-widescreen-native-readback COMMAND test-psyz-interpolation
+            --filter=gpu::scaled_widescreen_keeps_native_readback)
+        set_tests_properties(original-gpu-widescreen-native-readback PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-widescreen-subpixel-pan COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_subpixel_shift_moves_picture_uniformly)
+        set_tests_properties(original-gpu-widescreen-subpixel-pan PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-widescreen-room-dither COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_room_step_keeps_its_dither)
+        set_tests_properties(original-gpu-widescreen-room-dither PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-native-attributes COMMAND test-psyz-interpolation --filter=gpu::ps1_polygon_attribute_gradients)
+        set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-native-coverage COMMAND test-psyz-interpolation --filter=gpu::native_polygon*)
+        set_tests_properties(original-gpu-native-coverage PROPERTIES TIMEOUT 30 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-untextured-interpolation COMMAND test-psyz-interpolation
+            --filter=gpu::untextured_geometry_keeps_interpolation_with_textured_neighbors)
+        set_tests_properties(original-gpu-untextured-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-frame-interpolation COMMAND test-psyz-interpolation --filter=gpu::interpolated*)
         set_tests_properties(original-gpu-frame-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
@@ -938,14 +1429,19 @@ if(BUILD_TESTING)
             --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
         add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
             --filter=gpu::widescreen_hd_extension_is_display_only)
-        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension PROPERTIES
+        add_test(NAME original-gpu-hd-layer-edges COMMAND test-psyz-interpolation
+            --filter=gpu::hd_room_layers_keep_shared_cutout_edges_opaque)
+        set_tests_properties(original-gpu-hd-layer-edges PROPERTIES
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped")
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension
+            original-gpu-hd-layer-edges PROPERTIES
             TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_executable(test-gpu-resource-failures tests/gpu_resource_failures.c)
         target_link_libraries(test-gpu-resource-failures PRIVATE psyz)
-        foreach(mode upload readback reset resize swapchain-resize)
+        foreach(mode upload readback reset resize swapchain-resize pacing)
             add_test(NAME original-gpu-resource-${mode} COMMAND test-gpu-resource-failures --${mode})
             set_tests_properties(original-gpu-resource-${mode} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
                 LABELS "gpu" ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy")
@@ -1042,6 +1538,42 @@ if(BUILD_TESTING)
             endif()
         endforeach()
     endif()
+endif()
+
+# Clang's COFF linker diagnoses unresolved references even in unused functions.
+# The actor fixture exercises real shared actors/processes, so retain its own
+# entry point but close the same runtime graph as the game. Do not stub engine
+# functions or suppress undefined symbols. Production objects are reused; only
+# the desktop host is compiled again with an entry point the fixture never calls.
+if(BUILD_TESTING AND MINGW AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    add_library(pe-actor-lifecycle-host OBJECT src/main/boot/main.c)
+    target_include_directories(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,COMPILE_DEFINITIONS>
+        main=pe_actor_lifecycle_unused_game_entry)
+    target_link_libraries(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,LINK_LIBRARIES>)
+    get_target_property(actor_fixture_runtime parasite-eve-pc SOURCES)
+    list(REMOVE_ITEM actor_fixture_runtime src/main/boot/main.c)
+    set_property(TARGET test-original-actor-lifecycle PROPERTY SOURCES
+        tests/original_actor_lifecycle.c ${actor_fixture_runtime}
+        $<TARGET_OBJECTS:pe-actor-lifecycle-host>)
+    target_link_libraries(test-original-actor-lifecycle PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,LINK_LIBRARIES>)
+endif()
+
+# Every program built from the mods' objects also needs what they link (the Wardrobe's character
+# packs read zips and pack.json): object libraries don't pass their link libraries on.
+if(PE_MODS)
+    get_property(pe_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(pe_target IN LISTS pe_targets)
+        get_target_property(pe_type ${pe_target} TYPE)
+        get_target_property(pe_sources ${pe_target} SOURCES)
+        if(pe_type STREQUAL "EXECUTABLE" AND pe_sources AND "${pe_sources}" MATCHES "TARGET_OBJECTS:pe-mods")
+            target_link_libraries(${pe_target} PRIVATE pe_download_json pe_download_zip)
+        endif()
+    endforeach()
 endif()
 
 if(PE_PS5_GAME)

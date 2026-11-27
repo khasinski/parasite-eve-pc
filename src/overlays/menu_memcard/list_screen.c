@@ -2,6 +2,8 @@
 #include "menu_memcard_menu.h"
 #include "menu_memcard_screen.h"
 #include "pe1/boot.h"
+#include "pe_hooks.h"
+#include "pe1/mouse_input.h"
 #include <psyz/video.h>
 #include <stdio.h>
 
@@ -28,6 +30,26 @@ static inline MemcardImageNode *MenuCard_FindImageNode(s32 kind) {
     return node;
 }
 
+/* The mouse over the title menu: its rows are 20 pixels apart, the cursor's
+ * y on each (140 Load when a card has a file, 160 New Game, 180 Continue,
+ * 200 Tutorial), each row's words drawn from y + 2. The rows the cursor can
+ * take are those Up/Down reach (MenuCard_HandleListInput). */
+static void MenuCard_PointListRow(MemcardImageNode *cursor) {
+    static unsigned seen;
+    int x, y, row;
+    if (!Mouse_Moved(&seen, &x, &y) || x < 96 || x >= 224 || y < 142) {
+        return;
+    }
+    row = 140 + (y - 142) / 20 * 20;
+    if (row == cursor->y || row < (MenuCard_FindImageNode(6)->intensity == 0x100 ? 140 : 160) ||
+        row > MenuCard_FindImageNode(5)->y) {
+        return;
+    }
+    g_MemcardScreenTimer = 0;
+    cursor->y = row;
+    Menu_PlayMoveSound();
+}
+
 /* Scroll and confirm handling for the memory card list screen. */
 void MenuCard_HandleListInput(void) {
     s32 pad;
@@ -35,6 +57,7 @@ void MenuCard_HandleListInput(void) {
     MemcardImageNode *node;
 
     pad = Draw_RemapStatusFlags();
+    Mouse_NoteTitleScreen();
     if(g_BootHostActive && g_BootHostPadEventCount && pad!=g_MemcardPrevPad){
         printf("{\"event\":\"title_input\",\"vblank\":%u,\"pad\":%u,\"timer\":%d,\"nodes\":[",
             g_BootHostVBlankCount,(u32)pad,g_MemcardScreenTimer);
@@ -96,6 +119,7 @@ void MenuCard_HandleListInput(void) {
             }
         }
         node = MenuCard_FindImageNode(7);
+        MenuCard_PointListRow(node);
         if (pad & 0x20) {
             if (node->y == 160 || node->y == 180 || node->y == 200 || node->y == 140) {
                 g_MemcardScreenTimer = 1001;
@@ -265,6 +289,7 @@ s32 MenuCard_RunListScreen(void) {
     s32 initialPage;
     s32 waitFrames;
     s32 result;
+    s32 loaded = 0;
     s32 groupsRemaining;
     u32 rgb0;
     u32 rgb1;
@@ -316,7 +341,8 @@ s32 MenuCard_RunListScreen(void) {
         DrawSync(0);
         VSync(0);
         VSync(0);
-        if (g_LogoFadePlayed == 0) {
+        /* The publisher logo (image 8) is the USA release's; the Japanese title has none. */
+        if (g_LogoFadePlayed == 0 && !PE_JAPAN) {
             g_LogoFadePlayed = 1;
             MenuCard_ShowLogoFade();
         }
@@ -342,25 +368,26 @@ s32 MenuCard_RunListScreen(void) {
             g_MemcardScreenBuffers[0]->dirty.w = g_MemcardScreenBuffers[1]->dirty.w = 0;
             g_MemcardScreenPage = g_ActiveDrawSlot;
             g_MemcardScreenBuffers[0]->overlay.w = g_MemcardScreenBuffers[1]->overlay.w = 0;
+            /* The Japanese picture area is a row higher: one row less above, one more below. */
             rect.x = 0;
             rect.y = 0;
             rect.w = 0x1E0;
-            rect.h = 0x14;
+            rect.h = PE_JAPAN ? 0x13 : 0x14;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
-            rect.y = 0xE0;
+            rect.y = PE_JAPAN ? 0xDF : 0xE0;
             rect.w = 0x1E0;
-            rect.h = 0x10;
+            rect.h = PE_JAPAN ? 0x11 : 0x10;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
             rect.y = 0xF0;
             rect.w = 0x1E0;
-            rect.h = 0x14;
+            rect.h = PE_JAPAN ? 0x13 : 0x14;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
-            rect.y = 0x1D0;
+            rect.y = PE_JAPAN ? 0x1CF : 0x1D0;
             rect.w = 0x1E0;
-            rect.h = 0x10;
+            rect.h = PE_JAPAN ? 0x11 : 0x10;
             ClearImage(&rect, 0, 0, 0);
             initialPage = g_MemcardScreenPage == 0;
             g_MemcardScreenPage = initialPage;
@@ -409,6 +436,10 @@ s32 MenuCard_RunListScreen(void) {
                 MemCard_UpdateSavePolling();
                 Field_HandleStateTransition();
                 MenuCard_HandleListInput();
+                PE_HOOK(PE_HOOK_TITLE_FRAME, &loaded);
+                if (loaded) {
+                    break;
+                }
                 MenuCard_RedrawImageNodes();
                 node = (g_MemcardActiveNodeHead);
                 previous = 0;
@@ -491,7 +522,9 @@ s32 MenuCard_RunListScreen(void) {
         Draw_InitBuffers();
         Draw_SelectBuffer();
         Draw_PresentFrame(2);
-        if (g_MemcardScreenTimer >= 0x3E9) {
+        if (loaded) {
+            result = 2; /* a mod loaded a save: on as Continue */
+        } else if (g_MemcardScreenTimer >= 0x3E9) {
             wantedKind = 7;
             selection = (g_MemcardActiveNodeHead);
             while (selection != 0) {

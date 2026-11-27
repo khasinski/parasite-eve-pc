@@ -3,6 +3,7 @@
 #include "pe1/battle.h"
 #include "pe1/draw_state.h"
 #include "pe1/save_slot_metadata.h"
+#include "pe1/text.h"
 #include "pe1/textbox.h"
 
 unsigned char g_SaveOverlayTimer;
@@ -37,10 +38,10 @@ void Save_DrawSlotMetadata(void)
         prompt = (g_BattleScanPanel.prompt.word >> 10) & 3;
         if (prompt != 0) {
             if (prompt == phase) {
-                g_TextboxEntries[0].message = g_AnalyzeHpFormatText;
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_HP, g_AnalyzeHpFormatText, 0);
             }
         } else {
-            g_TextboxEntries[0].message = g_AnalyzeHpUnknownText;
+            g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_HP_UNKNOWN, g_AnalyzeHpUnknownText, 0);
         }
         g_TextboxEntries[0].state = 2;
         g_TextboxEntries[0].control.flags |= 0x2000000;
@@ -55,25 +56,25 @@ void Save_DrawSlotMetadata(void)
             g_BattleScanPanel.prompt.timer = 0x4B;
             state = g_BattleScanPanel.prompt.word;
             if (state & 0x1000) {
-                g_TextboxEntries[0].message = g_TextSusceptibleToPoison[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_POISON, g_TextSusceptibleToPoison[0], sizeof g_TextSusceptibleToPoison[0]);
                 g_BattleScanPanel.prompt.word &= ~0x1000;
             } else if (state & 0x2000) {
-                g_TextboxEntries[0].message = g_TextSusceptibleToAcid[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_ACID, g_TextSusceptibleToAcid[0], sizeof g_TextSusceptibleToAcid[0]);
                 g_BattleScanPanel.prompt.word &= ~0x2000;
             } else if (state & 0x4000) {
-                g_TextboxEntries[0].message = g_AnalyzeTranquilizerWeakTexts[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_TRANQUILIZER, g_AnalyzeTranquilizerWeakTexts[0], sizeof g_AnalyzeTranquilizerWeakTexts[0]);
                 g_BattleScanPanel.prompt.word &= ~0x4000;
             } else if (state & 0x8000) {
-                g_TextboxEntries[0].message = g_AnalyzeHeatWeakTexts[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_HEAT, g_AnalyzeHeatWeakTexts[0], sizeof g_AnalyzeHeatWeakTexts[0]);
                 g_BattleScanPanel.prompt.word &= ~0x8000;
             } else if (state & 0x10000) {
-                g_TextboxEntries[0].message = g_AnalyzeColdWeakTexts[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_COLD, g_AnalyzeColdWeakTexts[0], sizeof g_AnalyzeColdWeakTexts[0]);
                 g_BattleScanPanel.prompt.word &= ~0x10000;
             } else if (state & 0x20000) {
-                g_TextboxEntries[0].message = g_AnalyzeStealWeakTexts[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_STEAL, g_AnalyzeStealWeakTexts[0], sizeof g_AnalyzeStealWeakTexts[0]);
                 g_BattleScanPanel.prompt.word &= ~0x20000;
             } else if (state & 0x40000) {
-                g_TextboxEntries[0].message = g_AnalyzeConfusionWeakTexts[Save_GetMetadataWindowIndex()];
+                g_TextboxEntries[0].message = Text_LookupBattleMessage(BATTLE_TEXT_CONFUSION, g_AnalyzeConfusionWeakTexts[0], sizeof g_AnalyzeConfusionWeakTexts[0]);
                 g_BattleScanPanel.prompt.word &= ~0x40000;
             } else {
                 Draw_ResetTextboxes();

@@ -13,6 +13,9 @@
 #include "psyz/state_audio.h"
 #include "psyz/state_producers.h"
 #include "pe_state_files.h"
+#include "pe_state_portable.h"
+#include "pe_checkpoint_game.h"
+#include "pe_profile_transactions.h"
 #include "pe_state_mod_contract.h"
 extern int CPE_StateHostIdle(void);
 extern unsigned CPE_StateHostReasonBits(void);
@@ -87,8 +90,58 @@ static int restore_components(PeCpuStateSession*s,const PeStateBarrier*barrier,c
     return PeState_RestoreComponents(&s->registry,barrier,&s->identity,in,bytes,s->scratch,s->scratchBytes);
 #endif
 }
+
+/* New file checkpoints always own a portable component. Strict runtime ownership
+ * gates only the optional exact component; it never gates persistent recovery. */
+static int portable_file(PeCpuStateSession *s,const PeStateBarrier *barrier,int mode) {
+    s->portableRestored=0;
+    if(CPE_StateHostReasonBits()&~4096u)return PE_STATE_BUSY;
+    if(mode==3) {
+        unsigned portable=0;size_t exact=0;
+        if(s->outputBytes<PE_PORTABLE_HEADER||pe_checkpoint_capture_portable(s->output+80,
+            (unsigned)(s->outputBytes-80),&portable))return PE_STATE_INCOMPLETE;
+        unsigned char *runtime=s->output+80+portable;
+        if(!PeCpuStateSession_CurrentRoomBoundary()&&!initialize(s)) {
+            int r=PeState_CapturePartial(&s->registry,barrier,&s->identity,runtime,
+                s->outputBytes-80-portable,&exact);
+            if(r)exact=0; /* Portable capture remains valid without runtime ownership. */
+        }
+        int r=pe_port_finish(s->output,s->outputBytes,portable,exact,&s->identity,&s->used);
+        if(r)return r;
+        r=PeStateFiles_WriteUnique(s->stateDirectory,s->output,s->used,&s->identity,s->stateFile,sizeof s->stateFile);
+        if(r)return r;
+        pe_profile_transactions_committed();
+#if PE_NATIVE_STATE_CHANGED_COHORTS
+        if(exact)(void)PeStateGraphArchive_Remember(&s->graphArchive,&s->world,&s->battle,&s->identity,runtime,exact);
+#endif
+        return 0;
+    }
+    int r=PeStateFiles_Read(s->stateDirectory,s->stateFile,s->output,s->outputBytes,&s->used,&s->identity);
+    if(r)return r;
+    unsigned portable,exact;
+    r=pe_port_inspect(s->output,s->used,&s->identity,&portable,&exact);
+    if(r)return r; /* Legacy partial files have no portable restore contract. */
+    if(pe_checkpoint_prepare_portable(s->output+80,portable))return PE_STATE_INVALID;
+    const unsigned char *runtime=s->output+80+portable;PeStateInfo info;
+    if(exact&&!PeCpuStateSession_CurrentRoomBoundary()&&
+       !PeState_Inspect(runtime,exact,&s->identity,&info)&&!initialize(s)) {
+        r=restore_components(s,barrier,runtime,exact);
+        if(!r){pe_mod_state_after_restore();return 0;}
+        if(r==PE_STATE_ROLLBACK_FAILED)return r;
+        /* Failed exact transactions have rolled back before portable commit. */
+    }
+    r=pe_checkpoint_commit_portable();
+    if(!r){s->initialized=0;s->portableRestored=1;}
+    return r?PE_STATE_INVALID:0;
+}
 static void service(void *context){
     PeCpuStateSession *s=context;int mode=s->pending,attemptedRestore=0;PeStateBarrier barrier={0,all_begin,all_unchanged,all_end};
+    if(mode==3||mode==4){
+        PeState_ClearFailure();s->used=0;s->boundaryReason=0;
+        s->result=portable_file(s,&barrier,mode);
+        if(s->result)s->boundaryReason=s->result==PE_STATE_ROLLBACK_FAILED?17:16;
+        s->output=0;s->input=0;s->scratch=0;s->pending=0;return;
+    }
     PeState_ClearFailure();s->used=0;s->boundaryReason=PeCpuStateSession_CurrentRoomBoundary();s->result=s->boundaryReason?PE_STATE_INCOMPLETE:initialize(s);
     if(s->result&&!s->boundaryReason)s->boundaryReason=PE_STATE_ROOM_OWNERS;
     if(!s->result){

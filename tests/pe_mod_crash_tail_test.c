@@ -54,6 +54,7 @@ void pe_equip_sync_init(void) {}
 void pe_present_install(void) {}
 void pe_menu_begin(const char *page) { (void)page; }
 void pe_menu_load_settings(void) {}
+void pe_menu_alias_setting(const char *key, const char *legacy) { (void)key; (void)legacy; }
 int pe_menu_register_toggle(const char *sub, const char *label, const char *description, int *flag,
                             PeMenuPerFrame per_frame) {
     (void)sub; (void)label; (void)description; (void)per_frame;
@@ -68,6 +69,7 @@ int pe_menu_top_page(const char *page, const char *description, int order) {
 }
 void pe_panel_install(void) {}
 void pe_toast(const char *text) { (void)text; }
+void pe_debug_control_install(void) {}
 int pe_free_field(void) { return 1; }
 void pe_pages_describe(void) {}
 

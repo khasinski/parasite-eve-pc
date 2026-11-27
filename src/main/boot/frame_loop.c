@@ -92,6 +92,7 @@ void Boot_FlushSceneFast(void) {
 
 int (*g_BootMovieSkipConfirm)(void);
 void (*g_BootSceneStarted)(void);
+int (*g_BootTestSave)(void);
 
 /* The original story movie player has no skip button (the title movies stop
  * on Start in MenuCard_PlayVideo). A new Start press while one
@@ -152,6 +153,9 @@ int Boot_RunFrame(void)
             *scene_flags = 0;
             Field_HandleStateTransition();
             PE_HOOK(PE_HOOK_FRAME, NULL);
+            if (g_BootHostSaveAt && g_BootHostVBlankCount >= g_BootHostSaveAt && g_BootTestSave &&
+                g_BootTestSave())
+                g_BootHostSaveAt = 0;
             flags = g_GameStateFlags;
             g_GameStateFlags = flags & ~0x30u;
             skip_movie = Boot_MovieSkipChosen(state);

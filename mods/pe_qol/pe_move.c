@@ -10,13 +10,15 @@
  * ALWAYS RUN: the run bit of the field input is input bit 0 of the button mapping table
  * (g_FieldRenderFlagTable[0], Circle by default). In free field movement with Always run on it
  * uses a local d-pad mask, so moving means running, and no mask while the run button is held.
- * The original button mapping is never modified.
+ * The original button mapping is never modified. Only the run button walks: the game drops the
+ * run bit while the action button is held (Cross over Circle), so after the poll the bit is put
+ * back for a d-pad direction with Cross held (issue 205). Examining works while running.
  *
- * ANALOG: in analog mode the game sets the run bit only when one stick axis is past full tilt,
- * so a round stick gate dropped Aya to a walk on diagonals. Before the game reads the pad
- * (PE_HOOK_PAD_READ) the stick is reshaped, both axes scaled together so the steering angle is
- * unchanged: to run, out until the larger axis reaches its edge; to walk, in until neither axis
- * is at full tilt. Cross always walks (examining has to stop her).
+ * ANALOG: the game runs when the stick is past the "Analog run threshold" option (a radius,
+ * the same on diagonals) and ignores the run button. With Always run on, before the game reads
+ * the pad (PE_HOOK_PAD_READ), the stick is reshaped, both axes scaled together so the steering
+ * angle is unchanged: to run, out until the larger axis reaches its edge; to walk (run button
+ * held), in to just inside the threshold. With Always run off the stick is left alone.
  *
  * BATTLE START: while Aya walks to her spot (phase 7), scale the local script
  * speed before its original destination clamp, and the local animation increment.
@@ -31,11 +33,13 @@
 #include "pe1/boot.h"
 #include "pe1/field_actor.h"
 #include "pe1/pad_state.h"
+#include "pe1/game_state.h"
 
 #define PE_RUN_MAP_DPAD     0x00F0u   /* up/right/down/left, internal pad bits */
-#define PE_PAD_CROSS        0x2000u
 #define PE_STICK_CENTER     0x80
-#define PE_STICK_FULL_R2    (100 * 100)
+#define PE_FIELD_RUN        0x1u          /* field bit0: run */
+#define PE_FIELD_DIRS       0x78u         /* field bits3..6: directions */
+#define PE_FIELD_ACTION     0x20000300u   /* field bits the game lets win over run */
 #define PE_MOVE_FACTOR_STOCK 0x10000
 #define PE_ANIM_STEP_STOCK  0x10000
 #define PE_ENTRY_ACTION_MODE 5u
@@ -50,6 +54,8 @@ static const int32_t s_entry_factor[] = { 0x10000, 0x18000, 0x20000, 0x30000, 0x
 static int s_always_run = 1;
 static int s_run_choice = 3, s_walk_choice = 3;   /* 1.75x field movement by default */
 static int s_combat_choice = 0, s_entry_choice = 0;
+static int s_repeat_interact;
+static unsigned s_interact_ticks;
 
 static int32_t pe_speed(int choice) { return s_speed_factor[choice >= 0 && choice < PE_SPEED_CHOICES ? choice : 0]; }
 
@@ -86,37 +92,70 @@ static PePad pe_read_pad(void) {
     return p;
 }
 
-/* Should a stick push run? (Always run: unless the run button is held; never while Cross is.) */
-static int pe_stick_runs(const PePad *p) {
-    int dx, dy;
-    if (p->bits & PE_PAD_CROSS) return 0;
-    if (s_always_run) return !(p->bits & (uint32_t)g_FieldRenderFlagTable[0]);
-    dx = p->x - PE_STICK_CENTER;
-    dy = p->y - PE_STICK_CENTER;
-    return dx * dx + dy * dy >= PE_STICK_FULL_R2;
+/* The game's analog field run test (Field_HandleStateTransition): the stick's distance from the
+ * centre against the "Analog run threshold" option, a percentage of full tilt. */
+static int pe_stick_radius_runs(int dx, int dy) {
+    const unsigned threshold = g_FieldAnalogRunThreshold;
+    if (dx < -127) dx = -127;
+    if (dy < -127) dy = -127;
+    return (unsigned)(dx * dx + dy * dy) * 10000u >= 127u * 127u * threshold * threshold;
 }
+
+/* The game reads a direction only outside the stick dead zone (0x5A..0xA0 on both axes). */
+static int pe_stick_moves(int x, int y) { return x < 0x5A || x >= 0xA1 || y < 0x5A || y >= 0xA1; }
 
 static int pe_on_pad_read(void *ctx, void *user) {
     PePad p;
-    int dx, dy, ax, ay, big, run, full, reach, x, y;
+    int dx, dy, run, big, reach, x, y;
     (void)ctx;
     (void)user;
-    if (!pe_game_loaded() || !pe_free_field()) return 0;
+    if (!s_always_run || !pe_game_loaded() || !pe_free_field()) return 0;
     p = pe_read_pad();
     if (!p.analog || !p.stick) return 0;
     dx = p.x - PE_STICK_CENTER;
     dy = p.y - PE_STICK_CENTER;
-    ax = dx < 0 ? -dx : dx;
-    ay = dy < 0 ? -dy : dy;
-    big = ax > ay ? ax : ay;
-    run = pe_stick_runs(&p);
-    full = p.x < 0x14 || p.x >= 0xE7 || p.y < 0x14 || p.y >= 0xE7;
-    if (big <= 0 || run == full) return 0;            /* already what we want */
-    reach = run ? 127 : 100;
-    x = PE_STICK_CENTER + (dx * reach + (dx < 0 ? -big / 2 : big / 2)) / big;
-    y = PE_STICK_CENTER + (dy * reach + (dy < 0 ? -big / 2 : big / 2)) / big;
+    run = !(p.bits & (uint32_t)g_FieldRenderFlagTable[0]);
+    if (run == pe_stick_radius_runs(dx, dy)) return 0;      /* already what we want */
+    if (run) {
+        /* Out until the larger axis reaches its edge: at least full tilt for any threshold. */
+        big = dx < 0 ? -dx : dx;
+        if ((dy < 0 ? -dy : dy) > big) big = dy < 0 ? -dy : dy;
+        if (big <= 0) return 0;
+        x = PE_STICK_CENTER + (dx * 127 + (dx < 0 ? -big / 2 : big / 2)) / big;
+        y = PE_STICK_CENTER + (dy * 127 + (dy < 0 ? -big / 2 : big / 2)) / big;
+    } else {
+        /* In to just inside the run threshold, diagonals included. A threshold too low to walk
+         * outside the dead zone leaves the stick alone: Aya runs rather than stops. */
+        const int length = (int)pe_isqrt((unsigned)(dx * dx + dy * dy)) + 1;
+        for (reach = 127 * (int)g_FieldAnalogRunThreshold / 100;; --reach) {
+            if (reach <= 0) return 0;
+            x = PE_STICK_CENTER + dx * reach / length;
+            y = PE_STICK_CENTER + dy * reach / length;
+            if (!pe_stick_moves(x, y)) return 0;
+            if (!pe_stick_radius_runs(x - PE_STICK_CENTER, y - PE_STICK_CENTER)) break;
+        }
+    }
     g_PadPackets[0].leftX = (u8)(x < 0 ? 0 : x > 0xFF ? 0xFF : x);
     g_PadPackets[0].leftY = (u8)(y < 0 ? 0 : y > 0xFF ? 0xFF : y);
+    return 0;
+}
+
+/* With the d-pad, the game drops the run bit while the action button is held (originally so
+ * that Cross wins over a held Circle). Always run maps run to the d-pad itself, so that rule
+ * would make Cross a walk button. After the poll, restore the run bit for that case only:
+ * a d-pad direction, the run button not held and the bit dropped by the action rule. */
+static int pe_on_run_frame(void *ctx, void *user) {
+    PePad p;
+    (void)ctx;
+    (void)user;
+    if (!s_always_run || !pe_game_loaded() || !pe_free_field()) return 0;
+    if ((g_FieldPadBits & PE_FIELD_RUN) || !(g_FieldPadBits & PE_FIELD_DIRS) || !(g_FieldPadBits & PE_FIELD_ACTION))
+        return 0;
+    p = pe_read_pad();
+    if (p.analog || !(p.bits & PE_RUN_MAP_DPAD) || (p.bits & (uint32_t)g_FieldRenderFlagTable[0])) return 0;
+    g_FieldPadBits |= PE_FIELD_RUN;
+    if (g_FieldPadLastFrame & PE_FIELD_RUN) g_FieldPadReleased &= ~PE_FIELD_RUN;
+    else g_FieldPadPressed |= PE_FIELD_RUN;
     return 0;
 }
 
@@ -152,8 +191,27 @@ static int pe_on_actor_step(void *ctx, void *user) {
     return 0;
 }
 
+/* Original contact scripts test the cooked action edge (field bit8).
+ * Repeating only that edge preserves held buttons, movement and remapping. */
+static int pe_on_interact_frame(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    const unsigned action = 0x100u;
+    if (!s_repeat_interact || !pe_game_loaded() || !pe_free_field() ||
+        pe_in_battle() || (g_FieldMoveLock & 1) || !(g_FieldPadBits & action)) {
+        s_interact_ticks = 0;
+        return 0;
+    }
+    if (g_FieldPadPressed & action) s_interact_ticks = 0;
+    else if (++s_interact_ticks == 8) {
+        g_FieldPadPressed |= action;
+        s_interact_ticks = 0;
+    }
+    return 0;
+}
+
 void pe_move_register(const char *mod_id) {
     pe_menu_register_toggle(PE_PAGE_MOVEMENT, "Always run", "Hold the run button to walk (d-pad and stick).", &s_always_run, NULL);
+    pe_menu_register_toggle(PE_PAGE_MOVEMENT, "Repeat interact", "Keep trying interactions while holding the action button.", &s_repeat_interact, NULL);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Run speed", "How fast Aya runs in the field.", &s_run_choice, s_speed_names, PE_SPEED_CHOICES);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Walk speed", "How fast Aya walks in the field.", &s_walk_choice, s_speed_names, PE_SPEED_CHOICES);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Combat speed", "How fast Aya moves during battle.", &s_combat_choice, s_speed_names, PE_SPEED_CHOICES);
@@ -163,6 +221,8 @@ void pe_move_register(const char *mod_id) {
         s_always_run, s_speed_names[s_run_choice], s_speed_names[s_walk_choice],
         s_speed_names[s_combat_choice], s_entry_names[s_entry_choice]);
 
+    pe_hook_add(PE_HOOK_FRAME, pe_on_run_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
+    pe_hook_add(PE_HOOK_FRAME, pe_on_interact_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PAD_READ, pe_on_pad_read, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PAD_MAP, pe_on_pad_map, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_ACTOR_STEP, pe_on_actor_step, NULL, PE_PRIORITY_NORMAL, mod_id);
@@ -172,5 +232,19 @@ void pe_move_register(const char *mod_id) {
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_wire.h"
 #include "pe_checkpoint_qol.h"
-int pe_move_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||0)return 0;if(apply&&(!in||!pe_move_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_always_run,0,1,1);PE_CK_U(w,s_run_choice,0,7,1);PE_CK_U(w,s_walk_choice,0,7,1);PE_CK_U(w,s_combat_choice,0,7,1);PE_CK_U(w,s_entry_choice,0,4,1);return w.ok&&w.at==20u;}
+/* Preserve the 20-byte owner layout. Legacy first words 0/1 mean repeat off;
+ * added bits own the repeat setting and phase. Older readers reject them. */
+int pe_move_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply) {
+    if ((!in && !out) || (apply && (!in || !pe_move_checkpoint_walk(in,0,0)))) return 0;
+    if ((unsigned)s_always_run>1 || (unsigned)s_repeat_interact>1 || s_interact_ticks>7) return 0;
+    PeCheckpointWire w={in,out,0,apply,1};
+    uint32_t flags=(unsigned)s_always_run | ((unsigned)s_repeat_interact<<1);
+    uint32_t packed=pe_checkpoint_u32(&w,flags | (s_interact_ticks<<2),0,31,0);
+    if ((packed & 3u)!=flags) w.ok=0; /* settings must match, as before */
+    if (apply && w.ok) s_interact_ticks=packed>>2;
+    PE_CK_U(w,s_run_choice,0,7,1);PE_CK_U(w,s_walk_choice,0,7,1);
+    PE_CK_U(w,s_combat_choice,0,7,1);PE_CK_U(w,s_entry_choice,0,4,1);
+    return w.ok && w.at==20u;
+}
+
 #endif

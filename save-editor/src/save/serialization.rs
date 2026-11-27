@@ -96,6 +96,7 @@ impl PeSaveSlot {
         let calculated_crc = calc_save_crc16(block);
 
         Ok(Self {
+            companion: None,
             slot_index,
             filename,
             is_clear_data,
@@ -143,6 +144,7 @@ impl PeSaveSlot {
     /// Check structural references before any save/export writes a container.
     /// Stat bonuses, ammo and legitimate custom effects are left untouched.
     pub fn validate_inventory(&self) -> Result<()> {
+        self.validate_mod_inventory()?;
         if self.inventory_slot_count > 50
             || self.inventory_items.len() != 50
             || self.storage.len() != 100

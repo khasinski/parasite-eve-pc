@@ -142,6 +142,33 @@ static int original_atomic_card_write(unsigned port, const char *host) {
         if (!SDL_SaveFile(host, old, 0x2000)) valid = 0;
         MenuWidget_InitPool(); g_MenuDeferredCallback = NULL;
     }
+#ifdef PE_MODS
+    /* The real start of a save whose game style differs from the slot's: the mod layer must
+     * follow the name the manager publishes (a Clear game over a normal save, and back). */
+    if (valid) {
+        MemCardPortState *state = &g_MemCardPortStates[port];
+        memset(state, 0, sizeof(*state));
+        state->present = 1;
+        state->slots[14].state = MEMCARD_SLOT_OCCUPIED;
+        state->slots[14].titleStyleFlag = port;
+        state->fileDescriptor = -1;
+        g_SaveTitleStyleFlag = !port;
+        g_MemCardActiveState = state;
+        MenuWidget_InitPool(); g_MenuDeferredCallback = NULL;
+        Save_StartWriteSlot(port, 14);
+        if (state->nextState != 11) valid = 0;
+        state->managerState = 11;
+        for (unsigned i = 0; i < 16 && state->managerState != 3; ++i) MemCard_UpdateSaveState(port);
+        char logical[32], changed[4096];
+        snprintf(logical, sizeof(logical), g_MemCardFilenameFormatPtr, port, '0' + !port, 'O');
+        Psyz_AdjustPath(changed, logical, sizeof(changed));
+        SDL_PathInfo info;
+        if (state->managerState != 3 || !SDL_GetPathInfo(changed, &info) || SDL_GetPathInfo(host, &info)) valid = 0;
+        if (!SDL_RenamePath(changed, host)) valid = 0;
+        if (!SDL_SaveFile(host, old, 0x2000)) valid = 0;
+        MenuWidget_InitPool(); g_MenuDeferredCallback = NULL;
+    }
+#endif
     /* A staging file left by a killed process must not consume a PS1 card
      * block or become a selectable save on the next directory scan. */
     char orphan[4096];

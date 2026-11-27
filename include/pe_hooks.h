@@ -33,7 +33,7 @@ typedef enum PeHookId {
     PE_HOOK_ACTOR_STEP,  /* PeHookActorStep: local scripted speed or animation increment */
     PE_HOOK_ITEM_USE,    /* int *: Battle_ApplyDamage item id before its effects */
     PE_HOOK_TEXT_LOOKUP, /* PeHookTextLookup: a resident text table lookup's result (system messages,
-                          * item names and descriptions, the rest); may be replaced */
+                          * item names and descriptions, the rest), or a battle message; may be replaced */
     PE_HOOK_INVENTORY_SORTED, /* NULL: Aya's native bag sort completed */
     PE_HOOK_INVENTORY_HEADER, /* MenuWidgetNode *: after Aya's Quantity header is drawn */
     PE_HOOK_EQUIP_EFFECT, /* PeHookEquipEffect: effect icon draw; nonzero replaces sprite */
@@ -65,8 +65,101 @@ typedef enum PeHookId {
                                * move; replaceable */
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
+    PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
+    PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
+                          * (as the card load does) to leave the title the way Continue does; appended,
+                          * previous hook IDs unchanged */
+    PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
+                           * gives them (pe1/text_render.h) */
+    PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
+    PE_HOOK_TEXT_SCRIPT,  /* PeHookTextScript: whether the pack in use reads right to left, and
+                           * which Unicode letter a one-byte code draws (pe1/text_render.h) */
+    PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
+                        * their bytes may be changed in place (a translation's pictures) */
+    /* Costume combat styles; appended after upstream's IDs. */
+    PE_HOOK_AT_CHARGE, /* PeHookAtCharge: eligible native AT increment, after status modifiers */
+    PE_HOOK_PLAYER_ACTION_END, /* Combatant *: previously nonempty native action queue completed */
+    PE_HOOK_PLAYER_ACTION, /* Combatant *: committed action queue, after native AT reset */
+    PE_HOOK_BATTLE_HUD, /* NULL: native battle HUD prepared, before primitive submission */
+    PE_HOOK_ENEMY_DAMAGE, /* PeHookEnemyDamage: final local loss, before enemy HP commit */
+    PE_HOOK_TARGET_PREVIEW, /* PeHookTargetPreview: selected target panel has been prepared */
+    PE_HOOK_PE_RECOVERY, /* PeHookPeRecovery: eligible native passive PE increment only */
+    PE_HOOK_ACTION_MODE, /* PeHookActionMode: valid native actor pose change */
+    PE_HOOK_PLAYER_ACTION_CANCEL, /* Combatant *: pending queue abandoned/canceled */
+    PE_HOOK_ENEMY_EFFECT, /* PeHookEnemyEffect: an enemy attack's effect on its target
+                           * (Battle_ApplyEnemyAttack): stage 0 at entry, stage 1 once an
+                           * ailment passed the armor roll; *cancel skips the effect;
+                           * appended, previous hook IDs unchanged */
+    PE_HOOK_SPELL_DONE,  /* PeHookSpellDone: Battle_ApplySpellEffect after the power's effect,
+                          * before the HP clamp and the PE drain; *drain may change; appended */
+    PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
+    PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
+                            * tries the medicines in may change; appended */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookStealResult {
+    int item, success;
+} PeHookStealResult;
+
+/* The medicines Auto Medicine tries, first to last (item ids); natively Full Recover, then
+ * Medicine 4 down to Medicine 1. Ids other than those five are skipped. */
+typedef struct PeHookAutoMedicine {
+    int *order;
+    int count;
+} PeHookAutoMedicine;
+
+typedef struct PeHookPeRecovery {
+    const void *actor;
+    int current, maximum;
+    int *increment; /* 16.16 native PE units; rates/divisors stay native */
+} PeHookPeRecovery;
+typedef struct PeHookActionMode {
+    const void *actor;
+    int mode;
+} PeHookActionMode;
+
+typedef struct PeHookEnemyDamage {
+    const void *source, *target;
+    int *damage;
+    int ordinary; /* excludes PE and native instant-kill status effects */
+} PeHookEnemyDamage;
+typedef struct PeHookTargetPreview {
+    const void *object; /* RenderObjectEntity * of the selected target */
+    int mode, out_of_range;
+    int phase; /* 0 before preparation (restore prior cue), 1 after preparation */
+} PeHookTargetPreview;
+
+typedef struct PeHookAtCharge {
+    const void *actor;
+    int *increment;
+} PeHookAtCharge;
+
+/* Stage 0: the effect is about to run (cancel skips all of it, buff strips included).
+ * Stage 1: an ailment (poison, confusion, darkness, stiffness) is about to land after
+ * the armor's resist roll failed (cancel = resisted; one-use immunity is kept). */
+typedef struct PeHookEnemyEffect {
+    int effect;          /* ENEMY_EFFECT_* */
+    int stage;
+    const void *target;  /* Combatant *, the attacked actor */
+    int *cancel;
+} PeHookEnemyEffect;
+
+/* drain: the PE cost in 16.16 before PE Light (Barrier's cost is already taken). */
+typedef struct PeHookSpellDone {
+    unsigned spell;
+    struct BattleEntity *target;
+    void *actor;         /* Combatant *, the caster */
+    int hp_before;       /* the caster's HP before the effect */
+    int *drain;
+} PeHookSpellDone;
+
+typedef struct PeHookEquipmentGuard {
+    int kind; /* 0 native value, 1 record, 2 Tools selections */
+    int value;
+    const struct ItemDataRecord *record;
+    unsigned selection;
+} PeHookEquipmentGuard;
 
 /* The factor belongs to the current calculation, not the actor. A handler
  * may change it for this input step only and must not retain its address. */
@@ -113,7 +206,8 @@ typedef struct PeHookTextGlyph {
 
 typedef struct PeHookTextLookup {
     unsigned table, index; /* table 4 = system messages, 8 = item names, 12 = item descriptions,
-                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10) */
+                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10), 20 = a battle message
+                            * from the boot program, index BATTLE_TEXT_* (Text_LookupBattleMessage) */
     void **text;
     int persistent; /* nonzero: editable name copied into a save; use stable byte glyphs only */
 } PeHookTextLookup;
@@ -125,6 +219,45 @@ typedef struct PeHookTextPage {
     unsigned page;             /* the page the script opened */
     unsigned char **message;   /* the text the box will draw */
 } PeHookTextPage;
+
+typedef struct PeHookDiscRead {
+    unsigned sector;     /* the first sector read, counted from the start of PE.IMG */
+    unsigned count;      /* sectors read, 2048 bytes each */
+    unsigned char *data; /* where they were read to */
+} PeHookDiscRead;
+
+/* The text renderer asks for a stretch's letters. The provider keeps them alive until the active
+ * language changes. */
+typedef struct PeHookTextStretch {
+    unsigned id;              /* F1 C6 hi lo: hi * 240 + lo */
+    const unsigned *letters;  /* provider: Unicode, in reading order */
+    unsigned count;
+} PeHookTextStretch;
+
+/* The text renderer asks how a Unicode letter draws, before the game's own English set. A provider
+ * either names a one-byte game code that draws it, or puts it in a 12 x 12 cell of the font page
+ * (only when draw is nonzero: measuring never uploads) and gives that cell and the advance. In
+ * menus it may cut the cell as the game cuts its own letters: u from the first inked column, w
+ * columns wide. */
+typedef struct PeHookTextLetter {
+    unsigned style;           /* PeTextStyle */
+    unsigned letter;          /* Unicode; 0 when `paged` names the letter instead */
+    unsigned paged;           /* a two-byte name letter (FB-FE then a byte): (page byte - FA) << 8
+                               * | byte; the provider gives its Unicode letter's drawing, else 0 */
+    int draw;
+    int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1. For a
+                               * `paged` letter it also sets `letter` to the Unicode letter */
+    unsigned char u, v;       /* provider, when code is -1: the cell on font page 0 */
+    unsigned advance;         /* provider, when code is -1 */
+    unsigned char w;          /* provider, when code is -1: columns drawn from u (0: all 12) */
+} PeHookTextLetter;
+
+/* Asked once per line drawn and for each one-byte letter in a right-to-left line. */
+typedef struct PeHookTextScript {
+    unsigned code;            /* a one-byte game code (0x4D-0xF0), or ~0u to ask only `rtl` */
+    int rtl;                  /* provider: nonzero when the pack in use reads right to left */
+    unsigned letter;          /* provider: the Unicode letter `code` draws in that pack, else 0 */
+} PeHookTextScript;
 
 typedef struct PeHookRewards {
     int exp;
@@ -243,6 +376,25 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread);
  * 8 KB card block) as a real save would, when a room starts. -1 while mod code
  * is running; the block stays zeroed. */
 int pe_mod_snapshot_save_tail(unsigned char *block);
+#define PE_RECOVERY_NATIVE_SIZE (0x12E4u+0x8A8u)
+#define PE_RECOVERY_COMPANION_MAX 8192u
+typedef struct PeModRecoverySnapshot {
+    unsigned version, companion_size, checksum;
+    unsigned char card[8192], companion[PE_RECOVERY_COMPANION_MAX];
+} PeModRecoverySnapshot;
+/* Coherent room recovery copy; game-thread only, with no mod callback/allocation/file I/O. */
+int pe_mod_snapshot_recovery(const unsigned char *native,unsigned native_size,PeModRecoverySnapshot *out);
+/* Native card publication boundary: companion data is staged before the native checksum. */
+void pe_mod_bind_native(void);
+int pe_mod_save_path(const char *mapped_path);
+int pe_mod_load_admit(const char *mapped_path,const unsigned char *block);
+void pe_mod_save_committed(const char *mapped_path);
+void pe_mod_save_cancelled(void);
+int pe_mod_save_publish(const char *temporary,const char *target);
+int pe_mod_equipment_guard(int native_value);
+int pe_mod_tool_guard(unsigned selection);
+struct ItemDataRecord;
+int pe_mod_equipment_record_guard(const struct ItemDataRecord *record);
 #define PE_HOOK(id, ctx) \
     ((id) == PE_HOOK_INIT ? pe_host_init((const PeHookInit *)(const void *)(ctx)) : pe_hook_dispatch((id), (ctx)))
 #else

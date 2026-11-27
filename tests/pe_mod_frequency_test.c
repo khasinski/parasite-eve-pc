@@ -14,29 +14,161 @@
 #include "pe1/game_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/scene_room.h"
+#include "pe_checkpoint_qol.h"
 Pe1GameState g_GameState;
 SceneRoomSectorRange g_RoomSectorTable[SCENE_ROOM_COUNT];
 int g_SceneDispatchCur;
 u32 g_ScriptVariableBank[512];
 static int loaded = 1, battle, *mode, free_field = 1;
-static int *always_run, *run_speed, *walk_speed, *combat_speed, *entry_speed;
+static int *always_run, *run_speed, *walk_speed, *combat_speed, *entry_speed, *repeat_interact;
 
-static PeHookFn on_player_move, on_pad_map, on_actor_step;
+static PeHookFn on_player_move, on_pad_map, on_actor_step, on_frame, on_pad_read, on_run_frame;
+u32 g_FieldPadBits, g_FieldPadPressed, g_FieldPadLastFrame, g_FieldPadReleased;
+unsigned g_FieldAnalogRunThreshold = 85;
+unsigned pe_isqrt(unsigned v) { unsigned r = 0; while ((r + 1) * (r + 1) <= v) ++r; return r; }
 static BattleEntity player;
 PadPacket g_PadPackets[2];
 s32 g_FieldRenderFlagTable[32];
-int g_BattleModeState;
+int g_BattleModeState, g_FieldMoveLock;
 BattleEntity *pe_player(void) { return &player; }
 int pe_free_field(void) { return free_field; }
 void pe_mod_log(const char *id,const char *fmt,...) { (void)id;(void)fmt; }
 int pe_menu_register_toggle(const char *p,const char *l,const char *d,int *v,PeMenuPerFrame tick) {
-    (void)p;(void)l;(void)d;(void)tick;always_run=v;return 0;
+    (void)p;(void)d;(void)tick;
+    if(!strcmp(l,"Always run"))always_run=v;
+    else {assert(!strcmp(l,"Repeat interact"));repeat_interact=v;}
+    return 0;
 }
 int pe_menu_register_tick(PeMenuPerFrame tick) { (void)tick; assert(0);return 0; }
 void pe_move_register(const char *);
+/* The game's radial analog run test (Field_HandleStateTransition). */
+static int stick_runs(void) {
+    int x=(int)g_PadPackets[0].leftX-128,y=(int)g_PadPackets[0].leftY-128;
+    if(x<-127)x=-127;
+    if(y<-127)y=-127;
+    return (unsigned)(x*x+y*y)*10000u>=127u*127u*g_FieldAnalogRunThreshold*g_FieldAnalogRunThreshold;
+}
+static void stick(unsigned buttons,int x,int y) {
+    g_PadPackets[0].header=0x7300;g_PadPackets[0].buttons=(u16)~buttons;
+    g_PadPackets[0].leftX=(u8)x;g_PadPackets[0].leftY=(u8)y;
+}
+/* Issue 205: the action button (raw Cross 0x4000) is never a walk button. Only the run
+ * button (raw Circle 0x2000 by default) walks with Always run; without it the stick and the
+ * game's own Cross-over-run rule stay as the original. */
+static void run_button_regression(void) {
+    const int pushes[][2]={{128+80,128+80},{128-90,128+60},{128,128-100},{128+127,128},{128-70,128-70}};
+    loaded=free_field=1;battle=0;g_FieldRenderFlagTable[0]=0x4000;g_FieldAnalogRunThreshold=85;
+    for(unsigned i=0;i<sizeof pushes/sizeof pushes[0];++i)for(unsigned b=0;b<4;++b){
+        const unsigned buttons=b==1?0x4000u:b==2?0x2000u:b==3?0x6000u:0u;
+        /* Always run off: the stick is the player's own. */
+        *always_run=0;stick(buttons,pushes[i][0],pushes[i][1]);on_pad_read(NULL,NULL);
+        assert(g_PadPackets[0].leftX==pushes[i][0] && g_PadPackets[0].leftY==pushes[i][1]);
+        /* Always run on: the run button decides, Cross does not; the angle is kept. */
+        *always_run=1;stick(buttons,pushes[i][0],pushes[i][1]);on_pad_read(NULL,NULL);
+        int x=(int)g_PadPackets[0].leftX-128,y=(int)g_PadPackets[0].leftY-128;
+        int dx=pushes[i][0]-128,dy=pushes[i][1]-128;
+        assert(stick_runs()==!(buttons&0x2000u));
+        assert(x<-38 || x>=33 || y<-38 || y>=33);                 /* still moving */
+        assert((long)x*dy-(long)y*dx<=2*(abs(dx)+abs(dy)) && (long)x*dy-(long)y*dx>=-2*(abs(dx)+abs(dy)));
+        assert((x<0)==(dx<0) && (y<0)==(dy<0));
+    }
+    /* A threshold too low to walk outside the dead zone leaves the stick alone. */
+    g_FieldAnalogRunThreshold=20;stick(0x2000,128+80,128+80);on_pad_read(NULL,NULL);
+    assert(g_PadPackets[0].leftX==128+80 && g_PadPackets[0].leftY==128+80);
+    g_FieldAnalogRunThreshold=85;
+    /* Not in the free field: untouched. */
+    free_field=0;stick(0x2000,128+80,128+80);on_pad_read(NULL,NULL);
+    assert(g_PadPackets[0].leftX==128+80);free_field=1;
+
+    /* D-pad: the game drops run (bit0) while Cross (bits 8/9/29) is held. With Always run
+     * the run bit comes back unless the run button is held. */
+    for(unsigned last=0;last<2;++last)for(unsigned b=0;b<4;++b)for(int enabled=0;enabled<2;++enabled){
+        const unsigned buttons=0x10u|(b&1?0x4000u:0)|(b&2?0x2000u:0);
+        *always_run=enabled;
+        g_PadPackets[0].header=0x4100;g_PadPackets[0].buttons=(u16)~buttons;
+        g_FieldPadBits=0x8u|(b&1?0x20000300u:0);g_FieldPadLastFrame=last?0x20000309u:0x8u;
+        g_FieldPadPressed=g_FieldPadBits&~g_FieldPadLastFrame;
+        g_FieldPadReleased=g_FieldPadLastFrame&~g_FieldPadBits;
+        const u32 pressed=g_FieldPadPressed,released=g_FieldPadReleased;
+        on_run_frame(NULL,NULL);
+        const int restore=enabled && (b&1) && !(b&2);
+        assert(g_FieldPadBits==((b&1?0x20000308u:0x8u)|(restore?1u:0)));
+        assert(g_FieldPadPressed==(restore && !last?pressed|1u:pressed));
+        assert(g_FieldPadReleased==(restore && last?released&~1u:released));
+    }
+    /* Analog keeps the game's radial rule; no direction or no action: untouched. */
+    *always_run=1;g_PadPackets[0].header=0x7300;g_PadPackets[0].buttons=(u16)~0x4010u;
+    g_FieldPadBits=0x20000308u;on_run_frame(NULL,NULL);assert(g_FieldPadBits==0x20000308u);
+    g_PadPackets[0].header=0x4100;g_FieldPadBits=0x20000300u;on_run_frame(NULL,NULL);assert(g_FieldPadBits==0x20000300u);
+    g_FieldPadBits=0x8u;on_run_frame(NULL,NULL);assert(g_FieldPadBits==0x8u);
+    loaded=0;g_FieldPadBits=0x20000308u;on_run_frame(NULL,NULL);assert(g_FieldPadBits==0x20000308u);loaded=1;
+    *always_run=0;g_FieldPadBits=g_FieldPadPressed=g_FieldPadReleased=g_FieldPadLastFrame=0;
+    g_PadPackets[0].header=0x4100;g_PadPackets[0].buttons=0xFFFF;
+}
 static void movement_regression(void) {
     pe_move_register("pe_qol");
-    assert(on_pad_map && on_actor_step && on_player_move);
+    assert(on_pad_map && on_actor_step && on_player_move && on_pad_read && on_run_frame && on_frame != on_run_frame);
+    assert(repeat_interact && on_frame && !*repeat_interact);
+    /* Only cooked action edges repeat; raw pad, held bits and other actions
+     * stay intact. Existing game mapping has already selected action bit8. */
+    loaded=free_field=1;battle=0;
+    g_FieldPadBits=0x110;g_FieldPadPressed=0x10;
+    for(unsigned i=0;i<32;++i){on_frame(NULL,NULL);assert(g_FieldPadPressed==0x10);}
+    *repeat_interact=1;
+    g_FieldPadPressed=0x110;on_frame(NULL,NULL);assert(g_FieldPadPressed==0x110);
+    PadPacket raw=g_PadPackets[0];
+    for(unsigned i=1;i<=32;++i){
+        g_FieldPadPressed=0x10;on_frame(NULL,NULL);
+        assert(g_FieldPadPressed==(i%8?0x10:0x110));
+        assert(g_FieldPadBits==0x110 && !memcmp(&raw,&g_PadPackets[0],sizeof raw));
+    }
+    /* Flag0x4 enables collision response; flag0x1 blocks player input. */
+    g_FieldMoveLock=4;
+    for(unsigned i=1;i<=8;++i){g_FieldPadPressed=0;on_frame(NULL,NULL);assert(g_FieldPadPressed==(i==8?0x100:0));}
+    g_FieldMoveLock=0;
+    for(unsigned guard=0;guard<6;++guard){
+        loaded=free_field=1;battle=0;g_FieldMoveLock=0;*repeat_interact=1;g_FieldPadBits=0x100;
+        g_FieldPadPressed=0x100;on_frame(NULL,NULL);
+        for(unsigned i=0;i<7;++i){g_FieldPadPressed=0;on_frame(NULL,NULL);assert(!g_FieldPadPressed);}
+        if(guard==0)loaded=0;
+        if(guard==1)free_field=0;
+        if(guard==2)battle=1;
+        if(guard==3)*repeat_interact=0;
+        if(guard==4)g_FieldPadBits=0;
+        if(guard==5)g_FieldMoveLock=1;
+        on_frame(NULL,NULL);assert(!g_FieldPadPressed);
+        loaded=free_field=1;battle=0;g_FieldMoveLock=0;*repeat_interact=1;g_FieldPadBits=0x100;
+        for(unsigned i=1;i<=8;++i){g_FieldPadPressed=0;on_frame(NULL,NULL);assert(g_FieldPadPressed==(i==8?0x100:0));}
+    }
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    unsigned char state[20],bad[20];
+    loaded=free_field=1;battle=0;g_FieldMoveLock=0;*repeat_interact=1;g_FieldPadBits=0x100;
+    g_FieldPadPressed=0x100;on_frame(NULL,NULL);
+    for(unsigned i=0;i<7;++i){g_FieldPadPressed=0;on_frame(NULL,NULL);}
+    assert(pe_move_checkpoint_walk(NULL,state,0));
+    assert((state[0]>>2)==7 && (state[0]&2));
+    g_FieldPadPressed=0;on_frame(NULL,NULL);assert(g_FieldPadPressed==0x100);
+    assert(pe_move_checkpoint_walk(state,NULL,0)); /* validation is read-only */
+    g_FieldPadPressed=0;on_frame(NULL,NULL);assert(!g_FieldPadPressed);
+    assert(pe_move_checkpoint_walk(state,NULL,1));
+    g_FieldPadPressed=0;on_frame(NULL,NULL);assert(g_FieldPadPressed==0x100);
+    /* An invalid later field cannot partially restore the saved repeat phase. */
+    memcpy(bad,state,sizeof bad);bad[16]=99;
+    assert(!pe_move_checkpoint_walk(bad,NULL,1));
+    g_FieldPadPressed=0;on_frame(NULL,NULL);assert(!g_FieldPadPressed);
+    memcpy(bad,state,sizeof bad);bad[0]|=0x20;
+    assert(!pe_move_checkpoint_walk(bad,NULL,0));
+    *repeat_interact=0;on_frame(NULL,NULL);
+    assert(!pe_move_checkpoint_walk(state,NULL,1)); /* configuration differs */
+    assert(pe_move_checkpoint_walk(NULL,state,0) && state[0]<=1);
+    assert(pe_move_checkpoint_walk(state,NULL,1)); /* legacy word1 */
+    *always_run=0;
+    assert(pe_move_checkpoint_walk(NULL,state,0) && state[0]==0);
+    assert(pe_move_checkpoint_walk(state,NULL,1)); /* legacy word0 */
+    *always_run=2;assert(!pe_move_checkpoint_walk(NULL,state,0));
+    *always_run=0;
+#endif
+    *repeat_interact=0;g_FieldPadBits=g_FieldPadPressed=0;
     *always_run=*run_speed=*walk_speed=*combat_speed=*entry_speed=0;
     memset(&player,0,sizeof(player));
     g_PadPackets[0].header=0x4100;g_PadPackets[0].buttons=0xFFFF;
@@ -114,6 +246,7 @@ static void movement_regression(void) {
     assert(speed==INT32_MAX);
     speed=INT32_MIN;on_actor_step(&entry_step,NULL);assert(speed==INT32_MIN);
     battle=0;free_field=1;
+    run_button_regression();
     puts("Passed movement options: eight local input speeds, run/combat selection, scripts, transitions and non-player actors preserve original actor factors");
 }
 static PeHookFn on_random;
@@ -137,7 +270,8 @@ int pe_hook_add(int id, PeHookFn fn, void *u, int p, const char *m) {
     else if(id==PE_HOOK_PLAYER_MOVE) on_player_move=fn;
     else if(id==PE_HOOK_PAD_MAP) on_pad_map=fn;
     else if(id==PE_HOOK_ACTOR_STEP) on_actor_step=fn;
-    else assert(id==PE_HOOK_PAD_READ);
+    else if(id==PE_HOOK_FRAME) { if(!on_run_frame) on_run_frame=fn; else on_frame=fn; }
+    else { assert(id==PE_HOOK_PAD_READ); on_pad_read=fn; }
     return 0;
 }
 void pe_battle_frequency_register(const char *);

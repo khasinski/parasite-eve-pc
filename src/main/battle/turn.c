@@ -1,4 +1,6 @@
 #include "pe1/akao.h"
+#include "pe_hooks.h"
+#include "pe1/pe_image.h"
 #include "pe1/asset_find.h"
 #include "pe1/battle.h"
 #include "pe1/battle_cmd.h"
@@ -11,6 +13,7 @@
 #include "pe1/render_object.h"
 #include "pe1/save.h"
 #include "pe1/scene_transition.h"
+#include "pe1/text.h"
 
 /* Actors affected by the current action, in original encounter order. */
 BattleEntity *g_BattleActionActors[7];
@@ -100,9 +103,9 @@ int Battle_RollEscapeChance(void) {
         int attempts;
         g_BattleSaveOverlayActive = 1;
         if (result == -1)
-            g_CurItemEffectData = g_EscapeBlockedTexts + Save_GetMetadataWindowIndex() * 14;
+            g_CurItemEffectData = Text_LookupBattleMessage(BATTLE_TEXT_ESCAPE_BLOCKED, g_EscapeBlockedTexts, 14);
         else
-            g_CurItemEffectData = g_EscapeFailedTexts + Save_GetMetadataWindowIndex() * 17;
+            g_CurItemEffectData = Text_LookupBattleMessage(BATTLE_TEXT_ESCAPE_FAILED, g_EscapeFailedTexts, 17);
         player = g_ActiveActor;
         attempts = ((unsigned int)player->stateFlags >> 25) & 7;
         if (attempts < 5)
@@ -240,6 +243,7 @@ static inline void FinishAction(void) {
     g_ActiveActor->hpAlive = 0;
     g_ActiveActor->stateFlags |= 0x200000;
     BattleCmd_ResetTableCursor();
+    PE_HOOK(PE_HOOK_PLAYER_ACTION, g_ActiveActor);
 }
 int Battle_HandleItemMenu(void) {
     u8 active=1;
@@ -251,9 +255,14 @@ int Battle_HandleItemMenu(void) {
         Battle_MarkActiveEntities(g_BattleTargetList,g_BattleTargetIndex);
         PLAY_TABLE_SOUND(0x44C)
     } else {
-        if ((g_FieldPadPressed&0x2000) && !MenuWidget_FindByModeAndSelectedBase(1,0) && g_BattleItemMenuState!=2) {
+        /* The Japanese release also cancels from item state 2 (undoing the pending item) and keeps
+         * no cancel-pending flag, so a cancelled turn slot always undoes its queued command. Its
+         * rewind loops (Battle_AdvanceTurnSlot) keep the USA's stop at the queue's start: the
+         * Japanese code reads before the queue there. */
+        if ((g_FieldPadPressed&0x2000) && !MenuWidget_FindByModeAndSelectedBase(1,0) && (PE_JAPAN || g_BattleItemMenuState!=2)) {
             cancelled=1;
-            if (g_BattleRemainingActions==(g_ActiveActor->action->turnWord&15))g_BattleSlotCancelPending=1;
+            PE_HOOK(PE_HOOK_PLAYER_ACTION_CANCEL,g_ActiveActor);
+            if (!PE_JAPAN && g_BattleRemainingActions==(g_ActiveActor->action->turnWord&15))g_BattleSlotCancelPending=1;
             else g_BattleSlotCancelPending=0;
             if (g_BattleItemMenuState==1) MenuWidget_InitPool();
             else if (g_BattleItemMenuState==2) BattleCmd_UndoPending();

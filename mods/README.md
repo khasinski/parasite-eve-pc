@@ -9,13 +9,15 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
 - **Runtime**: F1 > Manage mods > **All mods**, **off by default**. Until a player turns it on and
   restarts, no mod starts and nothing but the F1 panel touches the game. Below it, one toggle per
   mod; a mod turned off doesn't start, nor do the mods that need it. Changes apply at the next start.
+  The exceptions are **Language packs** and **Font**: a language or font the player picked is no
+  gameplay change, so they run with All mods off too (their own toggles turn them off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
@@ -35,6 +37,7 @@ mods/
     pe_game_facts.c      those facts as tables: mod effect names and groups, power tags
     pe_main_menu.*       extra rows in Aya's main menu, screens from the game's own widgets, Yes / No
     pe_equip_sync.c      edited equipment reaches the next battle
+    pe_debug_control.c   commands from a test script, off unless PE_DEBUG_CONTROL is set (docs/DEBUG_CONTROL.md)
     pe_gametext.h        text in the game's glyph code; pe_item_table.h the game's item names
     pe_image.h           the picture type the image code shares (RGBA, straight alpha)
     pe_present.*         image presenter: the only code that puts pictures into the game's frame
@@ -47,12 +50,19 @@ mods/
     ui/                  drawing (pe_ui_raster), the overlay quad (pe_ui_gpu), toasts
   pe_qol/              quality of life: movement, encounters, key item pocket, bag sort, Key Items menu
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
-  pe_economy/          Junk and loot, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
-  pe_collection/       Bestiary and Wardrobe registries, skins, Wardrobe menu (packs register here)
+  pe_economy/          the Junk wallet (counter, Difficulty, prices), Costume unlock rules, Smoke Grenades
+  pe_shops/            Requisition, Wayne's menu and Workshop, Warner, craft refunds (needs pe_economy)
+  pe_catalog/          Mod Catalog / Dismantle / Rebuild (its record keeps the name pe_economy.catalog)
+  pe_rewards/          battle rewards: extra Junk, rare drops and pity (needs pe_economy)
+  pe_collection/       Bestiary registry and menu (creature packs register here)
+  pe_wardrobe/         Wardrobe registry, skins, Wardrobe menu (costume packs register here)
   pe_stacks/           stacked consumables (up to 99 per bag or storage slot), from the Pathogen Eve port
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_phone/            Phone Calls: after saving at a phone, "Stay on the line?" and a short call
+  pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
+                       bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
   pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
                        by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
@@ -66,8 +76,19 @@ stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CM
 (story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
 gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
-Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
+
+## Font (pe_fonts)
+
+F1 > Font: Original keeps the game's own letters; Pixel Sans (shipped in `mods/fonts/`) swaps in a
+bolder set, drawn from Pixeloid Sans Bold by GGBotNet (SIL OFL 1.1, see `mods/fonts/README.txt`).
+The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
+Every `.png` in `mods/fonts/` beside the game or in the user folder is a choice, named after its
+file, with no code to add; `mods/fonts/README.txt` describes the picture. The letters go into the
+dialogue font page as it goes to VRAM (PE_HOOK_TIM_UPLOAD, before pe_lang adds its accents) and
+their widths into the dialogue and menu tables. US and European discs only; the Japanese discs keep
+their own letters.
 
 ## Warp (pe_warp)
 
@@ -84,10 +105,260 @@ way Save_LoadCardFileIntoRuntime does, without the card menu's dialogs, then run
 script's room transfer to the saved room: the room starts again as after a loaded save. It holds
 what a save holds, not Aya's place in the room or a fight in progress.
 
+## Phone Calls (pe_phone)
+
+F1 > Phone Calls. After Aya saves at a phone (the game's own question and save screen, unchanged),
+a box asks "Stay on the line?" with No first, so one Cross goes straight back to the game. Yes
+plays a short call in dialogue boxes: `*dial... ring... ring...*`, the call (Aya's lines as
+`{name}: ...` in the game's dialogue band, the caller's in a window higher up), then `*click*`.
+Cross goes on, Circle hangs up. Aya is held by the field lock (field event 0xFE / 0xFF, as a
+talking actor's script sends) until the last box closes. Backing out of the save screen, or
+answering No to the save, asks too while F1 > Ask without saving too is on (the default; off: only
+a real save asks). The question then comes once Aya has put the phone down (only a real save
+leaves her put-down waiting to be held; holding her earlier would stall a Yes before its save
+screen). Nothing in the game's scripts is patched.
+
+- Spotting: the save question page ("Will you save your progress?" with two choices) is
+  recognised at PE_HOOK_TEXT_PAGE ahead of every page handler; each sighting logs
+  `phone room=<map> story=0x<var 74> day=<n>` to pe_play.log (the room list phase 2 needs). The
+  story save near the end, which starts with Aya's name, gets no call.
+- A real save: the host's `save.committed` event (`PE_EVENT_SAVE_COMMITTED`, from
+  `pe_mod_save_committed` once the card file is published). Quick saves and room checkpoints
+  never commit, so they never ask.
+- **Calls are text files anyone can read and change.** The game's own are
+  `pe_phone/calls/pe1.txt` (its top explains the format), built into the game by CMake. The
+  first start writes a copy to `pe_calls/pe1.txt` beside the preferences; that copy, when present,
+  replaces the built-in calls (delete it to go back), and every other `.txt` in `pe_calls` adds
+  its calls. The copy's first line is a stamp (the hash of the calls it was written from): while
+  the rest still matches it, nobody edited the file and a newer game rewrites it with its calls;
+  an edited copy is never overwritten, and the game's calls go beside it as `pe1.txt.new` (not
+  loaded). A copy without a stamp (older builds) is adopted when it equals the built-in calls,
+  otherwise treated as edited. A call looks like:
+
+  ```
+  [mine/pizza2]            key: pack/name (saves remember it: don't rename)
+  caller = Tony's Pizza
+  tone = funny             serious or funny
+  day = 1                  1 to 6, 2-5, or any
+  rooms = 87               optional: only at these phones
+  priority = 10            optional: plays first there until heard
+  them: Tony's again. You hungry?
+  aya: Not anymore.
+  ```
+
+  Mistakes go to `pe_mods.log` with the file and line; a call with a mistake is left out, the
+  rest load. F1 > Phone Calls > Writing calls: Open calls folder, Reload calls (no restart), Try
+  call (pick any call by key), Play it now / Ask now (no save needed), Check calls (the game's font).
+- Mods can still add calls in code: the `phonecalls` v1 service (host/pe_services.h): `add`,
+  `find`, `pick`, `heard`, `reset`, `add_condition`; events `phone.call_start` / `phone.call_end`
+  (ctx: the call). A call has a key, caller, tone (serious / funny), lines, weight, `once`, story
+  days (the save screen's Day) or a variable 74 range, phone rooms, priority, `after` and `needs`.
+- Set calls: rooms + priority + a single day, chained with `after`; the header of `calls/pe1.txt`
+  lists every phone's room, place and day. One day each keeps the record at 48 bytes: its once list
+  (16) forgets the oldest, and a forgotten set call can't fit its day again.
+- Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
+  mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
+  never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park;
+  `phone.crossovers` (Phone Calls itself: F1 > Phone Calls > Crossover calls, on by default),
+  used by the Raccoon City and Final Fantasy calls in `pe1.txt`.
+- Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
+  that fit, leaving out the last five played.
+- Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).
+  Lines are wrapped with the game's glyph widths and the player's name, at most three lines a
+  box; a longer line runs on into another box. Debug > Check calls measures every call.
+- Per save: record `pe_phone.heard` v1 (48 bytes): the last five calls and up to 16 one-time
+  calls heard, as 16-bit key hashes. New Game resets it; F1 > Forget heard calls clears it.
+- Aya stays on the phone (pe_phone_hold.c): when the save is written, the phone's task already
+  waits (opcode 48) for her put-down animation (0x26 from frame 0x3C, receiver at her ear). While
+  the question and the call are up her animation step is 0 (PE_HOOK_ACTOR_STEP, a local value), so
+  she holds the receiver, the task waits and the phone's own field lock holds the field. On
+  `*click*` (or No) she is let go: the game's own put-down and hang-up sound play, then its unlock.
+  A phone that lets her go before the save ends (the sewer's emergency phone) has its own pose
+  replayed for the call (animation 30 to frame 14, opcodes 46/78/47 as its script does), then idle.
+- Sounds: the phone's own. Every save phone's script plays four sounds from its area's bank,
+  from a base id A (Akao command 0x15F): A and A+1 after Yes (pick up, dial tone), A+3 and A+2
+  after the save (put it down). A call plays the pick-up and the tone twice ("ring... ring...") on
+  its ring page, stopped when the other side picks up, and the put-down pair on `*click*`. The ids
+  come from a table of the 23 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
+  sound. F1 > Phone sounds turns them off.
+- Only save phones: the same question also comes when a new day starts (M351, M352), in the debug
+  room (M360) and as the story save (M271); those get no call. The Day 1 sewer's emergency phone
+  (M032) saves through "Use the phone" with no question of its own: that choice is spotted instead
+  (`pe_phone_use_option`), and its set call `pe1/sewer_emergency` plays first there. Its call has
+  no sounds (the sewer's bank has no phone sounds).
+- Settings: Phone calls (Ask after saving / Always call / Off), Ask without saving too (on),
+  Call tone (Mixed / Serious only / Funny only), Phone sounds.
+
+Files (one job each; they talk only through `pe_phone.h`):
+
+| File | Job |
+|---|---|
+| `pe_phone_mod.c` | the mod: descriptor, F1 rows, settings |
+| `pe_phone_service.c` | the `phonecalls` registry and this save's `pe_phone.heard` record |
+| `pe_phone_spot.c` | spotting a phone save: the question page, then `save.committed` |
+| `pe_phone_flow.c` | after the save: "Stay on the line?", then the call page by page |
+| `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
+| `pe_phone_sound.c` | the phone's own sounds: pick up and ring, put down |
+| `pe_phone_hold.c` | keeping Aya at the phone, receiver at her ear, until the call ends |
+| `calls/pe1.txt` | Parasite Eve's own calls, as text |
+| `pe_phone_packs.c` | call files: the built-in pe1.txt and the `pe_calls` folder, reload, open folder |
+| `pe_phone_file.c`, `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): reading call files, pages and wrapping, the heard record, picking |
+
+`tests/pe_mod_phone_test.c` (CTest `mod-phone`) checks the pure core and `calls/pe1.txt` without the game;
+pe-native-debug's `scenarios/phone_calls.py` checks the game side through real phone saves.
+
 ## Cheats (pe_cheats)
 
 F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
 All off until chosen; while they are off the mod writes nothing.
+
+## Challenges (pe_challenges)
+
+Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
+to build it.
+
+New Game opens a title-style challenge picker when this mod is enabled. Each challenge shows
+its current Off / On / level value and description. Hardcore is the first row, followed by the
+other challenges; Clear all challenges and Start game are at the bottom. Choose a row to edit it; Back keeps its
+previous value. Combine challenges, Clear all challenges, then Start game to commit the draft.
+Long lists scroll through six rows, with a range indicator. Hardcore's Start game summary warns
+that death ends the run permanently and challenge levels cannot be lowered after starting.
+
+The picker is independent of Combat styles: with both mods enabled, style selection comes first,
+then challenges; with only one enabled, only its picker appears; with neither, New Game proceeds
+without either question. A build may omit either mod. Continue/load and EX Game do not open the
+challenge picker. Headless or unavailable UI preserves the F1 choices. Settings are saved only
+when Start game confirms the draft; the existing run record, locks and F1 controls stay in use.
+
+F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
+page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
+overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's
+sub-page (a category left with no rows gets no page), then Presets, This run and Debug:
+
+| Category | Challenge | Rule | File |
+|---|---|---|---|
+| Restrictions | No Parasite Energy | no PE battle tab; every power dimmed, field too | pe_ch_no_pe.c |
+| Restrictions | No items in battle | no Item battle tab | pe_ch_menu_rules.c |
+| Restrictions | No escape | no Escape battle tab | pe_ch_menu_rules.c |
+| Restrictions | Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
+| Restrictions | Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage, except Maeda's gun (0x61, 0x93: the last fight needs it), which keeps normal damage; PE untouched | pe_ch_club_only.c |
+| Enemies | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
+| Enemies | Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
+| Aya | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
+| Aya | Half health (1/2 / 1/4 HP) | current HP capped at half or a quarter of max, field and battle; max HP itself never changed | pe_ch_half_health.c |
+| Aya | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
+| Aya | Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
+| Aya | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
+| Run rules | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
+
+Each definition names its category (`PeChallengeDef.category`; names and descriptions in
+`g_ch_categories`, pe_challenges.c), so F1 groups by it with no list to
+update. Rows moved from the top page to their category page keep their saved picks
+(`pe_menu_alias_setting` from `Challenges/<label>` to `Challenges/<category>/<label>`).
+
+Presets: Purist (No PE, No items, No escape), Nightmare (Purist plus Locked loadout, Glass cannon,
+Tough crowd 2x) only turn challenges on; Clear all is press-twice.
+
+- **Modular:** each challenge is a `PeChallengeDef` in the file of its rule: rows (label, levels),
+  the battle tabs it removes, flags (`CH_DEF_NEW_GAME_ONLY`, `CH_DEF_LOCKS_RUN`) and its hooks. The
+  core (`pe_ch_run.c` rows and record, `pe_ch_tabs.c`, assisted detection, run log, history,
+  milestones, summary, bundles, the screen and the notice box) only reads the definitions. A new challenge = an id (append only: ids are save bits), a
+  definition in its own file, a line in `g_ch_defs` (`pe_challenges.c`). `pe_challenges.h` maps it all.
+- **Per run:** the set and levels are saved with the game (record `pe_challenges.run` v2, 48 bytes),
+  so a loaded save shows its own set. At the title the rows are the pick for the next New Game.
+- **Assisted, never blocked:** a challenge turned off or lowered after the run's first minute or
+  first won battle, or a `pe_cheats` / `pe_assists` row switched on (or Win this battle) while a
+  challenge is on, marks the run Assisted. Other mods that work around a challenge (shops under No
+  items, Smoke Grenades under No escape) get a line on the Warnings row.
+- **Tabs:** the battle tabs are `g_MenuItemContextFlag` bits 0-4, which the game saves; they are
+  cleared only in battle (after Half-bar ATB's own tab handling) and the game's bits go back on the
+  first frame after. If every tab would go, Weapon stays (an empty battle menu is untested).
+- **Damage:** PE_HOOK_HP_LOSS for Aya (Glass cannon sources 1-2, then One-hit KO sources 1, 2, 4);
+  PE_HOOK_ENEMY_HIT / ENEMY_HIT_END give each hit's damage on an enemy, scaled after Rebalance and
+  before the Bestiary's kill check. Challenges that change dealt damage register a modifier
+  (`pe_ch_damage_modifier`) that multiplies the hit's num / den; a num of 0 means no damage.
+  Club only can't block equipping a gun (the game has no equip-refusal hook), so gun hits do
+  nothing and a message says so; the Weapon tab stays for switching to the Club in battle. No EXP warns that battle Junk (pe_rewards) scales with EXP.
+- **Other mods** (checked against every mod in the default list; nothing in them changed):
+  - Half-bar ATB edits the same tab word: the tabs code runs after it and follows its writes.
+  - Rebalance mod effects adjust each hit at the same hooks: the scaling runs after them, so it
+    scales their final damage. Glass cannon also goes past Rebalance's Attack All crowd cap (x1.5).
+  - No PE has the last word on power availability over PE balance / Quick powers.
+  - The Bestiary's kill check runs after the scaling, so kills still count.
+  - Assisted: pe_cheats / pe_assists rows switched on, and any play log tag starting `cheat_`
+    (Win this battle, Warp).
+  - Hardcore: quick load works only in free field, and the death is written on the game over's
+    first frame, so neither a quick load nor closing the game saves the run.
+  - Warnings (`kWarnings` in pe_ch_summary.c, one line each, a mod or one of its rows): shops
+    under No items, Smoke Grenades under No escape, battle Junk under No EXP, No random battles.
+- **Events for other mods** (`pe_ch_events.c`; listen with `pe_hook_add(pe_event_id("..."), ...)`,
+  no header of this mod needed):
+
+  | Event | ctx | When |
+  |---|---|---|
+  | `challenges.changed` | `const uint32_t *` active mask, bit = challenge id | after a load, a New Game, every change |
+  | `challenges.assisted` | `const char *` what did it ("Warp", "God mode", "lowered: No PE") | once per run |
+  | `challenges.run_ended` | `const uint32_t *` run id | a Hardcore run's game over |
+  | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
+
+  Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies, 11 Club only, 12 Half health.
+  A `challenges` service (is a challenge on, its level, report an assist) belongs in
+  `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
+  cheat mods are detected through their rows and the `play.log` `cheat_*` convention.
+- **Debug** (F1 > Challenges > Debug, nothing saved or changed): Preview the Hardcore notice (the
+  fallen-run window in the field, closing to nothing) and Preview fallen saves (Hardcore saves grey
+  in the save / load lists for the session).
+- **Not yet:** Scarcity, no bonus-point spending.
+- **Challenges in Aya's menu** (`pe_ch_screen.c`): no row of its own in Aya's menu. The game's
+  System list (the SYS icon, "Set User Preferences": Sound, Cursor, Window, Position) gets a fifth
+  row, **Challenges**, outside battle with a game loaded; the panel widens to fit it. It opens a
+  read-only screen from the game's own widgets: two framed lists side by side, **Active** (the
+  challenges on in this run) and **Completed** (every challenge with a record, below; cleared
+  clean in the game's yellow), each under a framed title with its count ("Completed 5/13"). Left /
+  Right moves between them; the list not in use is dimmed. The info panel below gives the
+  highlighted challenge: on Active its level (a run-locking one in yellow) and what it does, on
+  Completed its clears, best level, fastest time, Hardcore and first clear. The title bar gives the
+  run (Clean / Assisted, battles won, knockouts, time), then the controls; Circle or Cross goes
+  back to the System list. The game's handler reads System rows 4 and 5 as a jump to bonus points,
+  so Cross on our row is taken before it. Run history stays in `pe_challenges.ini` and F1's This
+  run page. Game text uses only what the game's font has (letters, digits, `. , : ! ? ' / + - %`).
+  Challenges are still chosen in F1.
+- **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
+  (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
+  `<id> <knockouts> [dead]` lines still read). It is per user, like `pe_collection.ini`: knockouts
+  and deaths survive the reload that follows them, and nothing goes into the card, so the save
+  editor, save states and companion files are unchanged. Every real save (card menu or quick save:
+  the block is `g_MemCardFileBuffer`; the crash reporter's room snapshot is skipped) refreshes the
+  run's line; the save after the credits (Clear Data: `g_SaveTitleStyleFlag` with the card menu's
+  clear prompt) marks it cleared (`pe_ch_milestones.c`). 128 runs; playing runs are dropped first,
+  fallen ones last.
+- **Hardcore saves in the save / load lists** (`pe_ch_card_marks.c`; the save phone's card screen and
+  the title's Load screen are the same menu): a Hardcore save's slot is drawn in a dark red window,
+  a fallen one in grey (only the menu's copy of the slot's window colour, `slot->blendColor`, is
+  changed; the card never is). With one highlighted, the title bar says "Hardcore run" and its other
+  challenges, or "Fallen Hardcore run: it can't be played"; when saving, that the slot holds a
+  Hardcore run. Each slot's file is read once (the game's `Psyz_AdjustPath` name) and its
+  `pe_challenges.run` record peeked read-only (`pe_save_peek`), again only when the slot changes.
+- **Records** (`pe_ch_records.c`): a challenge is completed when a run is cleared (the Clear Data
+  save after the credits) with it on at the end and never lowered. Per challenge: clean and
+  assisted clears, the hardest level cleared, the fastest time, whether it was cleared in a
+  Hardcore run, the first clear's date. Kept per user in `pe_challenges_records.ini` (one line per
+  challenge id). It is fed by listening to `challenges.run_cleared`, like any other mod could be;
+  the first time the file is missing, cleared runs already in the history are counted once. Shown
+  in the Completed list of Aya's Challenges screen (cleared clean in yellow) and as
+  "Challenges cleared N of M" in F1.
+- **This run (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
+- **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
+  challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase
+  3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run fallen in the history.
+  Loading any save of a fallen run (card slot, quick save, copy) opens the game's own dialogue
+  window ("This Hardcore run has ended. It fell after N battles, time." / Return to title;
+  `pe_ch_notice.c`), then the title through the game's own `Boot_Shutdown` on the first frame a soft
+  reset is allowed. Saves are never deleted or moved. The load isn't refused up front because the
+  load admission code lives in host files the PS5 port pins; a separate Hardcore card would need the
+  pinned save flow too.
 
 ## A mod
 
@@ -121,13 +392,23 @@ moved, disabled or updated without touching the others. Add the folder name to `
 
 ## Talking to other mods
 
-- **Services**: `pe_service_publish("junk", 1, &api)` / `pe_service_get("junk", 1)`. A service is
+- **Services**: `pe_service_publish("junk", 1, &api, MOD_ID)` / `pe_service_get("junk", 1)`. A service is
   a versioned struct of functions; a mod that finds none carries on without it.
 - **Events**: `pe_event_id("name")` and `pe_event_emit(id, ctx)` for announcements.
 
 Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk` v1 and
-`catalog` v1 (pe_economy), `keys` v1 (pe_qol), `wardrobe`, `bestiary` and `costumes` v1
-(pe_collection). Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
+`catalog` and `rebuild` v1 (pe_catalog), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
+`costumes` v1 (pe_wardrobe).
+
+The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
+other mods build on: custom content, equipment effects, Catalog entries and shop offers. During
+its init a mod declares batches (`pe_reg_batch`) and submits entries (`pe_reg_submit`) under its
+own namespace, "<mod id>/<name>"; it gets a receipt, not a definition. Once every mod has started
+the host seals the registry: limits, keys declared twice (every claimant fails, nothing wins),
+references and batch requirements, to a fixed point, the same whatever order mods start in. Then
+`pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
+reason) answer; nothing new is accepted until the next start. No mod uses it yet.
+`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
@@ -195,11 +476,13 @@ Records today:
 
 | Record | Holds | Owner |
 |---|---|---|
-| `pe_economy.loot` | Junk, rare pity, difficulty | pe_economy/pe_loot.c |
-| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list | pe_economy/pe_catalog.c |
-| `pe_economy.shop` | Requisition | pe_economy/pe_requisition.c |
+| `pe_economy.loot` | Junk, rare pity, difficulty (the rewards' fields through the `wallet` service, D10) | pe_economy/pe_loot.c |
+| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list (the name from before the split) | pe_catalog/pe_catalog.c |
+| `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
+| `pe_phone.heard` | the last five calls and one-time calls heard | pe_phone/pe_phone_calls.c |
+| `pe_challenges.run` | challenges and levels on / used / lowered, assisted, battles won, time | pe_challenges/pe_ch_run.c |
 
 Saves from earlier builds kept these as fixed blocks (`PELT` +0x000, `PECT` +0x040, `PESH` +0x1C0, `PKEY` +0x200, `SORT`
 +0x260 from 0x1C90).
@@ -244,6 +527,24 @@ not the number of enemies in a fight.
 
 pe_qol/pe_battle_frequency.c owns matching and settings. A single SCRIPT_RANDOM
 hook supplies local RNG bounds; loaded scripts and save data are not patched.
+
+## Hold to skip dialogue
+
+Movement / Hold to skip dialogue (Off, Square, R1, L1; Off by default). A dialogue
+box draws its whole page at once and waits for the cooked action edge (field bit
+0x100) to turn the page or close. While the chosen button is held (decoded pad
+bits from PE_HOOK_PAD_MAP), PE_HOOK_TEXTBOXES sets that edge every third frame,
+so each page is drawn, and its choice flag set, before the next press. It never
+presses while any box is opening (state 1), drew choices (control flag 0x200000)
+or shows a page with the choice command (FB 09), or a page it can't read to its
+end. pe_qol/pe_dialogue_skip.c.
+
+## Auto Medicine order
+
+Combat / Auto Medicine order: Strongest first (native) or Weakest first. The
+Auto Medicine effect in Entity_UpdateTimers asks PE_HOOK_AUTO_MEDICINE once per
+heal for the order it tries Full Recover and Medicine 4..1 in; it still uses as
+many as it needs to get above a fifth of max HP. pe_qol/pe_auto_medicine.c.
 
 ## Panacea and medicine combining
 
@@ -389,23 +690,30 @@ Tool-price, rescue/storage, confirmation, guard and save-layout checks.
 ## Wayne's Workshop
 
 pe_economy/pe_wayne_menu.c rewrites Wayne's own choice box (PE_HOOK_TEXTBOXES, before the
-boxes draw): Mod Permit Card and Workshop above Cancel, Junk and his count on Discard junk.
-Workshop opens Requisition, Rebuild (5 a page, Left/Right pages, dimmed rows can't be bought
-now) and a Wardrobe row while a mod publishes the `wardrobe` v1 service. Mod Permit Card adds
-one mod slot after a Yes / No. Circle goes back. While his box is the counter the shop allows
-buying though the field is busy (pe_shop_at_counter). Messages use pe_gametext.h.
+boxes draw): Workshop above Cancel, Junk and his count on Discard junk.
+Workshop opens a menu screen of its own (pe_shops/pe_workshop_screen.c), his box waiting below
+the screen: Requisition, Rebuild (the rebuilt item's stats as the equip screens show them), a
+Wardrobe row while a mod publishes the `wardrobe` v1 service (outfits beside their model), and
+Mod Permit Card (pe_permit.c: the bag's guns and armor; one permit adds one mod slot). Lists
+scroll; gray rows can't be had now and say why; every purchase asks Yes / No. Circle goes back.
+While his box is the counter the shop allows buying though the field is busy
+(pe_shop_at_counter). Messages use pe_gametext.h.
 
 host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) reruns the game's
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,
 Tool, Rebuild and editor changes reach the next battle.
 
-## Collection (pe_collection)
+## Collection (pe_collection) and Wardrobe (pe_wardrobe)
 
-F1 > PE Enhancements > Collection. Cosmetic and information only; Junk comes from the economy's
-`junk` service. The Collection is a registry: its creatures and costumes come from packs, and
-Parasite Eve's own are just the first pack (`pe_pack_pe1.c`). Other mods (an import from another
-game, a randomizer) add theirs through the `bestiary` and `costumes` services (host/pe_services.h)
-without touching these files.
+F1 > PE Enhancements > Collection and Wardrobe. Cosmetic and information only; Junk comes from the
+economy's `junk` service. Two mods since November 2026 (bridge findings D8 §12, D9): the
+Collection is the Bestiary, the Wardrobe the costumes; neither needs the other. Each is a
+registry: its creatures or costumes come from packs, and Parasite Eve's own are just the first
+pack (`pe_collection/pe_pack_pe1.c`, `pe_wardrobe/pe_pack_pe1_costumes.c`). Other mods (an import
+from another game, a randomizer) add theirs through the `bestiary` and `costumes` services
+(host/pe_services.h) without touching these files.
+
+In pe_collection/:
 
 - `pe_bestiary.c`: the creature registry. A kill (enemy HP above 0 to 0 or less, watched on
   PE_HOOK_BATTLE_UPDATE) or Scan (PE_HOOK_SPELL power 7) is credited to the creature the enemy
@@ -427,11 +735,19 @@ without touching these files.
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is
   met: the area's creatures (L1 / R1 change area; unmet ones "???"), the model turning with its idle
   animation in a game panel (host pe_model_stage; Left / Right turn it, Triangle full screen, Square
-  pause, Select the next form), and what is known by tier below. Unmet creatures of a reached area
+  pause, Select the next form), and what is known by tier below. The browser sits in the game's
+  screen area (right of the icon rail, under the title bar), widened to the status screen's right
+  edge. Details wrap to the panel width and native drawing budget;
+  L2 / R2 scroll the information independently of the creature list. Changing creatures or
+  unlocking a tier returns to the first detail line. Unmet creatures of a reached area
   show as a silhouette; others and bosses show nothing. Cross buys the next tier after the game's
   Yes / No (host `pe_confirm`). NEW: tiers not looked at yet (profile `seen`) list in the game's
   yellow. Debug > Collection: Junk, Give 1000 Junk, Test creature (its tiers, kills, NEW), Unlock
   next tier, Add a kill, Reset creature, Mark creature NEW, Clear / Make all NEW.
+  `tests/run_pe_bestiary_menu_test.ps1` checks the layout, wrapping without lost text (also when the
+  overflowing glyph is a space), scrolling, the title bar's Info page only when it scrolls, translated
+  glyph boundaries, dense text drawing limits, viewer controls and teardown.
+In pe_wardrobe/:
 - `pe_wardrobe.c`: the costume registry. A costume is one of the game's player bundles (bank 10 /
   12 / 13, rewritten at the start of Aya's model load, PE_HOOK_PLAYER_BANK), a skin folder
   (`bundle`, loaded by pe_skin_loader.c), or a provider's own model (its load(1) / load(0) at that
@@ -440,7 +756,13 @@ without touching these files.
   "wardrobe.worn". F1 groups and Bestiary areas come from whatever packs register.
 - `pe_skin_loader.c`: skins in the game's own player formats, from pe_skins/<folder>/ beside the
   preferences (texture.bin, model.bin, day1-8.bin, optional rooms.bin and meta.bin; the bridge's
-  build_skin.py makes them from the player's disc). Kept in host memory: Aya's textures are swapped
+  build_skin.py makes them from the player's disc). Loaded character models use native jacket
+  Aya's movement-cylinder radius (63 for the supported US assets), including character packs.
+  Only the host-owned model copy is normalized: installed assets, appearance, animations and
+  per-part combat hit bounds remain unchanged. This prevents NPC body widths from changing
+  movement clearance, as with Baker getting stuck near the police save-room area. Existing rig
+  defects are separate. Restart to reload any cached models after updating the mod.
+  Kept in host memory: Aya's textures are swapped
   at the game's upload (PE_HOOK_PLAYER_TEXTURES, the game's own kept for changing back), and
   bank_slots[0] and her rows point at the skin before her actor takes them (PE_HOOK_PLAYER_ROWS) and
   every frame; the weapon follows the skin's hand, room animations use retargeted copies. Instant
@@ -448,12 +770,23 @@ without touching these files.
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
   in (29, 31 or 23 parts), so the evening dress worn on a jacket day gets them retargeted to its own.
+  A room row with no copy (no pack installed, or none for that row) is fitted to the outfit's part
+  count instead: missing bones hold the outfit's idle pose, extra bones are dropped. Otherwise the
+  undecoded gown parts compound into a flickering, stretched shape in cutscenes (issue #220).
+  When rebuilding packs for Day 1 long-dress scenes, the generator must accept the shortest
+  23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
+  `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
+  threshold alone keeps the old cached set. The generator must also collect the bank 11 bundle
+  rows 28–34 (image entry 19), not only rows installed by room archives: none of those seven
+  fingerprints occurs in the room-only scan of either US disc. Updated `rooms.bin` copies are required as well as
+  the loader fix: updating the game executable does not repair existing skin assets.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
   costume is owned. Uses the Bestiary's six-row list, right-hand model preview and three-row details
   panel (outfit name, wear status/action, and preview control; no cast/category detail row). L1/R1 filter owned outfits by registered group; Left/Right rotate, Triangle opens/closes
   full view, Square (default keyboard V) pauses. Previews start facing the viewer. Both Wardrobe
   and Bestiary use `pe_screen_preview_input` to pass Left/Right through the native list to rotation. Cross wears the selected outfit when the menu closes; Circle returns.
-  There are no purchases, prices or unlock actions here. Missing/unowned outfits stay out of the list.
+  There are no purchases, prices or unlock actions here. Missing outfits stay out of the list, and
+  so do unowned ones while unlock rules apply (below).
   Names are fitted to the native font and capped to leave room for the title and side rail in the
   16 KB menu drawing buffer. Groups remember their scroll position while the screen is open.
   Preview loading is separate from equipment: `host/pe_model_skin.c` reads standalone skin blobs
@@ -464,15 +797,53 @@ without touching these files.
   names, the drawing budget, owned-only choices and cleanup; the model fixture covers player idle,
   skin source caching and missing files. Set `PE_MODEL_SKIN_ROOT` to the preference directory when
   running `tests/run_pe_model_test.ps1` to also decode installed Harlequin, Baker and Maya assets.
-- `pe_profile.c`: unlocks by key in pe_collection.ini beside the preferences, kept across every
-  game; records of packs that aren't loaded are kept untouched. The recomp's pe_collection.dat is
-  imported once.
-- `pe_pack_pe1.c`: the 75 creatures (pe_collection_data.h, generated by the bridge), the outfits
-  and the 38 character skins (each hidden while its pe_skins folder is missing).
-- `pe_collection.c`: the mod, Junk, messages; Debug > Collection resets the profile.
+- Unlock rules: a mod publishing `costume_rules` v1 (pe_economy's F1 > Economy > Costume unlock
+  rules, on by default) restricts wearing to owned or free costumes, bought with Junk. With the
+  rule off, or no such mod running, every installed costume can be worn and nothing is bought or
+  written as owned. What Aya wears follows a rule change at the next room load only; a costume the
+  rule locks comes off there with its key kept (bridge findings D8 §12).
+- `pe_packs.c`: character packs (bridge findings D8 §3, format v1) dropped in
+  `<preferences>/packs/` as a plain zip or the same layout unzipped: `pack.json` (`format` 1, `id`
+  of a-z / 0-9 / -, at most 31, `kind` "assets"), `LICENSE`, and `characters/<folder>/` with
+  `character.json` (`name`, `group`, `tier`: extra, outfit, supporting, main or special) and the
+  skin loader's files. Read at start-up only. Keys are `<pack id>/<folder>` (at most 63 bytes,
+  never renamed); the bundle `@<pack id>/<folder>` sends the skin loader to the pack. Refused, with
+  the reason on F1 > Collection > Wardrobe > Packs: an id installed twice (every copy), a bad or
+  reserved id (`pe1`, `local`), no LICENSE, another format or kind (recipe packs need the
+  builder), and zips with unsafe or duplicate names, encryption, links, files over 4 MiB, over
+  64 MiB unpacked or suspicious compression. A character missing a file, or not shaped like Aya
+  (host `pe_model_check_skin`, the bridge's check_skins_struct.py: at least 29 parts, draw commands
+  visiting each part once in order, every animation row one channel set per part, meta.bin's gun
+  part a part), is refused alone. Tiers price 25 / 50 / 100 / 250 / 400 Junk while unlock rules
+  apply. Previews in Aya's Wardrobe menu read the pack through `pe_model_skin_set_reader`, set by
+  the Wardrobe (the host never calls it by name). Recipe packs (Parasite Eve's own characters,
+  shared as instructions) are listed as needing a build: the bridge's
+  tools/pe_assets/pe_pack_build.py builds them from the player's disc into an assets pack here.
+  Not yet: default-appearance replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
+  the preview reader and the shape check's refusals.
+- `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
+  preferences, kept across every game; records of packs that aren't loaded are kept untouched. The
+  first time the file is missing, it imports the costume lines of pe_collection.ini (or, with none,
+  the recomp's pe_collection.dat) and records the source on an `imported` line. The Collection
+  drops its copies once it sees that line, so a lost pe_wardrobe.ini can't bring back costumes
+  cleared since.
+- `pe_pack_pe1_costumes.c`: the outfits and the 38 character skins (pe_wardrobe_data.h, generated
+  by the bridge; each hidden while its pe_skins folder is missing).
+- `pe_wardrobe_mod.c`: the mod, Junk, messages; Debug > Collection > Reset wardrobe resets its
+  profile. A player who had turned the Collection off in Manage mods starts with the Wardrobe off
+  too (host `pe_menu_alias_setting`).
+
+Back in pe_collection/:
+- `pe_profile.c`: Bestiary unlocks by key in pe_collection.ini beside the preferences, kept across
+  every game; records of packs that aren't loaded are kept untouched. The recomp's
+  pe_collection.dat is imported once. Costume lines from before the split are carried until the
+  Wardrobe has imported them; Reset collection never clears them.
+- `pe_pack_pe1.c`: the 75 creatures (pe_collection_data.h, generated by the bridge).
+- `pe_collection.c`: the mod, Junk, messages; Debug > Collection resets the Bestiary.
 
 Writing a pack (another mod):
-1. List "pe_collection" in your PeMod `requires`, so the services exist at your init.
+1. List "pe_collection" (creatures) and / or "pe_wardrobe" (costumes) in your PeMod `requires`,
+   so the services exist at your init.
 2. `const PeBestiaryApi *b = pe_service_get("bestiary", 1);` then `b->add(&info)` for each creature
    (static `PeCreatureInfo`, a key under your own prefix: "re2/zombie") and `b->map(room, identity,
    handle)` for where it appears, or `b->add_resolver(fn)` to decide per enemy (a randomizer that
@@ -488,13 +859,19 @@ Writing a pack (another mod):
 4. Keys are saved in players' profiles: never rename one once released.
 `tests/run_pe_collection_test.ps1` drives the registries the way such a pack would.
 
-## Mod Catalog files
+## Mod Catalog files (mods/pe_catalog)
+
+Its own mod since November 2026, "PE Enhancements: Mod Catalog". It reaches the Junk wallet only
+through the `junk` service (`pe_catalog_wallet.c`): without the economy mod running, paid actions
+are refused, never free. It publishes `catalog` (unlocks) and `rebuild` (the Rebuild list, for
+Wayne's Workshop). A player who had the economy off starts with it off too.
+
 
 - `pe_catalog.c`: effects, prices, install / remove rules, unlocks, the PECT save block, the
   `catalog` service.
 - `pe_dismantle.c`: Dismantle, Rebuild and Tool salvage.
 - `pe_catalog_pages.c`: the F1 pages. `pe_catalog_menu.c`: the Catalog in Aya's own menu.
-- `pe_catalog.h`: their private interface; other files use the `pe_cat_*` calls in pe_economy.h.
+- `pe_catalog.h`: their private interface; the mod's other files use the `pe_cat_*` calls in pe_catalog_mod.h.
 - `pe_discard_dismantle.c`: Discard on a gun or armor in Aya's menu or Wayne's storage reads
   Dismantle and confirms with what it pays (PE_HOOK_ITEM_ACTIONS); the equipped gear and the last
   Club keep the plain Discard. F1 > Economy > Discard dismantles.
@@ -505,7 +882,7 @@ pe_economy/pe_field_wayne.c: wherever Warner stands guard (map 374) he offers St
 Store item and the Workshop. His retail talk task (checked word for word, read-only) plays
 untouched; when it ends, the field is locked again the way his script does it (field event 0xFE)
 and our menu opens in a dialogue box of its own near the screen centre (PE_HOOK_TEXTBOXES, ahead
-of pe_wayne_menu.c, which adds Mod Permit Card and Workshop). Closing it unlocks the field (0xFF);
+of pe_wayne_menu.c, which adds Workshop). Closing it unlocks the field (0xFF);
 a storage choice then opens the game's storage screen. Nothing in his script is patched. F1 >
 Economy > Warner helps out.
 
@@ -529,3 +906,7 @@ and kill counts and discards old enemy HP tracking. Both save immediately;
 costume ownership, the worn outfit, Junk and unloaded packs' records remain
 unchanged. The actions live in pe_bestiary.c and use the existing profile
 API. Collection checks cover persistence, repeat use and post-reset kills.
+
+## Extension APIs
+
+The native-compatible v1 services, ownership rules, next-save purchase behavior and supported limits are documented in [the extension API guide](host/EXTENSION_APIS.md). For the whole mod API, start with [the API reference](../docs/MOD_API.md). The existing gameplay defaults are unchanged.

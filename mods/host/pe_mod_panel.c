@@ -52,6 +52,7 @@ static struct {
 static struct { char path[96]; int cursor; } s_remembered[MAX_REMEMBERED];
 static PeSurface s_surface;
 static float s_scale;
+static int s_origin_x, s_origin_y, s_shown_w, s_shown_h; /* where the window is shown, in pixels */
 static PsyzOverlayEventFilter_SDL3 s_prev_filter;
 
 static int pe_link_index(const char *page) {
@@ -158,9 +159,9 @@ static int pe_visible_rows(void) {
 /* Every page wears the refined look (pe_paint): a dark window, a framed help box. */
 static int pe_design_h(void) { return HEADER_H + pe_visible_rows() * ROW_H + FOOTER_H; }
 
-static float pe_layout_scale(int win_w, int win_h) {
+static float pe_layout_scale(int win_w, int win_h, int design_h) {
     float scale = (float)win_h / (float)REFERENCE_H;
-    const float wl = (float)win_w * 0.94f / (float)PANEL_W, hl = (float)win_h * 0.94f / (float)pe_design_h();
+    const float wl = (float)win_w * 0.94f / (float)PANEL_W, hl = (float)win_h * 0.94f / (float)design_h;
     if (scale > wl) scale = wl;
     if (scale > hl) scale = hl;
     if (scale > 2.5f) scale = 2.5f;
@@ -335,14 +336,12 @@ static void pe_wrapped(float x, float baseline, float step, float width, float e
     }
 }
 
-static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
-    const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s, base = mid + 6 * s;
-    const float label_x = (PANEL_PAD + 16) * s, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
-    const int off = e->row >= 0 ? !pe_menu_row_active(pe_menu_row(e->row)) : !pe_page_active(e->page);
-    const PeColor label = pe_ui_alpha(pe_look_text, (selected ? 1.0f : 0.78f) * (off ? 0.55f : 1.0f));
+/* A row's ground: the selected one's band and cursor, or the rule above an unselected one. */
+static void pe_paint_row_ground(int slot, int selected) {
+    const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s;
+    const float label_x = (PANEL_PAD + 16) * s;
     const int band_x = (int)(PANEL_PAD * 0.5f * s), band_y = (int)(top + 4 * s), band_w = (int)((PANEL_W - PANEL_PAD) * s),
               band_h = (int)((ROW_H - 8) * s);
-    char value[96];
     if (selected) {                                     /* a steel band fading right, hairlines, the red cursor */
         pe_hgradient(band_x, band_y, band_w, band_h, pe_ui_alpha(pe_look_steel, 0.34f), pe_ui_alpha(pe_look_steel, 0.0f));
         pe_hgradient(band_x, band_y, band_w, 1, pe_ui_alpha(pe_look_silver, 0.55f), pe_ui_alpha(pe_look_silver, 0.0f));
@@ -353,6 +352,15 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
         pe_hgradient((int)(label_x), (int)top, (int)((PANEL_W - 2 * PANEL_PAD - 16) * s), 1,
                      pe_ui_alpha(pe_look_silver, 0.07f), pe_ui_alpha(pe_look_silver, 0.0f));
     }
+}
+
+static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
+    const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s, base = mid + 6 * s;
+    const float label_x = (PANEL_PAD + 16) * s, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
+    const int off = e->row >= 0 ? !pe_menu_row_active(pe_menu_row(e->row)) : !pe_page_active(e->page);
+    const PeColor label = pe_ui_alpha(pe_look_text, (selected ? 1.0f : 0.78f) * (off ? 0.55f : 1.0f));
+    char value[96];
+    pe_paint_row_ground(slot, selected);
     if (e->row < 0) {                                   /* link */
         pe_ui_draw_text(&s_surface, label_x, base, 17 * s, e->page + e->name_at, label, PE_ALIGN_LEFT);
         pe_arrow((PANEL_W - PANEL_PAD) * s, mid, 10 * s, 1, selected ? pe_look_red : pe_ui_alpha(pe_look_dim, 0.7f));
@@ -394,6 +402,51 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
     }
 }
 
+/* The window: navy to black, faint scanlines, a silver double frame with bright corners; the
+ * game's name in red at the top. */
+static void pe_paint_window(int w, int h) {
+    const float s = s_scale;
+    int i;
+    pe_vgradient(0, 0, w, h, (PeColor){0.055f, 0.075f, 0.140f, 0.97f}, (PeColor){0.010f, 0.014f, 0.032f, 0.97f});
+    for (i = 0; i < h; i += 3) pe_px_rect(1, i, w - 2, 1, pe_ui_alpha(pe_look_silver, 0.022f));
+    pe_frame(0, 0, w, h, pe_ui_alpha(pe_look_silver, 0.50f));
+    pe_frame((int)(5 * s), (int)(5 * s), w - 2 * (int)(5 * s), h - 2 * (int)(5 * s), pe_ui_alpha(pe_look_silver, 0.13f));
+    pe_corners(0, 0, w, h, (int)(22 * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2, pe_ui_alpha(pe_look_silver, 0.95f));
+    pe_spaced(PANEL_PAD * s, 32 * s, 11 * s, 4 * s, "PARASITE EVE", pe_look_red, PE_ALIGN_LEFT);
+}
+
+/* The red rule fading out under the header. */
+static void pe_paint_rule(void) {
+    const float s = s_scale;
+    pe_hgradient((int)(PANEL_PAD * s), (int)(80 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2,
+                 pe_look_red, pe_ui_alpha(pe_look_red, 0.0f));
+    pe_px_rect((int)(PANEL_PAD * s), (int)(86 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1, pe_ui_alpha(pe_look_silver, 0.08f));
+}
+
+/* Scroll bar: a hairline track, a red thumb. */
+static void pe_paint_scroll(int visible, int count, int scroll) {
+    const float s = s_scale;
+    const float track_top = (HEADER_H + 4) * s, track_h = (visible * ROW_H - 8) * s;
+    const float thumb_h = track_h * (float)visible / (float)count;
+    const float thumb_top = track_top + (track_h - thumb_h) * (float)scroll / (float)(count - visible);
+    pe_px_rect((int)((PANEL_W - 14) * s), (int)track_top, 1, (int)track_h, pe_ui_alpha(pe_look_silver, 0.15f));
+    pe_px_rect((int)((PANEL_W - 15) * s), (int)thumb_top, (int)(3 * s), (int)thumb_h, pe_look_red);
+}
+
+/* The help box, as the game frames its own: the description, then the keys. */
+static void pe_paint_help(float footer, const char *help, const char *keys) {
+    const float s = s_scale;
+    const int bx = (int)(PANEL_PAD * 0.5f * s), by = (int)((footer + 8) * s), bw = (int)((PANEL_W - PANEL_PAD) * s),
+              bh = (int)((FOOTER_H - 20) * s);
+    char text[160];
+    pe_vgradient(bx, by, bw, bh, (PeColor){0.02f, 0.03f, 0.06f, 0.85f}, (PeColor){0.0f, 0.0f, 0.0f, 0.85f});
+    pe_frame(bx, by, bw, bh, pe_ui_alpha(pe_look_silver, 0.30f));
+    pe_corners(bx, by, bw, bh, (int)(10 * s), 1, pe_ui_alpha(pe_look_silver, 0.85f));
+    pe_wrapped(PANEL_PAD * s, (footer + 31) * s, 19 * s, (PANEL_W - 2 * PANEL_PAD) * s, 14 * s, 2, help, pe_look_text);
+    pe_upper(text, sizeof text, keys);
+    pe_spaced(PANEL_PAD * s, (footer + 72) * s, 10 * s, 1.6f * s, text, pe_ui_alpha(pe_look_dim, 0.85f), PE_ALIGN_LEFT);
+}
+
 static void pe_paint(int w, int h) {
     const float s = s_scale;
     const int visible = pe_visible_rows();
@@ -401,14 +454,8 @@ static void pe_paint(int w, int h) {
     const char *sub = strchr(s_panel.path, '/');
     char text[160];
     int i;
-    /* The window: navy to black, faint scanlines, a silver double frame with bright corners. */
-    pe_vgradient(0, 0, w, h, (PeColor){0.055f, 0.075f, 0.140f, 0.97f}, (PeColor){0.010f, 0.014f, 0.032f, 0.97f});
-    for (i = 0; i < h; i += 3) pe_px_rect(1, i, w - 2, 1, pe_ui_alpha(pe_look_silver, 0.022f));
-    pe_frame(0, 0, w, h, pe_ui_alpha(pe_look_silver, 0.50f));
-    pe_frame((int)(5 * s), (int)(5 * s), w - 2 * (int)(5 * s), h - 2 * (int)(5 * s), pe_ui_alpha(pe_look_silver, 0.13f));
-    pe_corners(0, 0, w, h, (int)(22 * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2, pe_ui_alpha(pe_look_silver, 0.95f));
-    /* Header: the game's name in red, the page in big spaced capitals, a red rule fading out. */
-    pe_spaced(PANEL_PAD * s, 32 * s, 11 * s, 4 * s, "PARASITE EVE", pe_look_red, PE_ALIGN_LEFT);
+    pe_paint_window(w, h);
+    /* Header: the page in big spaced capitals, a red rule fading out. */
     pe_spaced((PANEL_W - PANEL_PAD) * s, 32 * s, 11 * s, 3 * s, "GAME PAUSED", pe_ui_alpha(pe_look_dim, 0.85f), PE_ALIGN_RIGHT);
     {   /* the mod's name (its top page) big on the left, the page you're on small on the right */
         char page[160] = "";
@@ -433,54 +480,78 @@ static void pe_paint(int w, int h) {
     }
     if (s_panel.path[0] && !pe_page_active(s_panel.path))
         pe_spaced((PANEL_W - PANEL_PAD) * s, sub ? 46 * s : 66 * s, 11 * s, 3 * s, "MOD OFF", pe_look_dim, PE_ALIGN_RIGHT);
-    pe_hgradient((int)(PANEL_PAD * s), (int)(80 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2,
-                 pe_look_red, pe_ui_alpha(pe_look_red, 0.0f));
-    pe_px_rect((int)(PANEL_PAD * s), (int)(86 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1, pe_ui_alpha(pe_look_silver, 0.08f));
+    pe_paint_rule();
     if (!s_panel.count)
         pe_ui_draw_text(&s_surface, (PANEL_PAD + 16) * s, (HEADER_H + ROW_H * 0.5f + 6) * s, 16 * s, "Nothing here yet.",
                         pe_look_dim, PE_ALIGN_LEFT);
     for (i = 0; i < visible && s_panel.scroll + i < s_panel.count; ++i)
         pe_paint_row_pe(&s_panel.entries[s_panel.scroll + i], i, s_panel.scroll + i == s_panel.cursor);
-    if (s_panel.count > visible) {                      /* scroll bar: a hairline track, a red thumb */
-        const float track_top = (HEADER_H + 4) * s, track_h = (visible * ROW_H - 8) * s;
-        const float thumb_h = track_h * (float)visible / (float)s_panel.count;
-        const float thumb_top = track_top + (track_h - thumb_h) * (float)s_panel.scroll / (float)(s_panel.count - visible);
-        pe_px_rect((int)((PANEL_W - 14) * s), (int)track_top, 1, (int)track_h, pe_ui_alpha(pe_look_silver, 0.15f));
-        pe_px_rect((int)((PANEL_W - 15) * s), (int)thumb_top, (int)(3 * s), (int)thumb_h, pe_look_red);
-    }
-    /* The help box, as the game frames its own: the description, then the keys. */
-    {
-        const int bx = (int)(PANEL_PAD * 0.5f * s), by = (int)((footer + 8) * s), bw = (int)((PANEL_W - PANEL_PAD) * s),
-                  bh = (int)((FOOTER_H - 20) * s);
-        pe_vgradient(bx, by, bw, bh, (PeColor){0.02f, 0.03f, 0.06f, 0.85f}, (PeColor){0.0f, 0.0f, 0.0f, 0.85f});
-        pe_frame(bx, by, bw, bh, pe_ui_alpha(pe_look_silver, 0.30f));
-        pe_corners(bx, by, bw, bh, (int)(10 * s), 1, pe_ui_alpha(pe_look_silver, 0.85f));
-        pe_wrapped(PANEL_PAD * s, (footer + 31) * s, 19 * s, (PANEL_W - 2 * PANEL_PAD) * s, 14 * s, 2, pe_help_text(),
-                   pe_look_text);
-        pe_upper(text, sizeof text, pe_key_hints());
-        pe_spaced(PANEL_PAD * s, (footer + 72) * s, 10 * s, 1.6f * s, text, pe_ui_alpha(pe_look_dim, 0.85f), PE_ALIGN_LEFT);
-    }
+    if (s_panel.count > visible) pe_paint_scroll(visible, s_panel.count, s_panel.scroll);
+    pe_paint_help(footer, pe_help_text(), pe_key_hints());
 }
 
-static void pe_refresh(void) {
+/* Paint a window `design_h` units tall with `paint` and show it centred, when `*dirty` or the
+ * game's window changed size. */
+static void pe_show(int *dirty, int design_h, void (*paint)(int w, int h)) {
     static int s_last_w, s_last_h;
     int win_w, win_h, w, h;
     if (!pe_ui_font_ready() || !pe_ui_gpu_window_size(&win_w, &win_h)) return;
-    if (win_w != s_last_w || win_h != s_last_h) s_panel.dirty = 1;
-    if (!s_panel.dirty) return;
+    if (win_w != s_last_w || win_h != s_last_h) *dirty = 1;
+    if (!*dirty) return;
     s_last_w = win_w;
     s_last_h = win_h;
-    s_scale = pe_layout_scale(win_w, win_h);
+    s_scale = pe_layout_scale(win_w, win_h, design_h);
     w = (int)ceilf((float)PANEL_W * s_scale);
-    h = (int)ceilf((float)pe_design_h() * s_scale);
+    h = (int)ceilf((float)design_h * s_scale);
     if (!pe_ui_surface_begin(&s_surface, w, h)) return;
-    pe_paint(w, h);
+    paint(w, h);
     pe_ui_surface_finish(&s_surface);
-    pe_ui_gpu_show(&s_surface, (win_w - w) / 2, (win_h - h) / 2, 0.62f);
-    s_panel.dirty = 0;
+    s_origin_x = (win_w - w) / 2;
+    s_origin_y = (win_h - h) / 2;
+    s_shown_w = w;
+    s_shown_h = h;
+    pe_ui_gpu_show(&s_surface, s_origin_x, s_origin_y, 0.62f);
+    *dirty = 0;
 }
 
+static void pe_refresh(void) { pe_show(&s_panel.dirty, pe_design_h(), pe_paint); }
+
 /* ---- input ---- */
+
+/* A mouse event's point in design units of the window shown (pe_show); 0 when the event has no
+ * point. */
+static int pe_mouse_point(const SDL_Event *ev, float *x, float *y) {
+    SDL_WindowID id;
+    float wx, wy, density;
+    SDL_Window *window;
+    if (ev->type == SDL_EVENT_MOUSE_MOTION) {
+        id = ev->motion.windowID;
+        wx = ev->motion.x;
+        wy = ev->motion.y;
+    } else if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        id = ev->button.windowID;
+        wx = ev->button.x;
+        wy = ev->button.y;
+    } else {
+        return 0;
+    }
+    window = SDL_GetWindowFromID(id);
+    density = window ? SDL_GetWindowPixelDensity(window) : 1.0f;
+    if (density <= 0.0f) density = 1.0f;
+    if (s_scale <= 0.0f) return 0;
+    *x = (wx * density - (float)s_origin_x) / s_scale;
+    *y = (wy * density - (float)s_origin_y) / s_scale;
+    return 1;
+}
+
+/* The row slot under design point (x, y), or -1; -2 outside the window. */
+static int pe_mouse_slot(float x, float y, int visible) {
+    if (x < 0.0f || y < 0.0f || x >= (float)s_shown_w / s_scale || y >= (float)s_shown_h / s_scale) return -2;
+    if (x < PANEL_PAD * 0.5f || x >= PANEL_W - PANEL_PAD * 0.5f || y < HEADER_H || y >= HEADER_H + visible * ROW_H)
+        return -1;
+    return (int)((y - HEADER_H) / ROW_H);
+}
+
 static void pe_move(int delta) {
     if (!s_panel.count) return;
     s_panel.cursor = (s_panel.cursor + delta + s_panel.count) % s_panel.count;
@@ -516,13 +587,77 @@ static void pe_step(int direction) {
     if (e && e->row >= 0) pe_menu_row_step(pe_menu_row(e->row), direction);
 }
 
+static int s_open_key, s_open_button = -1, s_open_trigger_held;
+void pe_mod_panel_set_open_binding(int key, int button) {
+    s_open_key = key;
+    s_open_button = button;
+    s_open_trigger_held = 0;
+}
+static int pe_open_binding_event(const SDL_Event *ev) {
+    if (ev->type == SDL_EVENT_KEY_DOWN)
+        return s_open_key > SDL_SCANCODE_UNKNOWN && (int)ev->key.scancode == s_open_key && !ev->key.repeat;
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+        return s_open_button >= 0 && s_open_button < SDL_GAMEPAD_BUTTON_COUNT && ev->gbutton.button == s_open_button;
+    if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && s_open_button >= SDL_GAMEPAD_BUTTON_COUNT &&
+        ev->gaxis.axis == (s_open_button == SDL_GAMEPAD_BUTTON_COUNT ? SDL_GAMEPAD_AXIS_LEFT_TRIGGER
+                                                                    : SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
+        const int was = s_open_trigger_held;
+        s_open_trigger_held = ev->gaxis.value > (was ? 8000 : 16000);
+        return s_open_trigger_held && !was;
+    }
+    return 0;
+}
+
 static void pe_panel_event(const SDL_Event *ev) {
+    if (pe_open_binding_event(ev)) {
+        s_panel.open = 0;
+        return;
+    }
     if (ev->type == SDL_EVENT_QUIT || ev->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         s_panel.open = 0;
         SDL_PushEvent((SDL_Event *)ev);
         return;
     }
-    if (ev->type == SDL_EVENT_KEY_DOWN) {
+    if (ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        /* Pointing selects a row; a click opens a page or takes the row (on a value's field, its
+         * left half steps it down, its right half up); right click goes back; a click outside the
+         * window closes it, as the settings panel does. */
+        float x, y;
+        int slot, at;
+        if (!pe_mouse_point(ev, &x, &y)) return;
+        if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button == SDL_BUTTON_RIGHT) {
+            pe_back();
+        } else {
+            slot = pe_mouse_slot(x, y, pe_visible_rows());
+            at = slot >= 0 ? s_panel.scroll + slot : -1;
+            if (at >= s_panel.count) at = -1;
+            if (at >= 0 && at != s_panel.cursor) {
+                s_panel.cursor = at;
+                s_panel.dirty = 1;
+            }
+            if (ev->type != SDL_EVENT_MOUSE_BUTTON_DOWN || ev->button.button != SDL_BUTTON_LEFT) {
+                return;              /* pointing only: the row is selected (and repainted) above */
+            } else if (slot == -2) {
+                s_panel.open = 0;
+            } else if (at >= 0) {
+                const Entry *e = &s_panel.entries[at];
+                const PeMenuRow *row = e->row >= 0 ? pe_menu_row(e->row) : NULL;
+                const float value_x = PANEL_W - PANEL_PAD - VALUE_W * 0.5f;
+                if (row && row->kind != PE_ROW_ACTION && row->kind != PE_ROW_INFO &&
+                    x >= value_x - VALUE_W * 0.5f + 6) {
+                    pe_step(x < value_x ? -1 : 1);
+                } else {
+                    pe_accept();
+                }
+            } else {
+                return;
+            }
+        }
+    } else if (ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        float step = ev->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -ev->wheel.y : ev->wheel.y;
+        if (step == 0.0f) return;
+        pe_move(step > 0.0f ? -1 : 1);
+    } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         switch (ev->key.scancode) {
         case SDL_SCANCODE_F1: s_panel.open = 0; break;
         case SDL_SCANCODE_ESCAPE:
@@ -591,6 +726,223 @@ static void pe_panel_run(void) {
     extern void CPE_StateUi_AfterModalClosed(void);
     CPE_StateUi_AfterModalClosed();
 #endif
+}
+
+/* ---- a question before the game goes on: one of a list of rows ----
+ * In the panel's look and modal like it, for a choice the game needs before it loads anything
+ * (pe_lang: the language, the first start with packs). A row is the only way out: Escape and F1
+ * do nothing here. Closing the game's window leaves it unanswered. */
+static struct {
+    int open, dirty, cursor, scroll, result, count, cancelable;
+    const char *const *names;
+    const char *const *descriptions; /* the title look: one per row, or NULL */
+    const char *title, *help;
+} s_choose;
+
+/* Title rows are larger than panel rows; cap their viewport instead of shrinking long lists. */
+static int pe_choose_visible(void) {
+    const int limit = s_choose.descriptions ? 6 : VISIBLE_ROWS;
+    return s_choose.count < limit ? s_choose.count : limit;
+}
+
+static void pe_paint_choose(int w, int h) {
+    const float s = s_scale;
+    const int visible = pe_choose_visible();
+    char text[160];
+    int i;
+    pe_paint_window(w, h);
+    pe_upper(text, sizeof text, s_choose.title);
+    pe_spaced(PANEL_PAD * s, 66 * s, 28 * s, 5 * s, text, pe_look_text, PE_ALIGN_LEFT);
+    pe_paint_rule();
+    for (i = 0; i < visible; ++i) {
+        const int at = s_choose.scroll + i, selected = at == s_choose.cursor;
+        const float mid = (HEADER_H + i * ROW_H + ROW_H * 0.5f) * s;
+        pe_paint_row_ground(i, selected);
+        pe_ui_draw_text(&s_surface, (PANEL_PAD + 16) * s, mid + 6 * s, 17 * s, s_choose.names[at],
+                        pe_ui_alpha(pe_look_text, selected ? 1.0f : 0.78f), PE_ALIGN_LEFT);
+    }
+    if (s_choose.count > visible) pe_paint_scroll(visible, s_choose.count, s_choose.scroll);
+    pe_paint_help((float)(HEADER_H + visible * ROW_H), s_choose.help, "Up/Down select   Enter choose");
+}
+
+static int pe_mouse_title_slot(float x, float y, int visible);
+
+static void pe_choose_event(const SDL_Event *ev) {
+    const int n = s_choose.count, visible = pe_choose_visible();
+    int accept = 0;
+    if (ev->type == SDL_EVENT_QUIT || ev->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+        s_choose.result = -1;
+        s_choose.open = 0;
+        SDL_PushEvent((SDL_Event *)ev);
+        return;
+    }
+    if(s_choose.cancelable&&((ev->type==SDL_EVENT_KEY_DOWN&&(ev->key.scancode==SDL_SCANCODE_ESCAPE||ev->key.scancode==SDL_SCANCODE_F1)) ||
+       (ev->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN&&(ev->gbutton.button==SDL_GAMEPAD_BUTTON_EAST||ev->gbutton.button==SDL_GAMEPAD_BUTTON_GUIDE)) ||
+       (ev->type==SDL_EVENT_MOUSE_BUTTON_DOWN&&ev->button.button==SDL_BUTTON_RIGHT))){
+        s_choose.result=-1;s_choose.open=0;return;
+    }
+    if (ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        float x, y;                     /* pointing selects a row, a left click takes it */
+        int slot;
+        if (!pe_mouse_point(ev, &x, &y)) return;
+        if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button != SDL_BUTTON_LEFT) return;
+        slot = s_choose.descriptions ? pe_mouse_title_slot(x, y, visible) : pe_mouse_slot(x, y, visible);
+        if (slot < 0 || s_choose.scroll + slot >= n) return;
+        accept = ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button == SDL_BUTTON_LEFT;
+        if (!accept && s_choose.cursor == s_choose.scroll + slot) return;   /* no repaint per motion */
+        s_choose.cursor = s_choose.scroll + slot;
+    } else if (ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        float step = ev->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -ev->wheel.y : ev->wheel.y;
+        if (step == 0.0f) return;
+        s_choose.cursor = (s_choose.cursor + (step > 0.0f ? n - 1 : 1)) % n;
+    } else if (ev->type == SDL_EVENT_KEY_DOWN) {
+        switch (ev->key.scancode) {
+        case SDL_SCANCODE_UP: case SDL_SCANCODE_KP_8: s_choose.cursor = (s_choose.cursor + n - 1) % n; break;
+        case SDL_SCANCODE_DOWN: case SDL_SCANCODE_KP_2: s_choose.cursor = (s_choose.cursor + 1) % n; break;
+        case SDL_SCANCODE_HOME: s_choose.cursor = 0; break;
+        case SDL_SCANCODE_END: s_choose.cursor = n - 1; break;
+        case SDL_SCANCODE_RETURN:
+        case SDL_SCANCODE_KP_ENTER:
+        case SDL_SCANCODE_SPACE: accept = !ev->key.repeat; break;
+        default: return;
+        }
+    } else if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+        switch (ev->gbutton.button) {
+        case SDL_GAMEPAD_BUTTON_DPAD_UP: s_choose.cursor = (s_choose.cursor + n - 1) % n; break;
+        case SDL_GAMEPAD_BUTTON_DPAD_DOWN: s_choose.cursor = (s_choose.cursor + 1) % n; break;
+        case SDL_GAMEPAD_BUTTON_SOUTH: accept = 1; break;
+        default: return;
+        }
+    } else {
+        return;
+    }
+    if (s_choose.cursor < s_choose.scroll) s_choose.scroll = s_choose.cursor;
+    if (s_choose.cursor >= s_choose.scroll + visible) s_choose.scroll = s_choose.cursor - visible + 1;
+    s_choose.dirty = 1;
+    if (accept) {
+        s_choose.result = s_choose.cursor;
+        s_choose.open = 0;
+    }
+}
+
+/* ---- the same question in the title menu's look ----
+ * Centred words like the title's New Game / Continue / Tutorial, a soft green glow behind the
+ * selected one, and that row's description under the list. No panel frame: a dark veil over
+ * the (dimmed) screen. */
+enum { TITLE_TOP = 64, TITLE_ROW_H = 46, TITLE_DESC_H = 132 };
+static const PeColor pe_title_glow = {0.30f, 0.95f, 0.50f, 1.0f};
+
+static int pe_title_design_h(int count) { return TITLE_TOP + count * TITLE_ROW_H + TITLE_DESC_H; }
+
+/* The title look's row slot under design point (x, y), or -1: its rows span the window's width. */
+static int pe_mouse_title_slot(float x, float y, int visible) {
+    if (x < 0.0f || x >= (float)s_shown_w / s_scale || y < TITLE_TOP || y >= TITLE_TOP + visible * TITLE_ROW_H)
+        return -1;
+    return (int)((y - TITLE_TOP) / TITLE_ROW_H);
+}
+
+static void pe_paint_title(int w, int h) {
+    const float s = s_scale;
+    const float cx = (float)w * 0.5f;
+    const float desc_top = (float)(TITLE_TOP + pe_choose_visible() * TITLE_ROW_H);
+    int i;
+    pe_ui_fill_round_rect(&s_surface, 0, 0, (float)w, (float)h, 18 * s, (PeColor){0.0f, 0.0f, 0.0f, 0.72f});
+    if (s_choose.title[0]) {
+        char text[160];
+        pe_upper(text, sizeof text, s_choose.title);
+        pe_spaced(cx, 40 * s, 13 * s, 4 * s, text, pe_ui_alpha(pe_look_dim, 0.9f), PE_ALIGN_CENTRE);
+    }
+    for (i = 0; i < pe_choose_visible(); ++i) {
+        const int at = s_choose.scroll + i, selected = at == s_choose.cursor;
+        const float em = 27 * s, mid = (TITLE_TOP + i * TITLE_ROW_H + TITLE_ROW_H * 0.5f) * s;
+        if (selected) {   /* the title's glow: soft green layers behind the word */
+            const float tw = pe_ui_text_width(s_choose.names[at], em);
+            int k;
+            for (k = 0; k < 4; ++k) {
+                const float grow = (float)(3 - k) * 7 * s;
+                pe_ui_fill_round_rect(&s_surface, cx - tw * 0.5f - 18 * s - grow, mid - 17 * s - grow * 0.45f,
+                                      tw + 36 * s + 2 * grow, 34 * s + grow * 0.9f, 17 * s + grow * 0.45f,
+                                      pe_ui_alpha(pe_title_glow, 0.10f + 0.07f * (float)k));
+            }
+        }
+        pe_ui_draw_text(&s_surface, cx, mid + 9 * s, em, s_choose.names[at],
+                        pe_ui_alpha(pe_look_text, selected ? 1.0f : 0.70f), PE_ALIGN_CENTRE);
+    }
+    if (s_choose.count > pe_choose_visible()) {
+        char range[40];
+        snprintf(range, sizeof range, "%d-%d / %d", s_choose.scroll + 1,
+                 s_choose.scroll + pe_choose_visible(), s_choose.count);
+        pe_ui_draw_text(&s_surface, (PANEL_W - PANEL_PAD) * s, (desc_top - 2) * s,
+                        11 * s, range, pe_look_dim, PE_ALIGN_RIGHT);
+    }
+    pe_px_rect((int)(PANEL_PAD * s), (int)((desc_top + 4) * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1,
+               pe_ui_alpha(pe_look_silver, 0.18f));
+    if (s_choose.descriptions && s_choose.descriptions[s_choose.cursor])
+        pe_wrapped(PANEL_PAD * s, (desc_top + 32) * s, 21 * s, (PANEL_W - 2 * PANEL_PAD) * s, 15 * s, 3,
+                   s_choose.descriptions[s_choose.cursor], pe_look_text);
+    {
+        char keys[96];
+        pe_upper(keys, sizeof keys, s_choose.help[0] ? s_choose.help : "Up/Down select   Enter choose");
+        pe_spaced(cx, (desc_top + TITLE_DESC_H - 18) * s, 10 * s, 1.6f * s, keys, pe_ui_alpha(pe_look_dim, 0.85f),
+                  PE_ALIGN_CENTRE);
+    }
+}
+
+static int pe_choose_run(const char *title, const char *help, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial, int allow_panel);
+
+int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial) {
+    return pe_choose_run(title, help, names, NULL, count, initial, 0);
+}
+int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial) {
+    if (!descriptions) return -1;
+    return pe_choose_run(title, keys, names, descriptions, count, initial, 0);
+}
+
+static int pe_choose_run(const char *title, const char *help, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial, int allow_panel) {
+    const int in_panel=s_panel.open;
+    const int audio_paused = Psyz_AudioIsPaused();
+    if (!names || !count || count > MAX_ENTRIES || (s_panel.open && !allow_panel) || s_choose.open || !pe_mod_interactive()) return -1;
+    if (!pe_ui_gpu_ready()) {
+        pe_mod_log(NULL, "question unavailable: no GPU overlay");
+        return -1;
+    }
+    memset(&s_choose, 0, sizeof s_choose);
+    s_choose.cancelable=allow_panel;
+    s_choose.descriptions = descriptions;
+    s_choose.names = names;
+    s_choose.count = (int)count;
+    s_choose.title = title ? title : "";
+    s_choose.help = help ? help : "";
+    s_choose.cursor = initial > 0 && initial < (int)count ? initial : 0;
+    if (s_choose.cursor >= pe_choose_visible()) s_choose.scroll = s_choose.cursor - pe_choose_visible() + 1;
+    s_choose.result = -1;
+    pe_toast_block(1);
+    Psyz_PauseHostClock_SDL3(true);
+    Psyz_AudioPause();
+    s_choose.open = s_choose.dirty = 1;
+    while (s_choose.open) {
+        if (s_choose.descriptions)
+            pe_show(&s_choose.dirty, pe_title_design_h(pe_choose_visible()), pe_paint_title);
+        else
+            pe_show(&s_choose.dirty, HEADER_H + pe_choose_visible() * ROW_H + FOOTER_H, pe_paint_choose);
+        Psyz_VideoVSync(0);
+    }
+    pe_ui_gpu_hide();
+    SDL_ResetKeyboard();     /* a held key must not reach the resumed pad poll */
+    if(!in_panel)Psyz_PauseHostClock_SDL3(false);
+    if (!audio_paused) Psyz_AudioUnpause();
+    if(!in_panel)pe_toast_block(0);
+    else s_panel.dirty=1;
+    return s_choose.result;
+}
+
+int pe_menu_confirm(const char *title,const char *help){
+    static const char *const answers[]={"Yes","No"};
+    int result=pe_choose_run(title,help,answers,NULL,2,1,1);
+    return result<0?-1:result==0;
 }
 
 #ifdef PE_PS5_PLUGINS
@@ -673,6 +1025,15 @@ static bool pe_filter(const SDL_Event *ev) {
     /* Device lifecycle must still reach PsyZ while the panel is modal. */
     if (ev->type == SDL_EVENT_GAMEPAD_REMOVED || ev->type == SDL_EVENT_GAMEPAD_ADDED) return false;
 #endif
+    if (s_choose.open) {
+        if (ev->type == SDL_EVENT_WINDOW_RESIZED || ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+            ev->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
+            s_choose.dirty = 1;
+            return false;
+        }
+        pe_choose_event(ev);
+        return true;
+    }
     if (s_panel.open) {
         if (ev->type == SDL_EVENT_WINDOW_RESIZED || ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
             ev->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
@@ -686,7 +1047,8 @@ static bool pe_filter(const SDL_Event *ev) {
         return true;
     }
     if ((ev->type == SDL_EVENT_KEY_DOWN && ev->key.scancode == SDL_SCANCODE_F1 && !ev->key.repeat) ||
-        (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE)) {
+        (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE) ||
+        pe_open_binding_event(ev)) {
 #ifdef PE_PS5_GPU_NATIVE
         extern int CPE_HostOpenRegistryPage(const char *);CPE_HostOpenRegistryPage(NULL);
 #else
@@ -709,6 +1071,14 @@ int pe_mod_panel_open_page(const char *page) {
 #ifdef PE_PS5_PLUGINS
     s_direct_drain = 1; /* release the closing button before original pad polling */
 #endif
+    pe_panel_run();
+    return 1;
+}
+
+void pe_mod_panel_close(void) { s_panel.open = 0; }
+
+int pe_mod_panel_open(void) {
+    if (!pe_ui_gpu_ready() || s_panel.open) return 0;
     pe_panel_run();
     return 1;
 }

@@ -1,14 +1,21 @@
 """Reproducible local issue56 candidate. Never mutates baseline pack or refs."""
 from pathlib import Path
-import cv2,numpy as np,json,hashlib,os,subprocess,shutil
+import argparse,cv2,numpy as np,json,hashlib,os,subprocess,shutil
 from PIL import Image,ImageDraw
-ROOT=Path(__file__).resolve().parents[3]
-HERE=Path(__file__).resolve().parent
-BASE=ROOT/'hd-animated/pack-0.1-webp'
-OUT=ROOT/'hd-animated/pack-issue-56-candidate'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--assets-root',type=Path,default=Path(__file__).resolve().parents[3])
+parser.add_argument('--baseline',type=Path)
+parser.add_argument('--out',type=Path)
+a=parser.parse_args()
+ROOT=a.assets_root.resolve()
+HERE=ROOT/'hd-animated/corrections/issue-56'
+BASE=a.baseline or ROOT/'hd-animated/pack-0.1-webp'
+OUT=a.out or ROOT/'hd-animated/pack-issue-56-candidate'
+AUDIT=OUT.parent/(OUT.name+'-audit.json')
+if AUDIT.exists():raise FileExistsError(AUDIT)
 # Source masters stay versioned separately. Hardlinks are replaced, never edited.
 if OUT.exists():raise FileExistsError(OUT)
-OUT.mkdir()
+OUT.mkdir(parents=True)
 for p in BASE.iterdir():
  if p.is_file():os.link(p,OUT/p.name)
 manifest=json.loads((BASE/'manifest.json').read_text())
@@ -79,6 +86,33 @@ for room in ['M046','M103']:
 board=rectify(scene('M042'),[(26.5,152),(79,127.7),(86.8,170),(38.4,196.5)],(1024,768))
 q=[(34,172),(67,182),(57,234),(16,223)];canvas=scene('M099')
 add('M099',0,project(board,q,(canvas.shape[1],canvas.shape[0])),[q],'Fallen board reuses intact M042 writing and grid',exclude=[[(0,209),(22,218),(22,250),(0,250)]])
+# The static window rails retained nearest-native dark steps in the motion
+# assembly. Recover these narrow bands from the existing full-context master;
+# neither animated door controller participates in this correction.
+r,v=views[('M099',0)];w,h=v['canvas_size']
+anchor=next(x for x in json.loads((r/'anchor-views.json').read_text()) if x['room']=='M099' and x['group']==0)
+alignment=next(x for x in json.loads((r/'anchor-alignment.json').read_text())['anchors'] if x['id']==anchor['id'])
+if alignment['status']!='global affine registered':raise ValueError('M099 window correction needs the reviewed registered anchor')
+window_master=np.array(Image.open(r/'registered-anchors'/(anchor['id']+'.png')).convert('RGB').resize((w*4,h*4),Image.Resampling.LANCZOS))
+restored=np.array(Image.open(r/'source-sr-full'/(anchor['id']+'.png')).convert('RGB'))
+if restored.shape!=window_master.shape:raise ValueError('M099 registered anchor and source restoration dimensions differ')
+illumination=np.clip((cv2.GaussianBlur(restored.astype(np.float32),(0,0),16)+8)/(cv2.GaussianBlur(window_master.astype(np.float32),(0,0),16)+8),.4,2.5)
+window_master=np.uint8(np.clip(np.rint(window_master*illumination),0,255))
+add('M099',0,window_master,[[(0,135),(180,58),(180,75),(0,152)]],
+    'Static window rail from the existing full-context master',entries=[19])
+# Recover the static upper wall trim from the aligned room anchor.
+# The alternate camera and both door controllers are deliberately excluded.
+r,v=views[('M103',0)];w,h=v['canvas_size'];aw,ah=v['active_size'];x0,y0,_,_=v['active_bbox']
+anchor=next(x for x in json.loads((r/'anchor-views.json').read_text()) if x['room']=='M103' and x['group']==0)
+alignment=next(x for x in json.loads((r/'anchor-alignment.json').read_text())['anchors'] if x['id']==anchor['id'])
+if alignment['status']!='global affine registered':raise ValueError('M103 shelf correction needs the reviewed registered anchor')
+master=np.array(Image.open(r/'registered-anchors'/(anchor['id']+'.png')).convert('RGB').resize((aw*4,ah*4),Image.Resampling.LANCZOS))
+restored=np.array(Image.open(r/'source-sr-full'/(anchor['id']+'.png')).convert('RGB'))
+if restored.shape!=master.shape:raise ValueError('M103 registered anchor and source restoration dimensions differ')
+illumination=np.clip((cv2.GaussianBlur(restored.astype(np.float32),(0,0),16)+8)/(cv2.GaussianBlur(master.astype(np.float32),(0,0),16)+8),.4,2.5)
+canvas=np.zeros((h*4,w*4,3),np.uint8);canvas[y0*4:y0*4+ah*4,x0*4:x0*4+aw*4]=np.uint8(np.clip(np.rint(master*illumination),0,255))
+add('M103',0,canvas,[[(212,4),(320,54),(320,71),(209,17)]],
+    'Static upper wall trim from the registered full-context anchor',entries=[18])
 for room,poly in [('M094',[(0,40),(110,40),(126,97),(0,117)]),('M097',[(55,365),(110,353),(312,410),(298,449),(77,399),(65,419),(36,410)])]:
  r,v=views[(room,0)];w,h=v['canvas_size'];x,y,_,_=v['active_bbox']
  canvas=Image.new('RGB',(w*4,h*4));canvas.paste(Image.open(r/'generated'/v['base_input']).convert('RGB').resize((v['active_size'][0]*4,v['active_size'][1]*4),Image.Resampling.LANCZOS),(x*4,y*4))
@@ -89,6 +123,10 @@ for r,t in tasks:
  if t['room']=='M097' and t['entry']==12:continue # source-only opaque-black placeholder
  key=t['key'];record=records[key]
  with Image.open(BASE/record['file']) as im:material=np.array(im.convert('RGBA'))
+ with Image.open(BASE/record['reference_file']) as im:source_reference=np.array(im.convert('RGBA'))
+ if material.shape==(source_reference.shape[0]*2,*source_reference.shape[1:]):
+  material=material[:source_reference.shape[0]].copy()
+ if material.shape!=source_reference.shape:raise ValueError('Unexpected atlas/reference dimensions: '+key)
  before=material.copy();refs=np.load(r/'refs'/t['ref']);cols=min(16,len(refs))
  # Exact native coverage in room coordinates, then smooth only the authored HD
  # contour. Native RGB555/STP reference stays byte-identical in its own file.
@@ -122,16 +160,22 @@ for r,t in tasks:
  changed=np.any(material[:,:,:3]!=before[:,:,:3],axis=2)
  assert not np.any(changed&~allowed),key
  # Lossless PNG candidate avoids any unrelated re-encoding drift during review.
- target=OUT/(key+'.png');Image.fromarray(material).save(target,optimize=True)
+ target=OUT/(key+'.png');target.unlink(missing_ok=True);Image.fromarray(material).save(target,optimize=True)
  reference_sha=hashlib.sha256((OUT/record['reference_file']).read_bytes()).hexdigest();assert reference_sha==record['reference_sha256']
  # Runtime PNG needs a combined reference half; keep the WebP sidecar linked as
  # the independent integrity proof and material for final WebP packaging.
  ref=np.array(Image.open(BASE/record['reference_file']).convert('RGBA'));assert ref.shape==material.shape
  combined=np.concatenate((material,ref),axis=0);Image.fromarray(combined).save(target,optimize=True)
+ # The runtime tries WebP before PNG. A hardlinked baseline WebP beside
+ # this override would silently win, even though the manifest names PNG.
+ # Remove only the candidate link; the baseline file stays untouched.
+ previous=OUT/record['file']
+ if previous!=target and previous.exists():previous.unlink()
+ for suffix in ('.webp','.bmp'):(OUT/(key+suffix)).unlink(missing_ok=True)
  record.update(file=target.name,atlas_sha256=hashlib.sha256(target.read_bytes()).hexdigest(),pixel_sha256=hashlib.sha256(combined.tobytes()).hexdigest())
  proof.append(dict(room=t['room'],group=t['group'],entry=t['entry'],key=key,rgb_changed=int(changed.sum()),coverage_changed=int(np.sum(material[:,:,3]!=before[:,:,3])),reference_byte_identical=True,unselected_material_exact=True,corrections=[x[2] for x in patches.get((t['room'],t['group']),[]) if x[3] is None or t['entry'] in x[3]]))
 manifest['image_format']='mixed-png-webp';manifest['development_candidate']='issue-56';manifest['issue_56_keys']=[r['key'] for r in proof]
 # Break the baseline manifest hardlink before writing.
 (OUT/'manifest.json').unlink();(OUT/'manifest.json').write_text(json.dumps(manifest,separators=(',',':')))
-(HERE/'application-audit.json').write_text(json.dumps(dict(candidate=str(OUT),atlases=proof,baseline_preserved=True),indent=2))
+AUDIT.write_text(json.dumps(dict(candidate=str(OUT),atlases=proof,baseline_preserved=True),indent=2))
 print(OUT,len(proof),'atlases; all refs and unselected material exact')

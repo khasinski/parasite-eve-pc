@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_services.h"
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
@@ -13,12 +13,12 @@ int g_InvBonusSlotCount;
 static unsigned junk=1000;
 static int enabled=1;
 int pe_game_loaded(void) { return 1; }
-int pe_loot_enabled(void) { return enabled; }
-uint32_t pe_loot_price(uint32_t v) { return v; }
-uint32_t pe_loot_junk(void) { return junk; }
-void pe_loot_give_junk(uint32_t n) { junk+=n; }
-int pe_loot_spend_junk(uint32_t n) { if(junk<n)return 0;junk-=n;return 1; }
-int pe_loot_armor_has(int e) { (void)e;return 0; }
+int pe_catw_enabled(void) { return enabled; }
+uint32_t pe_catw_price(uint32_t v) { return v; }
+uint32_t pe_catw_junk(void) { return junk; }
+void pe_catw_give_junk(uint32_t n) { junk+=n; }
+int pe_catw_spend_junk(uint32_t n) { if(junk<n)return 0;junk-=n;return 1; }
+int pe_catw_armor_has(int e) { (void)e;return 0; }
 ItemDataRecord *pe_base_item(unsigned id) { return id<256?&bases[id]:NULL; }
 ItemDataRecord *pe_equipped(int armor) { return pe_cat_bag_record(armor?g_AyaSaveState.equipped_armor_slot:g_AyaSaveState.equipped_weapon_slot); }
 void pe_toast(const char *text) { (void)text; }
@@ -32,7 +32,17 @@ static int test_take(int l,int slot) {
 }
 static const PeStacksApi test_stacks={.take=test_take};
 const void *pe_service_get(const char *n,int v) { return (!strcmp(n,"stacks")&&v==1&&stack_extra>=0)?&test_stacks:NULL; }
+int pe_catalog_armor_unlocked(int effect);
+int pe_catalog_unlock_armor(int effect);
 int main(void) {
+    /* The "catalog" service (Requisition, battle rewards) and the Catalog's own install rule read
+     * one record: unlocking an economy effect sets that effect alone (issue #210). */
+    for (int e=PE_FX_BARGAIN;e<=PE_FX_SALVAGER;++e) {
+        pe_catalog_state()->bits[1]=0;
+        assert(pe_catalog_unlock_armor(e) && !pe_catalog_unlock_armor(e));
+        for (int k=1;k<32;++k) assert(pe_catalog_armor_unlocked(k)==(k==e) && pe_cat_unlocked(1,k)==(k==e));
+    }
+    pe_catalog_state()->bits[1]=0;
     g_AyaSaveState.inventory_slot_count=10;
     g_AyaSaveState.equipped_weapon_slot=0;g_AyaSaveState.equipped_armor_slot=1;
     bases[0x45]=(ItemDataRecord){.iconId=1,.itemId=0x45,.kind=1,.tailCount=3,.tailCapacity=3};

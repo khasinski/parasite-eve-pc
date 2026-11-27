@@ -17,6 +17,7 @@
  * (pe1/room_grab_attack.h).
  */
 
+#include "pe1/battle.h"
 #include "pe1/room_grab_attack.h"
 
 PE1_STATIC_ASSERT(PE1_OFFSETOF(RoomMotionTrigger, source_actor) - PE1_OFFSETOF(RoomMotionTrigger, callback) == PE1_OFFSETOF(RoomGrabStateTail, source_actor), grab_tail_source_alias);
@@ -413,6 +414,36 @@ int RoomEffect_GrabRelease(PmSlotHeader *raw) {
 void RoomEffect_GrabNop6(void) {
 }
 
+/* The sweep and the spray reach the attacking actor and the player through
+ * the typed records, as the other room attacks do. The PS1 byte offsets
+ * (the task's flag at 0x0D, the player's state flags at 0x4C) are other
+ * fields in the native layout, so the hits never landed. */
+
+/* Moves the attacking actor's action from "starting" to "running". */
+static void RoomEffect_GrabMarkAttackRunning(void) {
+    FieldActor *actor;
+
+    if (!g_FieldFxTaskContext->flags) return;
+    actor = g_FieldFxOwner->actor;
+    if (actor && actor->state && actor->state->action_state &&
+        *actor->state->action_state == 1)
+        *actor->state->action_state = 2;
+}
+
+/* Hits the player once per attack with the given hit reaction. */
+static void RoomEffect_GrabHitPlayer(u32 reaction) {
+    FieldActor *owner;
+
+    if (!g_FieldFxTaskContext->flags) return;
+    owner = g_FieldFxOwner->actor;
+    if (!owner || !owner->state ||
+        (owner->state->core_flags & 0x3F000000) != 0x01000000)
+        return;
+    if (g_PlayerEntity && g_PlayerEntity->state)
+        ((Combatant *)g_PlayerEntity->state)->stateFlags |= 0x4000;
+    owner->state->core_flags = (owner->state->core_flags & 0xC0FFFFFF) | reaction | 0x80000000u;
+}
+
 static const RoomFxSeed8 s_GroundSweepMarkSeed = {{0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00}};
 
 int RoomEffect_GroundSweepMark(int mode, void *data, intptr_t argument) {
@@ -508,13 +539,7 @@ int RoomEffect_GroundSweepController(int mode, void *data, intptr_t argument) {
         sweep->heading.z = 0;
         FieldFx_TransformMatrixPoint((void *)ANIM_OWNER_AS(RoomSparkChannel)->pool, 4, &offset, &hand);
         FieldFx_DrawHistoryTrail(&hand, (GteShortVector *)sweep, 0x3F0, (unsigned char *)&colorA, (unsigned char *)&colorA, 0x8C, (struct FieldTrailPair *)sweep->trail, 1);
-        if (FX_TASK_AS(RoomSparkEventState)->active) {
-            RoomSparkNode **slot = (RoomSparkNode **)ANIM_OWNER_AS(RoomSparkChannel)->pool;
-            if (slot && *slot) {
-                u8 *flag = (*slot)->state;
-                if (*flag == 1) *flag = 2;
-            }
-        }
+        RoomEffect_GrabMarkAttackRunning();
         sweep->phase = 0;
         sweep->timer = 0;
         sweep->sweeps = 8;
@@ -556,21 +581,8 @@ int RoomEffect_GroundSweepController(int mode, void *data, intptr_t argument) {
                 mark->blocked = 0;
                 mark->frame = 0;
             }
-            if (FieldFx_IsPlayerWithinRadius(sweep, 50)) {
-                if (FX_TASK_AS(RoomSparkEventState)->active) {
-                    RoomSparkChannel *channel = ANIM_OWNER_AS(RoomSparkChannel);
-                    if ((((RoomGroundSweepHitPool *)channel->pool)->object->flags & 0x3F000000) == 0x01000000) {
-                        {
-                            RoomSparkActor *player = ((RoomSparkBattleEntity *)D_8009D254)->actor;
-
-                            player->flags |= 0x4000;
-                        }
-                        ((RoomGroundSweepHitPool *)channel->pool)->object->flags =
-                            (((RoomGroundSweepHitPool *)channel->pool)->object->flags & 0xC0FFFFFF) | 0x3D000000;
-                        ((RoomGroundSweepHitPool *)channel->pool)->object->flags |= 0x80000000;
-                    }
-                }
-            }
+            if (FieldFx_IsPlayerWithinRadius(sweep, 50))
+                RoomEffect_GrabHitPlayer(0x3D000000);
             if ((s16)sweep->timer < 12) break;
             sweep->phase = 2;
             if (--sweep->sweeps <= 0) sweep->phase = 3;
@@ -596,21 +608,8 @@ int RoomEffect_GroundSweepController(int mode, void *data, intptr_t argument) {
                 mark->blocked = 0;
                 mark->frame = 0;
             }
-            if (FieldFx_IsPlayerWithinRadius(sweep, 50)) {
-                if (FX_TASK_AS(RoomSparkEventState)->active) {
-                    RoomSparkChannel *channel = ANIM_OWNER_AS(RoomSparkChannel);
-                    if ((((RoomGroundSweepHitPool *)channel->pool)->object->flags & 0x3F000000) == 0x01000000) {
-                        {
-                            RoomSparkActor *player = ((RoomSparkBattleEntity *)D_8009D254)->actor;
-
-                            player->flags |= 0x4000;
-                        }
-                        ((RoomGroundSweepHitPool *)channel->pool)->object->flags =
-                            (((RoomGroundSweepHitPool *)channel->pool)->object->flags & 0xC0FFFFFF) | 0x3D000000;
-                        ((RoomGroundSweepHitPool *)channel->pool)->object->flags |= 0x80000000;
-                    }
-                }
-            }
+            if (FieldFx_IsPlayerWithinRadius(sweep, 50))
+                RoomEffect_GrabHitPlayer(0x3D000000);
             if ((s16)sweep->timer < 4) break;
             sweep->phase = 1;
             if (--sweep->sweeps <= 0) sweep->phase = 3;
@@ -1005,19 +1004,7 @@ int RoomEffect_RisingSprayParticle(int mode, void *data, intptr_t argument) {
             position.x += rcos(spark->swirl) / 128;
             position.z += rsin(spark->swirl) / 128;
             if (FieldFx_IsPlayerWithinRadius(&position, 100)) {
-                if (FX_TASK_AS(RoomSparkEventState)->active) {
-                    RoomSparkChannel *channel = ANIM_OWNER_AS(RoomSparkChannel);
-                    if ((((RoomSprayHitPool *)channel->pool)->object->flags & 0x3F000000) == 0x01000000) {
-                        {
-                            RoomSparkActor *player = ((RoomSparkBattleEntity *)D_8009D254)->actor;
-
-                            player->flags |= 0x4000;
-                        }
-                        ((RoomSprayHitPool *)channel->pool)->object->flags =
-                            (((RoomSprayHitPool *)channel->pool)->object->flags & 0xC0FFFFFF) | 0x19000000;
-                        ((RoomSprayHitPool *)channel->pool)->object->flags |= 0x80000000;
-                    }
-                }
+                RoomEffect_GrabHitPlayer(0x19000000);
                 spark->vx = 0;
                 spark->vy = 0;
                 spark->vz = 0;
@@ -1179,13 +1166,7 @@ int RoomEffect_RisingSprayController(int mode, void *data, intptr_t argument) {
 
     switch (mode) {
     case 0:
-        if (FX_TASK_AS(RoomSparkEventState)->active) {
-            RoomSparkNode **slot = (RoomSparkNode **)ANIM_OWNER_AS(RoomSparkChannel)->pool;
-            if (slot && *slot) {
-                u8 *flag = (*slot)->state;
-                if (*flag == 1) *flag = 2;
-            }
-        }
+        RoomEffect_GrabMarkAttackRunning();
         return FieldFx_InitCallbackList(g_FieldFxActiveTaskSlot->end, 0x14, 0x37,
                              (FieldFxCallbackListCallback)RoomEffect_RisingSprayParticle);
     case 1:

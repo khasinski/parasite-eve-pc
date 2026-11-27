@@ -19,6 +19,7 @@
 #include "pe1/gpu_image.h"
 #include "pe1/gte.h"
 #include "pe1/pe_image.h"
+#include "pe_hooks.h"
 #include "pe1/psyq_cd.h"
 #include "pe1/psyq_ds_queue.h"
 #include "pe1/psyq_gpu.h"
@@ -320,6 +321,81 @@ static uint32_t le32(const unsigned char *p) {
            (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
+/* A CHD holds 2448-byte frames (2352 of sector, 96 of subcode) in compressed
+ * hunks. Only the sector part of the first track is exposed, so the rest of
+ * the code reads it exactly as it reads a BIN. */
+#include <libchdr/chd.h>
+
+typedef struct PeChd {
+    chd_file *file;
+    uint32_t unit, per_hunk, hunk;
+    unsigned char *buffer;
+} PeChd;
+
+static void chd_release(PeDisc *disc) {
+    if (!disc->chd) return;
+    if (disc->chd->file) chd_close(disc->chd->file);
+    free(disc->chd->buffer);
+    free(disc->chd);
+    disc->chd = NULL;
+}
+
+static int chd_image(PeDisc *disc) {
+    chd_file *file = NULL;
+    if (chd_open_file(disc->stream, CHD_OPEN_READ, NULL, &file) != CHDERR_NONE)
+        return fail(disc, "Cannot read this CHD image");
+    const chd_header *header = chd_get_header(file);
+    char meta[256] = {0}, type[32] = {0}, subtype[32] = {0}, pgtype[32] = {0}, pgsub[32] = {0};
+    int track = 0, frames = 0, pregap = 0, postgap = 0;
+    int found = chd_get_metadata(file, CDROM_TRACK_METADATA2_TAG, 0, meta, sizeof(meta) - 1,
+                                 NULL, NULL, NULL) == CHDERR_NONE &&
+                sscanf(meta, CDROM_TRACK_METADATA2_FORMAT, &track, type, subtype, &frames,
+                       &pregap, pgtype, pgsub, &postgap) == 8;
+    if (!found) {
+        pregap = 0;
+        found = chd_get_metadata(file, CDROM_TRACK_METADATA_TAG, 0, meta, sizeof(meta) - 1,
+                                 NULL, NULL, NULL) == CHDERR_NONE &&
+                sscanf(meta, CDROM_TRACK_METADATA_FORMAT, &track, type, subtype, &frames) == 4;
+    }
+    PeChd *chd = calloc(1, sizeof(*chd));
+    if (!header || !found || track != 1 || strcmp(type, "MODE2_RAW") || pregap != 0 ||
+        frames <= 0 || header->unitbytes != 2448 || header->hunkbytes % 2448 ||
+        !chd || !(chd->buffer = malloc(header->hunkbytes))) {
+        if (chd) free(chd->buffer);
+        free(chd);
+        chd_close(file);
+        return fail(disc, "Expected a CHD whose first track is MODE2_RAW");
+    }
+    chd->file = file;
+    chd->unit = header->unitbytes;
+    chd->per_hunk = header->hunkbytes / header->unitbytes;
+    chd->hunk = UINT32_MAX;
+    disc->chd = chd;
+    disc->image_size = (uint64_t)frames * 2352;
+    return 1;
+}
+
+/* Called with the stream locked. */
+static int chd_read_bytes(PeDisc *disc, uint64_t offset, unsigned char *data, size_t size) {
+    PeChd *chd = disc->chd;
+    while (size) {
+        uint64_t frame = offset / 2352;
+        uint32_t hunk = (uint32_t)(frame / chd->per_hunk);
+        if (chd->hunk != hunk) {
+            chd->hunk = UINT32_MAX;
+            if (chd_read(chd->file, hunk, chd->buffer) != CHDERR_NONE) return 0;
+            chd->hunk = hunk;
+        }
+        size_t within = (size_t)(offset % 2352);
+        size_t count = size < 2352 - within ? size : 2352 - within;
+        memcpy(data, chd->buffer + (size_t)(frame % chd->per_hunk) * chd->unit + within, count);
+        data += count;
+        offset += count;
+        size -= count;
+    }
+    return 1;
+}
+
 static int read_image(PeDisc *disc, uint64_t offset, void *data, size_t size) {
     if (!disc->stream)
         return fail(disc, "Disc image is not mounted");
@@ -332,7 +408,8 @@ static int read_image(PeDisc *disc, uint64_t offset, void *data, size_t size) {
 #else
     flockfile(disc->stream);
 #endif
-    int read_ok=pe_seek(disc->stream,(int64_t)offset,SEEK_SET)==0 &&
+    int read_ok=disc->chd?chd_read_bytes(disc,offset,data,size):
+                pe_seek(disc->stream,(int64_t)offset,SEEK_SET)==0 &&
                 fread(data,1,size,disc->stream)==size;
 #ifdef _WIN32
     _unlock_file(disc->stream);
@@ -447,17 +524,28 @@ int pe_disc_open(PeDisc *disc, const char *path) {
     }
     disc->stream = Disc_Utf8File(path, "rb");
     if (!disc->stream) return fail(disc, "Cannot open disc image: %s", path);
-    if (pe_seek(disc->stream, 0, SEEK_END) != 0 || pe_tell(disc->stream) < 0) {
+    char magic[8] = {0};
+    int chd = !cue && fread(magic, 1, 8, disc->stream) == 8 && !memcmp(magic, "MComprHD", 8);
+    if (chd) {
+        if (!chd_image(disc)) {
+            char error[sizeof(disc->error)];
+            memcpy(error, disc->error, sizeof(error));
+            pe_disc_close(disc);
+            memcpy(disc->error, error, sizeof(error));
+            return 0;
+        }
+    } else if (pe_seek(disc->stream, 0, SEEK_END) != 0 || pe_tell(disc->stream) < 0) {
         pe_disc_close(disc);
         return fail(disc, "Cannot measure disc image");
+    } else {
+        disc->image_size = (uint64_t)pe_tell(disc->stream);
     }
-    disc->image_size = (uint64_t)pe_tell(disc->stream);
     if (disc->track_offset > disc->image_size) {
         pe_disc_close(disc);
         return fail(disc, "CUE INDEX 01 exceeds the disc image");
     }
     const uint32_t sizes[] = {2352, 2048};
-    for (unsigned kind = 0; kind < (cue ? 1u : 2u); ++kind) {
+    for (unsigned kind = 0; kind < (cue || chd ? 1u : 2u); ++kind) {
         disc->sector_size = sizes[kind];
         disc->payload_offset = kind == 0 ? 24 : 0;
         if (!sector_payload(disc, 16, sector)) continue;
@@ -474,7 +562,12 @@ int pe_disc_open(PeDisc *disc, const char *path) {
     return fail(disc, "Expected a MODE2/2352 BIN or 2048-byte ISO9660 image");
 }
 
+int pe_disc_read_image(PeDisc *disc, uint64_t offset, void *data, size_t size) {
+    return read_image(disc, offset, data, size);
+}
+
 void pe_disc_close(PeDisc *disc) {
+    chd_release(disc);
     if (disc->stream) fclose(disc->stream);
     disc->stream = NULL;
 }
@@ -589,6 +682,10 @@ int CdRom_ReadSectorsFromLba(u32 lba, void *destination, u32 sectors)
     uint64_t bytes = (uint64_t)sectors * 2048u;
     if (offset > mounted_archive.size || bytes > mounted_archive.size - offset || bytes > SIZE_MAX) return -1;
     if (!pe_disc_read(g_CdImage, &mounted_archive, offset, destination, (size_t)bytes)) return -1;
+    {
+        PeHookDiscRead read = {lba - mounted_archive.sector, sectors, destination};
+        PE_HOOK(PE_HOOK_DISC_READ, &read);
+    }
     g_GameState.flags |= 0x1004000u;
     completion = 0;
     return 1;

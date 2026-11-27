@@ -319,10 +319,18 @@ pub(super) fn render_catalog_picker_for_slot(
 
                     if is_wayne_regular_storage {
                         if target_slot_idx < save.storage.len() {
-                            save.storage[target_slot_idx] = assigned_val;
+                            if let Err(e) =
+                                save.replace_inventory_slot(1, target_slot_idx, assigned_val)
+                            {
+                                ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                            }
                         }
                     } else if target_slot_idx < save.inventory_items.len() {
-                        save.inventory_items[target_slot_idx] = assigned_val;
+                        if let Err(e) =
+                            save.replace_inventory_slot(0, target_slot_idx, assigned_val)
+                        {
+                            ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                        }
                     }
                     *replace_mode = false;
                 }

@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "../mods/host/pe_main_menu.c"
-#include "../mods/pe_economy/pe_catalog_menu_state.c"
-#include "../mods/pe_economy/pe_catalog_menu_view.c"
-#include "../mods/pe_economy/pe_catalog_menu.c"
-#include "../mods/pe_economy/pe_catalog_effect_icons.c"
-#include "../mods/pe_economy/pe_armor_effect_display.c"
+#include "../mods/pe_catalog/pe_catalog_menu_state.c"
+#include "../mods/pe_catalog/pe_catalog_menu_view.c"
+#include "../mods/pe_catalog/pe_catalog_menu.c"
+#include "../mods/pe_catalog/pe_catalog_effect_icons.c"
+#include "../mods/pe_catalog/pe_armor_effect_display.c"
 
 static size_t frame_bytes, max_frame_bytes;
 _Alignas(RenderTexturedQuad) static unsigned char packet_arena[0x4000];
@@ -109,9 +109,9 @@ void Menu_PlayCancelSound(void) {}
 void Menu_PlayMoveSound(void) {}
 int Menu_GetBattleEquipMode(void) { return 0; }
 int pe_game_loaded(void) { return 1; }
-int pe_loot_enabled(void) { return 1; }
+int pe_catw_enabled(void) { return 1; }
 static unsigned junk=100,price=10;
-uint32_t pe_loot_junk(void) { return junk; }
+uint32_t pe_catw_junk(void) { return junk; }
 static ItemDataRecord records[2]={{.iconId=1,.itemId=0x45,.kind=1,.tailCount=10,.tailData={2,9}},
                                  {.iconId=1,.itemId=0x97,.kind=9,.tailCount=10,.tailData={8,17}}};
 static int slot_count=10,board_count=20,rule=PE_CAT_OK,installs,removes,removed_count=2,all_locked;

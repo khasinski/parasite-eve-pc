@@ -15,5 +15,9 @@
   "scripts": {
     "start": "electron .",
     "desktop:build": "python3 build_desktop.py"
+  },
+  "overrides": {
+    "minimatch": "11.0.5",
+    "glob": "14.0.4"
   }
 }

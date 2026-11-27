@@ -4,11 +4,16 @@ No automatic reflow: moving waits or choice rows could change game interaction.
 Unknown layouts remain explicit warnings rather than invented fit guarantees.
 """
 import re
-from . import gametext as gt, menu
+from . import battle, gametext as gt, menu
 from .validation import commands
 
 # textbox.c: default origin (20,174), fog bottom 224, line pitch 12.
 DEFAULT_WIDTH = 297
+# A right-to-left pack's lines end at x 300, mirroring the 20 px left margin (textbox.c
+# Textbox_RightEdge), so the default box holds 280 px of them.
+DEFAULT_WIDTH_RTL = 280
+# The default box's fog is the whole screen wide (textbox.c), so its text is lost only at the edge.
+DEFAULT_SCREEN_WIDTH = 320 - 20
 DEFAULT_LINES = 4
 # {name} draws TextboxNameGlyphs: sys/030 ("Aya") at a new game (Save_InitMetadataState), or the
 # name the player gave her, at most 8 glyphs (Menu_CopyPromptCodes). The English is laid out for
@@ -24,34 +29,105 @@ def advance(c: bytes, name_width: int = NAME_WIDTH) -> int:
         return name_width
     if op == 0xFB:
         return gt.WIDE if c[1] <= 3 else NUMBER_WIDTH if c[1] == 8 else 0
+    if c[:4] in gt.PACK_EXTRA:
+        return gt.PACK_EXTRA[c[:4]].advance()
     if op in (0xF1, 0xFC, 0xFD):
         return gt.WIDE
+    if op in gt.PACK_DRAWN:
+        return gt.box_advance(op)
+    if op in gt.PACK_LETTERS:
+        return gt.PACK_LETTERS[op].advance()
     if op < 0xF1:
-        return gt.BOX_ADVANCE[op] if op < len(gt.BOX_ADVANCE) else (gt._latin_advance(op) or gt.WIDE)
+        return gt.BOX_ADVANCE[op] if op < gt.GAME_CODES else (gt._latin_advance(op) or gt.WIDE)
     return 0
 
 
+def measure(cmds, name_width: int = NAME_WIDTH, menu_advance=None) -> int:
+    """How wide commands draw on one line. A right-to-left pack's Arabic letters are joined first
+    (petext/rtl.py), as the renderer draws them: their joined shapes, the gaps between them closed.
+    `menu_advance` measures the other commands in a menu's style instead of the dialogue box's."""
+    plain = menu_advance or (lambda c: advance(c, name_width))
+    if not gt.RTL:
+        return sum(plain(c) for c in cmds)
+    from . import letters, rtl
+    total, run = 0, []
+
+    def flush():
+        nonlocal total
+        if run:
+            total += rtl.width("".join(run), lambda ch: letters.CATALOG[ch].joined_advance(),
+                               lambda ch: letters.CATALOG[ch].cut()[1])
+            run.clear()
+
+    for c in cmds:
+        ch = gt.letter_of(c)
+        if ch and rtl.is_arabic(ord(ch)):
+            run.append(ch)
+            continue
+        flush()
+        total += plain(c)
+    flush()
+    return total
+
+
 def screens(raw: bytes, name_width: int = NAME_WIDTH):
-    pages, lines, width = [], [], 0
+    pages, lines, line = [], [], []
     for c in commands(raw):
         if c[0] in (0xF7, 0xF8):
-            lines.append(width)
-            width = 0
+            lines.append(measure(line, name_width))
+            line = []
             if c[0] == 0xF8:
                 pages.append(lines)
                 lines = []
         else:
-            width += advance(c, name_width)
-    lines.append(width)
+            line.append(c)
+    lines.append(measure(line, name_width))
     pages.append(lines)
     return pages
 
 
-def box_limit(source: dict):
-    """(width, lines) to wrap a page to: the narrowest of the boxes scripts open it in, else of
-    the boxes its bank opens when that set is complete; None when no box is known."""
-    boxes = source.get('boxes') or (source.get('boxes_possible') if source.get('boxes_complete') else None) or []
-    limits = [b for b in map(bounds, boxes) if b]
+def drawn_rows(raw: bytes) -> list[int]:
+    """The lines each screen of a page shows: its last lines that hold only spaces draw nothing
+    (a fan patch's page can end a screen with one, before its wait)."""
+    space, screens_, lines, line = gt.CODE_OF[" "], [], [], []
+    for c in commands(raw):
+        if c[0] in (0xF7, 0xF8):
+            lines.append(line)
+            line = []
+            if c[0] == 0xF8:
+                screens_.append(lines)
+                lines = []
+        else:
+            line.append(c)
+    lines.append(line)
+    screens_.append(lines)
+    out = []
+    for lines in screens_:
+        n = len(lines)
+        while n > 1 and all(c == bytes([space]) for c in lines[n - 1]):
+            n -= 1
+        out.append(n)
+    return out
+
+
+def box_limit(source: dict, screen: bool = False):
+    """Wrap to boxes proven for this page, or a complete bank with uniform bounds.
+
+    Different bank boxes are alternatives, not evidence this particular page
+    uses their smallest rectangle. Keep unproven pages as authored and warn.
+    screen: the width before the screen edge instead (bounds), for a fan patch's
+    own layout, which the patched game drew past a box wherever it stayed on screen.
+    """
+    boxes = source.get('boxes') or []
+    if not boxes:
+        if not source.get('boxes_complete'):
+            return None
+        possible = source.get('boxes_possible') or []
+        limits = [bounds(box, screen) for box in possible]
+        if not limits or None in limits or len(set(limits)) != 1:
+            return None
+        return limits[0]
+    limits = [b for b in (bounds(box, screen) for box in boxes) if b]
     if not limits:
         return None
     return min(w for w, _ in limits), min(n for _, n in limits)
@@ -60,9 +136,13 @@ def box_limit(source: dict):
 def bounds(box: str, screen: bool = False):
     """(width px, lines) a box holds. A styled box's text starts at its x with no inset and isn't
     clipped (textbox.c; the rectangle only sizes style 1's gradient), so its rectangle is what
-    looks right and the screen edge (screen=True) is where text is lost."""
+    looks right and the screen edge (screen=True) is where text is lost. The default box's fog
+    spans the whole screen (textbox.c), so past its 297 px a line is lost only at the screen edge,
+    300 px from x 20 (a right-to-left line ends at x 300, so it too has 300 px)."""
     if box == 'default':
-        return DEFAULT_WIDTH, DEFAULT_LINES
+        if screen:
+            return DEFAULT_SCREEN_WIDTH, DEFAULT_LINES
+        return DEFAULT_WIDTH_RTL if gt.RTL else DEFAULT_WIDTH, DEFAULT_LINES
     m = re.fullmatch(r'(?:styled )?(-?\d+),(-?\d+),(\d+),(\d+)', box)
     if not m:
         return None
@@ -117,9 +197,18 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
     """Dialogue pages against their boxes; menu entries against data/menu_layouts.json when the
     menu glyph metrics are known (else, and for keys it doesn't name, against the widest English
     entry of the table in widest_table, measured the same way)."""
+    from .stretch import LINE_BREAK
     errors, warnings = [], []
-    pages = screens(raw, name_px)
+    # a pack's line break in menu text (pelang.check_row) is measured as a line break
+    pages = screens(raw if key.startswith('dlg/') else raw.replace(LINE_BREAK, b'\xf7'), name_px)
     widest = max(max(p) for p in pages)
+    if battle.is_battle(key):
+        # One line of the dialogue font from x 20 (petext/battle.py); the bar has no second line.
+        if len(pages) > 1 or len(pages[0]) > 1:
+            errors.append('a battle message is one line: no line breaks or waits')
+        elif widest > battle.WIDTH:
+            errors.append(f'{widest} px; a battle message fits {battle.WIDTH} px before the screen edge')
+        return errors, warnings
     if not key.startswith('dlg/'):
         if metrics is not None:                  # measured as the menus draw it
             errors, warnings, covered = menu.check(key, raw, source, metrics, layouts or menu.load_layouts())
@@ -136,6 +225,7 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
     boxes = source.get('boxes') or []
     if not boxes:
         return errors, warnings + unproven(pages, source)
+    shown = drawn_rows(raw)
     for box in boxes:
         limit = bounds(box)
         if limit is None:
@@ -143,7 +233,8 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
             continue
         width, count = limit
         edge, rows = bounds(box, screen=True)
-        for n, page in enumerate(pages, 1):
+        for n, (page, lines) in enumerate(zip(pages, shown), 1):
+            page = page[:lines]                  # a screen's last lines of only spaces draw nothing
             if max(page) > edge:
                 errors.append(f'screen {n}: a line is {max(page)} px; dialogue box {box} fits {edge} px'
                               + ('' if box == 'default' else ' before the screen edge'))

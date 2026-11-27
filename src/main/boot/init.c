@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include <ctype.h>
 #include <errno.h>
@@ -12,6 +13,8 @@
 #include <psyz/video.h>
 #include <psyz/gpu.h>
 #include "pe1/field_actor.h"
+#include "pe1/mouse_input.h"
+#include "pe1/script_node.h"
 #include "pe1/geom_state.h"
 #include "pe1/render_object.h"
 #include "pe1/render_buffers.h"
@@ -36,6 +39,7 @@ void PadInit(int mode);
 #include "pe1/inventory_slots.h"
 #include "pe1/menu_inventory.h"
 #include "pe1/menu_widget.h"
+#include "pe1/menu_scroll_cursor.h"
 #include "pe1/pad_state.h"
 #include "pe1/player_entity.h"
 #include "pe1/psyq_callbacks.h"
@@ -69,6 +73,8 @@ _Alignas(16) u8 D_8010BD00[BOOT_TEXTURE_WORKSPACE_BYTES];
 _Alignas(16) u8 D_80120D08[0x200000];
 _Alignas(16) u8 g_SceneLoadScratchArea[0x20000];
 static _Alignas(16) u8 g_BootLoadedSceneArea[0x80008];
+/* The mounted release (pe1/pe_image.h): set by Asset_OpenPeImage, USA until a disc mounts. */
+u8 g_GameRegion;
 u8 *g_StrFileDirBuffer = g_BootLoadedSceneArea + 8;
 static _Alignas(16) u8 g_BootDisplayWorkArea[BOOT_DISPLAY_WORK_SIZE];
 u8 *g_CdLoadAreaBase = g_BootDisplayWorkArea;
@@ -92,6 +98,7 @@ u32 g_BootHostVBlankCount;
 u32 g_BootHostControlAt;
 u32 g_BootHostCrashAt;
 int g_BootHostCrashAbort;
+u32 g_BootHostSaveAt;
 void (*g_BootHostHdOptions)(int, const char *);
 void (*g_BootHostGraphicsOptions)(int, int, int);
 const char *g_BootHostVramPath;
@@ -262,6 +269,20 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     for (unsigned i = 0; i < 4; ++i) {
         printf("%s{\"state\":%u,\"page\":%d}", i ? "," : "", g_TextboxEntries[i].state, g_TextboxEntries[i].page_id);
     }
+    /* Optional layout observations leave the default replay protocol intact. */
+    const char *layout = getenv("PE_TEST_TEXTBOX_LAYOUT");
+    if (layout && !strcmp(layout, "1")) {
+        printf("],\"dialogue_layout\":[");
+        for (unsigned i = 0; i < 4; ++i) {
+            const TextboxEntry *entry = &g_TextboxEntries[i];
+            printf("%s{\"style\":%u,\"background\":%u,\"flags\":%u,\"rect\":",
+                   i ? "," : "", entry->style, entry->background, (u32)entry->control.flags);
+            if (entry->state && entry->style && entry->style != 3)
+                printf("[%u,%u,%u,%u]", entry->x, entry->y, entry->width, entry->height);
+            else printf("null");
+            putchar('}');
+        }
+    }
     printf("],\"actors\":[");
 
     unsigned actor_index = 0;
@@ -289,21 +310,63 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
         for (unsigned i = 0; i < sizeof(actor->pad_0AC) / sizeof(actor->pad_0AC[0]); ++i) {
             printf("%s%u", i ? "," : "", actor->pad_0AC[i]);
         }
-        printf("]}");
+        printf(
+            "],\"contact\":{\"scale\":%u,\"allocated\":%s,\"script\":%s,"
+            "\"body\":[%d,%d,%d,%d],\"cylinder\":[%d,%d,%d,%d],\"tasks\":[",
+            (unsigned)actor->move_speed,
+            actor->model_state.allocation_active ? "true" : "false",
+            actor->script_cursor_1a0 ? "true" : "false",
+            actor->render_object.hit_body.value0, actor->render_object.hit_body.value1,
+            actor->render_object.hit_body.value2, actor->render_object.hit_body.radius,
+            actor->render_object.hit_cylinder.value0, actor->render_object.hit_cylinder.value1,
+            actor->render_object.hit_cylinder.value2, actor->render_object.hit_cylinder.radius
+        );
+        ScriptNode *contact = actor->script_node_lists[1];
+        unsigned contacts = 0;
+        /* Bound diagnostics even if the list being investigated is damaged. */
+        while (contact && contacts < 32) {
+            printf("%s{\"trigger\":%u,\"flags\":%u}", contacts ? "," : "",
+                (unsigned)contact->trigger_value, (unsigned)contact->flags);
+            contact = contact->next;
+            ++contacts;
+        }
+        printf("],\"truncated\":%s}}", contact ? "true" : "false");
     }
 
     printf("],\"menu\":");
     if (g_MenuWidgetCurrentNode) {
         MenuWidgetNode *node = g_MenuWidgetCurrentNode;
+        int list_x = 0, list_y = 0;
+        const int list = node->mode == 2;
+        if (list) {
+            MenuWidget_ScreenPosition(node, &list_x, &list_y);
+        }
+        /* list: screen x, y, cell width, height, columns, rows shown, rows, first row shown */
         printf(
-            "{\"mode\":%d,\"selection\":%d,\"cursor\":[%d,%d]}",
+            "{\"mode\":%d,\"selection\":%d,\"cursor\":[%d,%d],\"list\":[%d,%d,%d,%d,%d,%d,%d,%d],\"plain\":%s}",
             node->mode,
             node->selected_base,
             node->cursor_x,
-            node->cursor_y
+            node->cursor_y,
+            list_x, list_y,
+            list ? node->draw_state : 0, list ? node->disabled : 0,
+            list ? node->grid_width : 0, list ? node->visible_rows : 0,
+            list ? node->y_limit : 0, list ? node->scroll_y : 0,
+            node->update == Menu_StepScrollCursor ? "true" : "false"
         );
     } else {
         printf("null");
+    }
+
+    const char *camera_observations = getenv("PE_TEST_CAMERA_STATE");
+    if (camera_observations && !strcmp(camera_observations, "1")) {
+        const GeomScrollCoordinates *camera = &g_GeomScroll.state.position;
+        printf(",\"camera\":{\"group\":%u,\"position\":[%d,%d],\"origin\":[%d,%d],"
+               "\"flags\":%u,\"mesh_tint\":%d,\"base_angles\":[%u,%u]}",
+               (unsigned)camera->groupSelect, camera->x, camera->y,
+               camera->originX, camera->originY, (unsigned)g_GeomScroll.state.flags,
+               (int)camera->meshTintLevel, (unsigned)camera->baseAngleDigital,
+               (unsigned)camera->baseAngleAnalog);
     }
 
     printf(",\"combat\":{\"mode\":%d,\"live_enemies\":%d", g_BattleModeState, (int)g_BattleLiveEnemyCount);
@@ -492,11 +555,13 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
             }
             const EnemyCombatant *enemy = (const EnemyCombatant *)actor->state;
             printf(
-                "%s{\"type\":%u,\"sub\":%u,\"mode\":%u,\"hp\":%d,\"hp_limit\":%d,\"defense\":%u,"
+                "%s{\"type\":%u,\"sub\":%u,\"model_bank\":%u,\"identity\":%u,\"mode\":%u,\"hp\":%d,\"hp_limit\":%d,\"defense\":%u,"
                 "\"core_flags\":%u,\"state_flags\":%u,\"status_flags\":%u,\"atb\":%u,\"atb_step\":%u}",
                 combatant_index++ ? "," : "",
                 actor->type_id,
                 actor->sub_id,
+                (unsigned)((const BattleEntity *)actor)->modelIndex,
+                (unsigned)(u16)enemy->field04.fieldId04,
                 actor->mode,
                 enemy->hp,
                 enemy->maxHp,
@@ -728,6 +793,29 @@ static void Boot_ReadHostControlCommand(void) {
         }
         g_BootHostGraphicsOptions(geometry, antialiasing, filtering);
         g_BootHostControlAt = g_BootHostVBlankCount + 8;
+        return;
+    }
+    if (!strncmp(line, "mouse ", 6)) {
+        /* mouse X Y ACTION FRAMES: the mouse at screen point X, Y (move, left,
+         * right, middle, up or down for the wheel), then FRAMES with no buttons. */
+        static const char *const actions[] = {"move", "left", "right", "middle", "up", "down"};
+        int x, y, action = -1;
+        unsigned long frames = 0;
+        char name[16], extra;
+        if (sscanf(line + 6, "%d %d %15s %lu %c", &x, &y, name, &frames, &extra) == 4) {
+            for (int i = 0; i < 6; ++i) {
+                if (!strcmp(name, actions[i])) action = i;
+            }
+        }
+        if (action < 0 || x < -100 || x > 420 || y < -100 || y > 324 || !frames ||
+            frames > g_BootHostVBlankLimit - g_BootHostVBlankCount) {
+            fprintf(stderr, "Invalid mouse control command\n");
+            fflush(stderr);
+            _Exit(2);
+        }
+        Mouse_TestEvent(x, y, (enum MouseAction)action);
+        hostButtons = 0;
+        g_BootHostControlAt = g_BootHostVBlankCount + (u32)frames;
         return;
     }
     if (strncmp(line, "advance ", 8)) {
@@ -1175,11 +1263,22 @@ void Field_HandleStateTransition(void) {
         g_FieldPadLastFrame = old_pad_bits;
         inverted = ~(u16)pad;
         pad_bits = base_bits;
-        if (inverted & 0x2000) {
-            pad_bits = base_bits | 0x4000;
+        if (PE_JAPAN) {
+            /* The Japanese release keeps the pad as it is: Circle confirms, Cross cancels. */
+            pad_bits = rawInverted;
+        } else {
+            /* The USA release swaps Circle and Cross, so Cross confirms. */
+            if (inverted & 0x2000) {
+                pad_bits = base_bits | 0x4000;
+            }
+            if (inverted & 0x4000) {
+                pad_bits |= 0x2000;
+            }
         }
-        if (inverted & 0x4000) {
-            pad_bits |= 0x2000;
+
+        /* The mouse presses the game's own buttons (pe1/mouse_input.h). */
+        if (g_BootHostActive) {
+            pad_bits |= Mouse_FrameButtons();
         }
 
         int run_mask = g_FieldRenderFlagTable[0];
@@ -1396,6 +1495,20 @@ static void Boot_PollConfiguredPad(void) {
     }
 }
 
+/* The mouse reads the events the game window gets after the host's windows (F1, Esc and the
+ * questions they ask) had theirs: a click or move made on one of those never reaches the game.
+ * (The event watch below sees every event, those too.) */
+static PsyzOverlayEventCB_SDL3 s_prevMouseEventCB;
+static void Boot_MouseEvent(const SDL_Event *event) {
+    if (s_prevMouseEventCB) {
+        s_prevMouseEventCB(event);
+    }
+    if (focused && (event->type == SDL_EVENT_MOUSE_MOTION || event->type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event->type == SDL_EVENT_MOUSE_WHEEL)) {
+        Mouse_HandleEvent(event);
+    }
+}
+
 static bool Boot_WatchPadEvent(void *userdata, SDL_Event *event) {
     (void)userdata;
     Boot_HandlePadEvent(event);
@@ -1431,12 +1544,25 @@ void Boot_ResetPadInput(void) {
     SDL_AddEventWatch(Boot_WatchPadEvent, NULL);
     memset(held, 0, sizeof(held));
     focused = true;
+    Mouse_Reset();
+    {
+        static bool mouse_hooked;
+        if (!mouse_hooked) {
+            mouse_hooked = true;
+            s_prevMouseEventCB = Psyz_OverlayEvent_SDL3(Boot_MouseEvent);
+        }
+    }
+    /* Headless runs and input replays (--pad-at) take no window mouse: only their own commands. */
+    Mouse_SetWindowInput(g_BootHostActive && native_pad_poll && !g_BootHostPadEventCount);
     memset(g_PadPackets, 0, sizeof(g_PadPackets));
     g_PadPackets[1].header = 0x00ff;
     publish();
 }
 
 void Boot_HandlePadEvent(const SDL_Event *event) {
+    if (event->type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+        Mouse_Reset();
+    }
     if (event->type == SDL_EVENT_WINDOW_FOCUS_LOST || event->type == SDL_EVENT_QUIT) {
         focused = false;
         memset(held, 0, sizeof(held));

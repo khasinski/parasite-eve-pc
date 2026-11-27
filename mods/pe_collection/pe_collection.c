@@ -1,10 +1,12 @@
-/* PE Enhancements: Collection, the Bestiary and the Wardrobe (psxrecomp build's pe_collection.c;
- * bridge findings pe-skins-bestiary-design-2026-10-19.md). F1 > PE Enhancements > Collection.
+/* PE Enhancements: Collection, the Bestiary (psxrecomp build's pe_collection.c; bridge findings
+ * pe-skins-bestiary-design-2026-10-19.md). F1 > PE Enhancements > Collection. The Wardrobe was part
+ * of it until November 2026 and is its own mod now (mods/pe_wardrobe; findings D8 §12, D9); the
+ * mod id stays pe_collection, so players' settings and profile keep their names.
  *
- * The Collection is a registry: creatures and costumes come from packs registered through the
- * `bestiary` and `costumes` services (host/pe_services.h). Parasite Eve's own are the first pack
- * (pe_pack_pe1.c); an import from another game or a randomizer registers the same way. This file:
- * the mod, Junk and messages. */
+ * The Collection is a registry: creatures come from packs registered through the `bestiary`
+ * service (host/pe_services.h). Parasite Eve's own are the first pack (pe_pack_pe1.c); an import
+ * from another game or a randomizer registers the same way. This file: the mod, Junk and
+ * messages. */
 #include <stdio.h>
 #include <string.h>
 
@@ -58,25 +60,21 @@ static void pe_junk_give(void) {
 static void pe_reset(void) {
     pe_profile_clear();
     pe_bestiary_reset();
-    pe_wardrobe_reset();
     pe_profile_save();
     pe_col_say("Collection reset");
 }
 
 static int collection_init(void) {
     pe_profile_load();
+    pe_profile_transactions_init();
     pe_service_publish("bestiary", 1, &g_pe_bestiary_api, MOD_ID);
-    pe_service_publish("costumes", 1, &g_pe_costumes_api, MOD_ID);
-    pe_menu_register_live_int(PE_PAGE_DEBUG_COLLECTION, "Junk", "Testing: Junk for buying Bestiary tiers and costumes.",
+    pe_menu_register_live_int(PE_PAGE_DEBUG_COLLECTION, "Junk", "Testing: Junk for buying Bestiary tiers.",
                               0, 99999, 100, pe_junk_get, pe_junk_set);
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Give 1000 Junk", "Testing: add 1000 Junk (Junk economy on).", pe_junk_give);
     pe_bestiary_register(MOD_ID);
-    pe_wardrobe_register(MOD_ID);
-    pe_wardrobe_menu_register(MOD_ID);
     pe_bestiary_menu_register(MOD_ID);
-    pe_skin_register(MOD_ID);
     pe_pack_pe1_register();
-    pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset collection", "Forget all Bestiary and Wardrobe unlocks.", pe_reset);
+    pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset collection", "Forget all Bestiary unlocks (the Wardrobe has its own reset).", pe_reset);
     pe_menu_register_tick(pe_profile_tick);
     return 0;
 }
