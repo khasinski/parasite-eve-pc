@@ -48,6 +48,8 @@ extern PeDisc *g_CdImageVolumes[2];
  * missing identity. NULL in headless runs. Success must install that volume. */
 extern int (*g_CdImageRequest)(unsigned identity);
 void CdRom_BindImage(struct PeDisc *disc, const struct PeDiscFile *archive);
+/* Synchronous archive access without touching native CD completion state. */
+int CdRom_CopyArchiveSectors(u32 sector, void *destination, u32 sectors);
 
 struct CdlLOC;
 

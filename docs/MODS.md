@@ -59,6 +59,9 @@ Manage mods name: **PE Enhancements: quality of life**.
 
 **Movement** page:
 - **Always run**: on by default. Hold the run button to walk.
+- **Visible field weapons**: off by default. The USA prototype can show the
+  equipped M16A1 or M16A2 in compatible field scenes with Aya's stock outfit.
+  It uses the native presentation during cutscenes and when rifle textures are unavailable.
 - **Walk speed** and **Run speed**: 1.75x by default. Choices go from Normal to 3x.
 - **Combat speed**: Normal by default.
 - **Battle start speed**: speeds up the battle-entry sequence. Normal by default, up to 4x.

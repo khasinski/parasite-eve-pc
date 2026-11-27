@@ -1926,6 +1926,11 @@ int Scene_UpdateBgDraw(void) {
         return 0;
     }
 
+    if (!(g_GameStateFlags & 2) && entity->render_object.variant_visible &&
+        PE_HOOK(PE_HOOK_FIELD_WEAPON_DRAW, &entity->render_object) > 0) {
+        return 0;
+    }
+
     if (!(g_GameStateFlags & 2) && (g_FieldMoveLock & 2)) {
         return 0;
     }

@@ -11,9 +11,11 @@ void pe_encounters_register(const char *mod_id);
 void pe_battle_frequency_register(const char *mod_id);
 void pe_auto_medicine_register(const char *mod_id);
 void pe_dialogue_skip_register(const char *mod_id);
+void pe_field_weapon_register(const char *mod_id);
 
 static int qol_init(void) {
     pe_move_register(MOD_ID);
+    pe_field_weapon_register(MOD_ID);
     pe_key_items_register(MOD_ID);
     pe_key_menu_register(MOD_ID);
     pe_bag_sort_register(MOD_ID);
