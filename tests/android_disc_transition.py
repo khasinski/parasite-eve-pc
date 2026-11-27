@@ -23,6 +23,7 @@ p.add_argument('--supply-disc', required=True, help='Imported CUE basename selec
 p.add_argument('--expected-scene', type=lambda v:int(v,0), help='Defaults to the original save tail scene token')
 p.add_argument('--required-identity', type=int, choices=[1,2], required=True)
 p.add_argument('--out', type=Path, required=True)
+p.add_argument('--timeout', type=int, default=120, help='Seconds allowed for the 21000-frame replay')
 a = p.parse_args()
 pkg = 'com.khasinski.parasiteeve'
 profile = 'disc-transition-'+uuid.uuid4().hex
@@ -71,7 +72,7 @@ try:
     adb('shell','am','start','-W','-n',pkg+'/.GameActivity','--es','testProfile',profile,
         '--esa','arguments',','.join(options))
     prompt_seen=False
-    deadline=time.monotonic()+120
+    deadline=time.monotonic()+a.timeout
     while time.monotonic()<deadline:
         if not adb('shell','pidof',pkg+':game',check=False).strip():break
         current=nodes()
@@ -84,7 +85,10 @@ try:
             click(current,a.supply_disc)
         elif any(t.casefold()=='choose image' for t in texts):
             click(current,'Choose image')
-    else:raise AssertionError('Original disc transition did not finish')
+    else:
+        log=adb('exec-out','run-as',pkg,'cat','files/diagnostics.log',check=False)
+        (a.out/'game.log').write_bytes(log)
+        raise AssertionError(f'Original disc transition exceeded {a.timeout}s (prompt_seen={prompt_seen})')
     log=adb('exec-out','run-as',pkg,'cat','files/diagnostics.log').decode()
     (a.out/'game.log').write_text(log)
     assert 'Assertion failure' not in log and 'FATAL' not in log, log[-1000:]
