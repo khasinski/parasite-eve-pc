@@ -262,6 +262,16 @@ static int boot_buffer_layout(void)
         if (block != overflow + i * ENTITY_ALLOCATION_BLOCK_SIZE) return 0;
         block[ENTITY_ALLOCATION_BLOCK_SIZE - 1] = (u8)i;
     }
+    /* A full model arena must not consume an actor or splice it into the live list. */
+    FieldActor candidate = {0};
+    FieldActor *saved_free = g_EntityFreeListHead, *saved_live = g_FieldActorListHead;
+    RenderObjectHeader model = {0};
+    u8 scene[] = {1, 0};
+    g_EntityFreeListHead = &candidate;
+    g_GameState.bank_slots[1] = &model;
+    if (Scene_LoadMap(scene, NULL, 1) || g_EntityFreeListHead != &candidate ||
+        g_FieldActorListHead != saved_live) return 0;
+    g_EntityFreeListHead = saved_free;
     if (Entity_AllocBlock(1) || first[4095].length != 0x1234 ||
         second[0].length != 0x5678 || second[4095].length != 0x9abc)
         return 0;
