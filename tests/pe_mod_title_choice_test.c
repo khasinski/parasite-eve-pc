@@ -123,6 +123,9 @@ void pe_ui_fill_round_rect(PeSurface *s, float x, float y, float w, float h,
   (void)r;
   (void)c;
 }
+void pe_ui_fill_rect(PeSurface *s, int x, int y, int w, int h, PeColor c) {
+  pe_ui_fill_round_rect(s, x, y, w, h, 0, c);
+}
 PeColor pe_ui_alpha(PeColor c, float a) {
   c.a *= a;
   return c;
