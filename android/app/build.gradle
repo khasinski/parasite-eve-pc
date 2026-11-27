@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner 'com.khasinski.parasiteeve.TouchControlsTest'
-        versionCode 1
-        versionName '0.15.0-android-development'
+        versionCode 2
+        versionName '0.16.0-android-development'
         externalNativeBuild {
             cmake {
                 targets 'parasite-eve-pc'

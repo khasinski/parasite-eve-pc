@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16-beta
 
 - Set a six-digit seed under **F1 → Randomizer** before starting a New Game to shuffle items and keys. Enemy randomization has its own toggle. Loading a save restores its seed and layout.
 - EX Game now preserves the quantities of stacked items in storage when it resets the starting bag.
