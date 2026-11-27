@@ -95,6 +95,7 @@ typedef enum PeHookId {
     PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
     PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
                             * tries the medicines in may change; appended */
+    PE_HOOK_MIRROR_MODEL, /* FieldActor * reflected owner: return 1 to draw its current model. */
     PE_HOOK_COUNT
 } PeHookId;
 

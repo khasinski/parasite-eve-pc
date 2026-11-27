@@ -315,6 +315,11 @@ static void pe_rebind_player(void) {
 }
 
 /* ---- hooks ---- */
+static int pe_on_mirror_model(void *owner, void *user) {
+    (void)user;
+    return owner && owner == g_PlayerEntity && (s_pointed || pe_worn_outfit());
+}
+
 static int pe_on_player_bank(void *ctx, void *user) {
     PeSkin *k;
     (void)ctx;
@@ -407,6 +412,7 @@ static int pe_on_load(void *ctx, void *user) {
 }
 
 void pe_skin_register(const char *mod_id) {
+    pe_hook_add(PE_HOOK_MIRROR_MODEL, pe_on_mirror_model, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_BANK, pe_on_player_bank, NULL, PE_PRIORITY_LATE, mod_id);   /* after the Wardrobe's bank */
     pe_hook_add(PE_HOOK_PLAYER_TEXTURES, pe_on_player_textures, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_ROWS, pe_on_player_rows, NULL, PE_PRIORITY_NORMAL, mod_id);

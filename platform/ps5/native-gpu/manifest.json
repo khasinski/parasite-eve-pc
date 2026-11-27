@@ -3371,7 +3371,7 @@
     },
     {
       "path": "include/pe1/room_fx_model.h",
-      "sha256": "4b89d5b46c1f8298538a3b67f109d74d7497ec5010d835484c2a55f8fdab47a5"
+      "sha256": "13c17f9453488a69df44db3e93dedc4fa3f0375ff2e4ae102c3470d4428284dd"
     },
     {
       "path": "include/pe1/room_glint_ribbon.h",
@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "3777a0663dd8e8f3fd246b544c8f252acda9b7f457c734ad64631a1134e92fc8"
+      "sha256": "81a0894c942f821a285d24c4f3f809fd04170b6ddb8c2d3b002112cf94592bcd"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4035,7 +4035,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "31ffd8ca953cfab50507f7bf9efafbfbfa89f34801ce0c23dfdb2e563f8903f6"
+      "sha256": "3bcdbd9329e92b0946a21c6744407b1e8ce97c396a50976e93cf2199f2ec55fb"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4535,7 +4535,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "8d8fca6a1899eb69629b1a575e3b156a00af4e17f7b61fe23b6163f65c87781f"
+      "sha256": "7d06fcea42661648aa5167324bd0e3f63306c29705d2f92b75a9050afe8e17fe"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
