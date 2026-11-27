@@ -96,6 +96,8 @@ typedef enum PeHookId {
     PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
                             * tries the medicines in may change; appended */
     PE_HOOK_FIELD_WEAPON_DRAW, /* RenderObjectEntity*: field Aya; handled replaces the stock weapon draw */
+    PE_HOOK_CUTSCENE_WEAPON_POSE, /* RenderObjectEntity*: temporary Aya rotation overrides */
+    PE_HOOK_FIELD_WEAPON_POSE, /* RenderObjectEntity*: decoded field Aya pose before transforms */
     PE_HOOK_COUNT
 } PeHookId;
 

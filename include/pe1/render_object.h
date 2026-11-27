@@ -673,6 +673,7 @@ void Render_Noop(void);
 
 void Render_UpdateClutTable(RenderObjectEntity *object, s16 force, s16 buffer_index);
 void Anim_BuildRotationMatrices(RenderObjectEntity *object, RenderAnimationDataHeader *data, int frame);
+void Anim_ApplyAyaArmPose(RenderObjectEntity *object, RenderAnimationDataHeader *data, int frame);
 void Anim_DecodeBoneRotationsByte(RenderObjectEntity *object, RenderAnimationDataHeader *animation_data,
                                   s16 frame);
 void Anim_DecodeBoneRotationsShort(RenderObjectEntity *object, RenderAnimationDataHeader *animation_data,
