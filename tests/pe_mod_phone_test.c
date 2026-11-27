@@ -307,7 +307,7 @@ static void test_pe1_pack(void) {
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     load_pe1();
-    assert(s_pack_count == 56);
+    assert(s_pack_count == 57);
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0)->key, "pe1/sewer_emergency"));
     for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
@@ -335,7 +335,7 @@ static void test_pe1_pack(void) {
             }
         }
     }
-    assert(funny == 20);
+    assert(funny == 21);
 }
 
 /* Crossover calls need the Crossover calls switch (phone.crossovers, on by default): off leaves them out. */
@@ -346,11 +346,12 @@ static void test_crossovers(void) {
     int i, tagged = 0;
     load_pe1();
     for (i = 0; i < s_pack_count; ++i) {
-        const int cross = !strncmp(s_pack[i]->key, "pe1/raccoon_", 12) || !strncmp(s_pack[i]->key, "pe1/ff_", 7);
+        const int cross = !strncmp(s_pack[i]->key, "pe1/raccoon_", 12) ||
+                          !strncmp(s_pack[i]->key, "pe1/ff_", 7) || !strcmp(s_pack[i]->key, "pe1/dc_regina");
         assert(cross == (s_pack[i]->needs && !strcmp(s_pack[i]->needs, "phone.crossovers")));
         tagged += cross;
     }
-    assert(tagged == 12);
+    assert(tagged == 13);
     memset(&r, 0, sizeof r);
     for (i = 0; i < 64; ++i) {
         c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, (uint32_t)i * 7919u);
