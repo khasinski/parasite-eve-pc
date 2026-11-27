@@ -31,6 +31,7 @@
 #include "pe_mod_menu.h"
 #include "pe_save.h"
 #include "pe_save_emission.h"
+#include "pe_save_query.h"
 #include "pe1/asset_table.h"
 #include "pe1/game_state.h"
 #include "pe1/inventory.h"
@@ -679,9 +680,20 @@ static int pe_rand_new_game(void *ctx, void *user) {
     return 0;
 }
 
+/* Earlier writers included these records even in ordinary games. Release their space before
+ * other mods migrate their records, but preserve unrecognized layouts the host is carrying. */
+static void pe_rand_retire_disabled(const PeSaveRecord *record, int enabled) {
+    PeSaveRecordStatus status;
+    if (!enabled && pe_save_query_record(record->name, &status) == 0 &&
+        status.load == PE_SAVE_RECORD_LOADED)
+        pe_save_retire_record(record);
+}
+
 static int pe_rand_save_read(void *ctx, void *user) {
     (void)ctx;
     (void)user;
+    pe_rand_retire_disabled(&s_record, s_run.on);
+    pe_rand_retire_disabled(&s_foes_record, s_foes_run.on);
     s_layout_ready = 0;
     s_door_moved = -1;   /* the loaded room is the save's, not one past a moved door */
     if (s_run.on && !pe_rand_supported()) {
@@ -769,7 +781,7 @@ static int pe_rand_init(void) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_rand_blue_door, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, pe_rand_francis_door, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_rand_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
-    pe_hook_add(PE_HOOK_SAVE_READ, pe_rand_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_SAVE_READ, pe_rand_save_read, NULL, PE_PRIORITY_EARLY, MOD_ID);
     /* these read only: rows for keylogic.py */
     pe_hook_add(PE_HOOK_ITEM_ADD, pe_rand_item_add, NULL, PE_PRIORITY_EARLY, MOD_ID);
     pe_hook_add(PE_HOOK_ITEM_COUNT, pe_rand_item_count, NULL, PE_PRIORITY_EARLY, MOD_ID);
