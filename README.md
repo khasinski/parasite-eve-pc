@@ -38,6 +38,15 @@ Translators can try the [Simplified Chinese rendering pilot](localization/pilots
 
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
 
+On the desktop GPU renderer, you can supply your own upscaled movie frames. Set
+`PE_FMV_DIR` to the parent folder and use the movie's disc filename without its
+extension as the subfolder name. For example, `FMV001/000001.webp` replaces
+frame 1 of `FMV001.STR`. Use six-digit frame numbers matching the original STR
+and 4:3 WebP images up to 4096 pixels on each side. The original disc supplies
+the timing and audio. Missing frames use the disc image, and START still skips
+or pauses the movie as usual.
+
+
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
 **Escape → Graphics → VSync** offers Auto, On and Off. Auto synchronizes near 60 Hz and uses a frame limiter on other displays; On prevents tearing at any refresh rate. Game speed stays the same.
