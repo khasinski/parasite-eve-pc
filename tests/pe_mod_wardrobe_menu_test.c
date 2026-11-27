@@ -1,6 +1,7 @@
 /* Production Wardrobe and host widgets; game drawing and the model stage are simulated. */
 #include <assert.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include "../mods/host/pe_main_menu.c"
 #include "../mods/pe_wardrobe/pe_wardrobe_menu.c"
@@ -119,6 +120,18 @@ const PeCostume *pe_wardrobe_worn(void) {return worn;}
 void pe_wardrobe_wear_later(const PeCostume *c) {++wears;worn=c;}
 int pe_wardrobe_story_bank(void) {return story_bank;}
 static void provider(int wearing) {(void)wearing;++provider_loads;}
+/* Weapons on view (pe_wardrobe_weapons.c), simulated: Aya's gun and two imported. */
+static int weapon_refreshes, weapon_releases;
+static const char *const weapon_names[3]={"Aya's gun","Knife (Claire)","Handgun Claire (Claire)"};
+void pe_ward_weapons_refresh(void) {++weapon_refreshes;}
+void pe_ward_weapons_release(void) {++weapon_releases;}
+int pe_ward_weapons_count(void) {return 3;}
+const char *pe_ward_weapon_name(int k) {return k>=0&&k<3?weapon_names[k]:"";}
+const char *pe_ward_weapon_group(int k) {return k==0?"Parasite Eve":"Resident Evil 2";}
+const char *pe_ward_weapon_note(int k) {return k==0?"Every gun Aya holds":"Imported from Resident Evil 2";}
+int pe_ward_weapon_source(int k,PeModelSource *src) {
+    memset(src,0,sizeof *src);if(k<0||k>=3)return 0;src->kind=PE_MODEL_CALLBACK;src->user=(void *)(intptr_t)(k+1);return 1;
+}
 void pe_stage_init(PeModelStage *s,int slot,uint32_t rgb) {memset(s,0,sizeof *s);s->slot=slot;s->box_rgb=rgb;}
 void pe_stage_place(PeModelStage *s,int x,int y,int w,int h) {s->x=x;s->y=y;s->w=w;s->h=h;}
 int pe_stage_show(PeModelStage *s,const PeModelSource *src,int silhouette) {
@@ -180,9 +193,32 @@ int main(void) {
     for(int advance=4;advance<=10;++advance) {font_advance=advance;draw_all();u8 *help=NULL;pe_on_help_text(&help,NULL);assert(help && Draw_MeasureTextWidth(help)<=278);}
     for(int i=0;i<3;++i)pe_on_frame(NULL,NULL);assert(!s_stage.has_source && s_shown==-1);
     draw_all();assert(s_stage.has_source);
-    send(PE_MENU_CIRCLE);assert(current==&from && !s_screen.list && !s_stage.has_source);
+    /* L2 / R2: weapons, looked at only */
+    assert(weapon_refreshes==2);   /* registered, opened */
+    send(PE_R2);assert(s_mode==1 && s_members==3 && s_groups==3 && pe_current()==0);draw_all();
+    assert(s_stage.source.kind==PE_MODEL_CALLBACK && s_stage.source.user==(void *)1 && s_preview);
+    send(PE_MENU_CROSS);assert(wears==2 && worn==&costumes[1]);   /* Cross never wears a weapon */
+    /* View only: no button in Weapons changes what Aya wears or runs a provider's gameplay loader */
+    for(unsigned bit=0;bit<16;++bit) {
+        const unsigned b=1u<<bit;
+        if(b&(PE_L2|PE_R2|PE_MENU_CIRCLE))continue;               /* leave the mode or the screen */
+        if(b&(0x1000u|0x4000u|PE_LEFT|PE_RIGHT|PE_L1|PE_R1|PE_TRIANGLE|PE_SQUARE|PE_MENU_CROSS)) {
+            pe_input(s_screen.panel,b);if(s_stage.fullscreen)pe_stage_fullscreen(&s_stage,0);draw_all();
+        }
+        assert(s_mode==1 && wears==2 && worn==&costumes[1] && !provider_loads);
+    }
+    if(s_paused){send(PE_SQUARE);}
+    memset(s_cursor,0,sizeof s_cursor);s_category=0;pe_set_group(0);
+    pe_info_row(1);{u8 note[32];pe_text_from_ascii(note,sizeof note,"Every gun Aya holds");assert(!memcmp(last_text,note,19));}
+    send(PE_R1);assert(s_members==1);send(PE_R1);assert(s_members==2 && pe_current()==1);draw_all();
+    assert(s_stage.source.user==(void *)2);
+    send(PE_TRIANGLE);assert(s_stage.fullscreen);send(PE_MENU_CIRCLE);assert(!s_stage.fullscreen);
+    for(int advance=4;advance<=10;++advance) {font_advance=advance;s_tick+=150;u8 *help=NULL;pe_on_help_text(&help,NULL);assert(help && Draw_MeasureTextWidth(help)<=278);}
+    send(PE_L2);assert(s_mode==0 && s_members==41 && pe_current()==2);draw_all();   /* outfits, on the one worn */
+    assert(!s_preview && !s_stage.has_source && !provider_loads);   /* the worn one has no preview */
+    send(PE_MENU_CIRCLE);assert(weapon_releases==1);assert(current==&from && !s_screen.list && !s_stage.has_source);
     for(int i=0;i<24;++i)assert(!used[i]);
     assert(!provider_loads && wears==2);
-    printf("Wardrobe checks passed: owned-only, equip-only, previews, grouping, scrolling, long text, fullscreen, pause, teardown; body peak %zu bytes.\n",max_frame_bytes);
+    printf("Wardrobe checks passed: owned-only, equip-only, previews, grouping, scrolling, long text, fullscreen, pause, weapons, teardown; body peak %zu bytes.\n",max_frame_bytes);
     return 0;
 }
