@@ -154,9 +154,8 @@ FieldActor *Scene_LoadMap(u8 *scene, FieldActor *after, int allocateFull)
     actor->allocation_block = (uintptr_t)allocation;
 
     if (scene[0] == 0 && (areaType = &g_SceneAreaType)) {
-        Render_SetupEntityPrims(&actor->render_object, actor->model_state.model_header, allocation + 2 * sizeof(RenderShadowQuad), 0x3C0,
-                                0x100, 0, 0x1C0, 2, (s8 **)&renderSetup,
-                                allocateFull);
+        Render_SetupPlayerModel(&actor->render_object, actor->model_state.model_header,
+                                allocation + 2 * sizeof(RenderShadowQuad), allocateFull);
     } else {
         archive = *g_LoadedSceneAssetBlock;
         directory = SceneAsset_ResolveOffset(archive, archive->directoryOffset);
