@@ -3291,7 +3291,7 @@
     },
     {
       "path": "include/pe1/render_setup.h",
-      "sha256": "eb4007b53d2ce3695b272d4b619570b923668ad08bc0ca953991359457d5cd8a"
+      "sha256": "23ecdc860a528a476bc3a991ddd8c769ced6a651eb068217f6114528e83aaf9a"
     },
     {
       "path": "include/pe1/render_shadow.h",
@@ -4535,7 +4535,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "cc7afd8c845e5656ddffd325d094edcbec6a8f97e661813582b349e55a4bf286"
+      "sha256": "8d8fca6a1899eb69629b1a575e3b156a00af4e17f7b61fe23b6163f65c87781f"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
