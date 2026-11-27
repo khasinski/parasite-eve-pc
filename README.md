@@ -10,7 +10,7 @@ A native PC port of Parasite Eve, built from the original game code with
 ## Play
 
 Download the game from [GitHub Releases](https://github.com/khasinski/parasite-eve-pc/releases).
-This is an early alpha; see the release notes for available platforms and known issues.
+This release is in beta. See the release notes for available platforms and known issues.
 See the [changelog](CHANGELOG.md) for changes.
 
 Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
