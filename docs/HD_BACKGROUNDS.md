@@ -158,6 +158,13 @@ rejects unknown or malformed `required_features` before downloading the ZIP,
 retaining its active pack. Feature compatibility is independent of development
 build version strings. ZIP delivery remains a static nginx transfer.
 
+The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1` when requesting
+the catalog and archive. The server keeps versioned catalogs so older games
+without these capabilities continue receiving a compatible pack. The client
+rejects unknown or malformed `required_features` before downloading the ZIP,
+retaining its active pack. Feature compatibility is independent of development
+build version strings. ZIP delivery remains a static nginx transfer.
+
 Downloads report `User-Agent: ParasiteEve/VERSION`, `X-PE-Version`, `X-PE-Build`,
 `X-PE-Platform` and an ephemeral per-download ID. The server counts download starts before nginx sends the ZIP; update checks and HEAD requests do not count. It stores
 coarse client metadata and keyed daily visitor hashes, not raw IP addresses.
@@ -239,6 +246,12 @@ metadata contract. The installer treats matte markers as checksummed extras;
 corrupt markers invalidate verification and cannot replace a working pack.
 GPU tests cover valid/invalid markers, PNG/WebP parity, native VRAM, palette
 fallback, semitransparency and the legacy transparent-pixel guard.
+
+With a debug APK and an imported US Disc 1 on a headless Android emulator,
+`python3 tests/android_lifecycle.py --serial emulator-5566 --hd-render /new/evidence/directory --hd-pack /path/to/reviewed/pack`
+checks a synthetic underlay in 4:3 and 16:9, using the reviewed HD material masks
+that expose it. It compares identical materials with and without the underlay:
+native state, full VRAM and PCM must match. Rendered frames and hashes are retained.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,

@@ -46,6 +46,20 @@ def write_png_rgba(path,width,rows):
                            chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b''))
 
 
+def synthetic_underlay(geometry):
+    """A solid diagnostic backdrop, with no reconstructed game artwork."""
+    key = 0xa55156a55156a551
+    cells = [(x, y) for y in range(0, 240, 16) for x in range(0, 320, 16)]
+    width = 16*68
+    half = ((len(cells)+15)//16)*68
+    pixels = b'\0'*(width*half*3)+bytes((137, 11, 241))*(width*half)
+    header = struct.pack('<2sIHHI', b'BM', 54+len(pixels), 0, 0, 54)
+    header += struct.pack('<IiiHHIIiiII', 40, width, half*2, 1, 24, 0, len(pixels), 0, 0, 0, 0)
+    descriptor = struct.pack('<4sI', b'PEW1', 1)+struct.pack('<IIQiiii', 0, len(cells), key, 0, 320, 0, 240)
+    descriptor += b''.join(struct.pack('<hh', x, y) for x, y in cells)
+    return {f'{key:016x}.bmp': header+pixels, geometry+'-under.bin': descriptor}
+
+
 def main(executable):
     disc, pack = os.getenv('PE_TEST_DISC'), os.getenv('PE_TEST_HD_BACKGROUNDS')
     if not disc or not pack:
