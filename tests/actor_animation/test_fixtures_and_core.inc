@@ -245,10 +245,17 @@ static int boot_buffer_layout(void)
     second[0].length = 0x5678;
     second[4095].length = 0x9abc;
     memset(g_EntityAllocationTable, 0, sizeof(g_EntityAllocationTable));
-    for (unsigned i = 0; i < 16; ++i) {
+    for (unsigned i = 0; i < ENTITY_ALLOCATION_ORIGINAL_SLOTS; ++i) {
         u8 *block = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
         if (!block || block + ENTITY_ALLOCATION_BLOCK_SIZE > g_RenderFrontBufferBase[0])
             return 0;
+        block[ENTITY_ALLOCATION_BLOCK_SIZE - 1] = (u8)i;
+    }
+    u8 *overflow = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
+    if (!overflow) return 0;
+    for (unsigned i = 1; i < ENTITY_ALLOCATION_SLOTS - ENTITY_ALLOCATION_ORIGINAL_SLOTS; ++i) {
+        u8 *block = Entity_AllocBlock(ENTITY_ALLOCATION_BLOCK_SIZE);
+        if (block != overflow + i * ENTITY_ALLOCATION_BLOCK_SIZE) return 0;
         block[ENTITY_ALLOCATION_BLOCK_SIZE - 1] = (u8)i;
     }
     if (Entity_AllocBlock(1) || first[4095].length != 0x1234 ||
