@@ -71,6 +71,10 @@ Settings are saved in `pe_mods.ini`. The [mod directory](docs/MODS.md) lists ava
 - [Super Junk and Duper Junk](docs/pe-enhancements/economy.md#super-junk-and-duper-junk) explains
   how to earn bundles, turn them into spendable Junk, and change the rules.
 
+- **Randomizer** (`pe_randomizer`): **F1 → Randomizer**, before New Game — shuffles items and keys
+  from a six-digit seed, with keys moved only where the key logic allows, and writes a spoiler file. It runs alone: with
+  it on, the other mods stay off until it is turned off and the game restarted.
+
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 
 ## Build
