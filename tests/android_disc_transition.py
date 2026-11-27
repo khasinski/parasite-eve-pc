@@ -77,9 +77,10 @@ try:
         if not adb('shell','pidof',pkg+':game',check=False).strip():break
         current=nodes()
         texts=[n.get('text','') for n in current]
-        if any('Disc '+str(a.required_identity)+' required' in t for t in texts):
-            prompt_seen=True
-        if any('Select the Parasite Eve (USA) Disc' in t for t in texts) and 'OK' in texts:
+        requested = any(f'Disc {a.required_identity} required' in text for text in texts)
+        if requested:
+            prompt_seen = True
+        if requested and 'OK' in texts:
             click(current,'OK')
         elif a.supply_disc in texts:
             click(current,a.supply_disc)
