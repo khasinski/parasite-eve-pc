@@ -718,6 +718,10 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        add_test(NAME original-game-chinatown-interpolation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/chinatown_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-chinatown-interpolation PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;gpu")
         # Mouse support on the disc: the title, dialogue, the name entry, the Triangle and battle menus.
         add_test(NAME original-game-mouse COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/mouse_game.py $<TARGET_FILE:parasite-eve-pc>
