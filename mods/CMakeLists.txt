@@ -96,6 +96,7 @@ set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
+    host/pe_combat_presets.c # combined presets; features retain their own settings
     host/pe_pages.c         # PE Enhancements page layout
     host/pe_game.c          # game access helpers
     host/pe_encounter.c     # random encounters in room bytecode
@@ -136,6 +137,11 @@ endif()
 set(PE_EXTRA_MODS "" CACHE STRING "Additional mods appended to the configured suite")
 set(pe_enabled_mods ${PE_MOD_LIST} ${PE_EXTRA_MODS})
 list(REMOVE_DUPLICATES pe_enabled_mods)
+# The native battle module is compiled only for an explicit prototype build.
+list(REMOVE_ITEM pe_enabled_mods pe_melee)
+if(PE_MELEE_PROTOTYPE)
+    list(APPEND pe_enabled_mods pe_melee)
+endif()
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")
@@ -163,7 +169,10 @@ endif()
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
 target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host host/import
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
-target_compile_definitions(pe-mods PRIVATE __psyz)
+target_compile_definitions(pe-mods PRIVATE __psyz PE_COMBAT_PRESETS=1)
+if(PE_MELEE_PROTOTYPE)
+    target_compile_definitions(pe-mods PRIVATE PE_MELEE_PROTOTYPE=1)
+endif()
 target_link_libraries(pe-mods PRIVATE psyz)
 if(TARGET pe_download_json AND TARGET pe_download_zip)
     target_link_libraries(pe-mods PRIVATE pe_download_json pe_download_zip)
@@ -298,17 +307,12 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
         pe_rebalance/pe_atb_items.c pe_rebalance/pe_pe_balance.c host/pe_game_facts.c)
     add_executable(test-mod-combine ${PROJECT_SOURCE_DIR}/tests/pe_mod_combine_colour_test.c
         pe_rebalance/pe_combine.c pe_rebalance/pe_panacea.c)
-    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c
-        ${PROJECT_SOURCE_DIR}/src/main/item/actions.c)
+    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c)
     foreach(target test-mod-atb test-mod-combine test-mod-pe)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_rebalance)
         target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
         target_link_libraries(${target} PRIVATE psyz)
     endforeach()
-    if(MINGW)
-        # Allow unused original item-module entry points to be discarded in this fixture.
-        target_compile_options(test-mod-pe PRIVATE -fno-asynchronous-unwind-tables)
-    endif()
     add_test(NAME mod-atb COMMAND test-mod-atb)
     add_test(NAME mod-combine COMMAND test-mod-combine)
     add_test(NAME mod-panacea-off COMMAND test-mod-combine --panacea-off)
@@ -453,6 +457,8 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
     pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
+    pe_feature_test(combat-presets ${PROJECT_SOURCE_DIR}/tests/pe_combat_presets_test.c host/pe_combat_presets.c)
+    target_compile_definitions(test-mod-combat-presets PRIVATE PE_COMBAT_PRESETS=1)
     pe_feature_test(encounter ${PROJECT_SOURCE_DIR}/tests/pe_encounter_test.c host/pe_encounter.c)   # random-encounter spots
 endif()
 if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
