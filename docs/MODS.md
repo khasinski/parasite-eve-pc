@@ -209,6 +209,8 @@ from **Bestiary** in Aya's main menu, which appears once you have met a creature
 - **Weaknesses**: revealed by casting Scan on the creature, or after 5 kills. For a boss, beating
   it.
 - **Loot**: revealed after 15 kills. For a boss, only by buying it.
+- **Kill progress popups**: on by default. A defeat shows the updated kill count over the enemy
+  and the goal for its next kill-based unlock. The number turns gold when you reach that goal.
 - **Buy next tier**: any tier can be bought with Junk, which needs Junk economy.
 
 In the menu, Cross buys, Triangle shows the model full screen, Square pauses it, Select shows the
