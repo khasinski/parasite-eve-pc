@@ -95,6 +95,9 @@ typedef enum PeHookId {
     PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
     PE_HOOK_AUTO_MEDICINE, /* PeHookAutoMedicine: Auto Medicine is about to heal; the order it
                             * tries the medicines in may change; appended */
+    PE_HOOK_ITEM_ACTIONS_READY, /* PeHookItemActions: custom actions and initial cursor are ready */
+    PE_HOOK_ITEM_ACTION_ROW, /* PeHookItemActionRow: remap or draw a popup row */
+    PE_HOOK_QUICK_SEND_STACK, /* PeHookQuickSendStack: optional storage stack transfer */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -337,6 +340,17 @@ typedef struct PeHookItemActions {
     int context;                  /* g_MenuItemActionContext: 0 consumables, 1 and 2 others */
     int list_id, slot;            /* g_MenuActiveItemList (0 = Aya's bag), g_MenuActiveItemSlot */
 } PeHookItemActions;
+
+typedef struct PeHookItemActionRow {
+    struct MenuWidgetNode *list;
+    int row;
+} PeHookItemActionRow;
+
+typedef struct PeHookQuickSendStack {
+    int from_mode, from_index, vacancy;
+    int amount; /* zero queries, positive commits exactly that many */
+    int count, capacity, moved;
+} PeHookQuickSendStack;
 
 /* Removing the item on slot `index` of the active list (g_InvItemPtr). A handler that keeps the
  * slot (it took one copy off a stack) sets result to the item id it gave and returns nonzero. */

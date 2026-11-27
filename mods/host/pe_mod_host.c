@@ -505,6 +505,9 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_TEXT_LETTER] = "text letter",
         [PE_HOOK_DISC_READ] = "disc read",
         [PE_HOOK_AUTO_MEDICINE] = "auto medicine",
+        [PE_HOOK_ITEM_ACTIONS_READY] = "item actions ready",
+        [PE_HOOK_ITEM_ACTION_ROW] = "item action row",
+        [PE_HOOK_QUICK_SEND_STACK] = "quick send stack",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

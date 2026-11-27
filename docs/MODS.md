@@ -80,6 +80,9 @@ Manage mods name: **PE Enhancements: quality of life**.
 - **Bag sort**: Manual or Auto, saved with your game. Auto keeps the game's own sort order. Moving
   an item by hand switches back to Manual. Square in the Use Item list opens sorting.
 - **Inventory tips**: on by default.
+- **Quick Send**: off by default. In storage and reward menus, **Send >** or
+  **Send <** moves one item into the opposite pane. In storage, double arrows
+  send the entire selected stack if it fits. **Move** still lets you pick a slot.
 
 ### Rebalance
 
