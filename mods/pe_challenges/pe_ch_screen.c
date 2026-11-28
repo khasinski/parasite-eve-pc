@@ -42,13 +42,10 @@
 #define CH_COLOR_TEXT  0x808080    /* the game's menu white */
 #define CH_COLOR_GOLD  0x408080    /* the game's yellow */
 #define CH_HELP_TICKS  150         /* each title-bar page */
-#define CH_CONFIG_ROWS 4           /* the game's Config list */
 
 enum { CH_ACTIVE, CH_DONE, CH_COLUMNS };
 
 extern int g_DrawTextPosX;
-int Menu_MainMenuInputHandler(MenuWidgetNode *node, u32 buttons);
-void Menu_DrawMainMenuItem(int row);
 
 static PeScreen s_screen;
 static MenuWidgetNode *s_other, *s_head[CH_COLUMNS], *s_info, *s_config_panel;
@@ -378,71 +375,12 @@ static void pe_open(MenuWidgetNode *config_list) {
            list_y, row_h);
 }
 
-/* ---- the Config list's extra row ----------------------------------------------------------- */
-
 static int pe_config_has_row(void) { return pe_game_loaded() && !pe_in_battle(); }
 
-static void pe_config_item(int row) {
-    if (row < CH_CONFIG_ROWS) { Menu_DrawMainMenuItem(row); return; }
-    pe_text_from_ascii(s_text, sizeof s_text, "Challenges");
-    Draw_PrintCenteredTextInWidth(s_text, g_DrawTextPosX);
-}
-
-/* The game prints no title-bar line for a Config row past its 4 (selected_base 0x20); on ours the
- * list borrows the host's base that always prints, and pe_on_config_help gives the line. */
-static int s_config_base = -1;
-static void pe_config_draw(MenuWidgetNode *node) {
-    if (s_config_base >= 0)
-        node->selected_base = MenuWidget_GridCellIndex(node) >= CH_CONFIG_ROWS ? pe_screen_title_base() : s_config_base;
-    MenuWidget_DrawList(node, pe_config_item);
-}
-static int pe_is_config_list(const MenuWidgetNode *node) {
-    return node && (node->draw == (void (*)())Menu_DrawMainMenuList || node->draw == (void (*)())pe_config_draw);
-}
-
-static int pe_config_input(MenuWidgetNode *panel, u32 buttons) {
-    MenuWidgetNode *list = MenuWidget_GetChild(panel, 0);
-    if ((buttons & PE_MENU_CROSS) && list && MenuWidget_GridCellIndex(list) >= CH_CONFIG_ROWS) {
-        pe_open(list);
-        Menu_PlayConfirmSound();
-        return 1;
-    }
-    return Menu_MainMenuInputHandler(panel, buttons);
-}
-
-/* The Config list is laid out: one more row, drawn and confirmed by us. */
-static int pe_on_list_rows(void *ctx, void *user) {
-    PeHookListRows *r = ctx;
-    (void)user;
-    if (!r || !r->count || !pe_is_config_list(r->node) || *r->count != CH_CONFIG_ROWS || !pe_config_has_row()) return 0;
-    if (!r->node->parent || r->node->parent->update != (int (*)())Menu_MainMenuInputHandler) return 0;
-    r->node->draw = (void (*)())pe_config_draw;
-    r->node->parent->update = (int (*)())pe_config_input;
-    s_config_base = r->node->selected_base;
-    *r->count = CH_CONFIG_ROWS + 1;
-    /* The panel is as wide as the game's longest word; widen it (to the right) for ours. */
-    {
-        const int need = pe_width("Challenges") + 12, grow = need - r->node->draw_state;
-        if (grow > 0) {
-            r->node->draw_state += grow;
-            r->node->parent->grid_width += grow;
-        }
-    }
-    return 0;
-}
-
-/* The row's title-bar line. */
-static int pe_on_config_help(void *ctx, void *user) {
-    MenuWidgetNode *current = MenuWidget_GetCurrentNode();
-    (void)user;
-    if (!current || current->draw != (void (*)())pe_config_draw || MenuWidget_GridCellIndex(current) < CH_CONFIG_ROWS)
-        return 0;
-    *(u8 **)ctx = pe_text_from_ascii(s_text, sizeof s_text, "Active and completed challenges");
-    return 0;
-}
-
 void pe_ch_screen_register(const char *mod_id) {
-    pe_hook_add(PE_HOOK_LIST_ROWS, pe_on_list_rows, NULL, PE_PRIORITY_NORMAL, mod_id);
-    pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_config_help, NULL, PE_PRIORITY_LATE, mod_id);
+    static const PeSystemMenuRow row = {
+        "Challenges", "Active and completed challenges", pe_config_has_row, pe_open
+    };
+    pe_system_menu_add(&row);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
 }

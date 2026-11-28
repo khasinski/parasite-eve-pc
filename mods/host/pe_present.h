@@ -20,7 +20,8 @@
 
 #include "pe_image.h"
 
-#define PE_PRESENT_SLOTS 4
+#define PE_PRESENT_MAP_SLOT 4
+#define PE_PRESENT_SLOTS 5
 
 typedef enum PePresentMode { PE_PRESENT_BOX, PE_PRESENT_STRIPS } PePresentMode;
 

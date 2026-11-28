@@ -21,6 +21,12 @@ void pe_ui_gpu_hide(void) {
     s_pixels = NULL;
     s_visible = 0;
 }
+int pe_ui_gpu_show_hud(const uint8_t *rgba, int w, int h, float aspect) {
+    (void)rgba; (void)w; (void)h; (void)aspect;
+    return 0;
+}
+void pe_ui_gpu_hide_hud(void) {}
+int pe_ui_gpu_hud_visible(void) { return 0; }
 static void pe_destroy(void) {
     pe_ui_gpu_hide();
     s_win_w = s_win_h = 0;

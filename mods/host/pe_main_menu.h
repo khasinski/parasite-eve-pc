@@ -41,6 +41,16 @@ void pe_icon_part(int sprite, int u, int v, int w, int h, int dx, int dy, int dw
 
 void pe_main_menu_add(const PeMainMenuRow *row, int order);   /* row must outlive the game */
 
+/* Extra rows in Aya's SYS list. Row descriptors must outlive the game. */
+typedef struct PeSystemMenuRow {
+    const char *label;
+    const char *help;
+    int (*shown)(void);
+    void (*open)(struct MenuWidgetNode *list);
+} PeSystemMenuRow;
+
+void pe_system_menu_add(const PeSystemMenuRow *row);
+
 /* A screen: panel at (x, y), `width` wide, list of `rows_visible` rows (longer lists scroll).
  * The list's draw and the panel's update are the caller's; the list is made current. */
 #define PE_SCREEN_EXTRA 4
