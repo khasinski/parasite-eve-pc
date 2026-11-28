@@ -1,5 +1,5 @@
-/* The automatic import: what runs by itself (on a worker thread) when the game starts, and when
- * the player asks for a scan. No UI here, so the flow test runs exactly this.
+/* The automatic import runs on a worker thread when the player opens Import for the first time
+ * or asks for a scan. No UI here, so the flow test runs exactly this.
  *
  *   1. every disc image in the import folder that a source game knows is read into the store
  *      (once per file: unchanged files are skipped);
