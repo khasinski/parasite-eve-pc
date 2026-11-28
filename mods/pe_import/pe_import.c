@@ -1,7 +1,7 @@
 /* F1 > Import: models from the player's other PlayStation games, into Parasite Eve, by themselves.
  *
  * The player only provides the discs: disc images (.cue with its .bin, or .iso) in
- * <preferences>/import/discs/, loose or one folder deep. When the game starts, a worker thread runs
+ * <preferences>/import/discs/, loose or one folder deep. When the player first opens Import, a worker thread runs
  * the automatic import (pe_import_job.c): new or changed disc images are read into the store, and
  * everything the source games mark automatic (RE2: Claire, Leon) is built into packs in
  * <preferences>/packs/. On the main thread the Wardrobe then adds the new costumes at once
@@ -33,7 +33,7 @@ static PeImportJob s_job;
 static SDL_Thread *s_thread;
 static SDL_AtomicInt s_state;                 /* 0 idle, 1 working, 2 done (to be published) */
 static int s_started;
-static char s_auto[400] = "starting";
+static char s_auto[400] = "Waiting for the first scan";
 static char s_scan[240] = "-";
 static char s_build[240] = "-";
 
@@ -629,6 +629,7 @@ static int worker(void *user) {
 
 static int start_job(void) {
     if (SDL_GetAtomicInt(&s_state) != 0) return 0;
+    s_started = 1;
     SDL_SetAtomicInt(&s_state, 1);
     snprintf(s_auto, sizeof s_auto, "working: reading your disc images and building...");
     if (!s_lock) s_lock = SDL_CreateMutex();
@@ -678,7 +679,7 @@ static void publish(void) {
  * Called every field frame and from the page's own lines (frames stop while F1 is open; the
  * game sends no title-screen frames to mods). */
 static void poll(void) {
-    if (!s_started) s_started = 1, start_job();
+    if (!s_started) return;
     say_builds();
     if (SDL_GetAtomicInt(&s_state) == 2) publish();
     apply_picked();
@@ -741,6 +742,11 @@ static void open_folder(void) { open_path(s_job.discs); }
 static void open_rooms_folder(void) { open_path(s_rooms_dir); }
 
 static void text_auto(char *out, unsigned size) {                    /* F1 is open: no frames, so poll here */
+    if (!pe_mod_active(MOD_ID)) {
+        snprintf(out, size, "Off");
+        return;
+    }
+    if (!s_started) start_job();
     poll();
     if (SDL_GetAtomicInt(&s_state) == 1) progress_text(out, size);
     else snprintf(out, size, "%s", s_auto);
@@ -772,9 +778,9 @@ static int import_init(void) {
     pe_menu_register_info(0, "Disc images folder", "Put your disc images here (.cue with its .bin, or .iso), loose or one folder deep; a Resident Evil 3 PC folder (rofs1.dat) works too.", text_folder);
     pe_menu_register_action(0, "Open the folder", "Opens the disc images folder.", open_folder);
     pe_menu_register_info(0, "Added folders", "More folders disc images are read from, where they already are.", text_folders);
-    pe_menu_register_action(0, "Add a folder", "Pick a folder that holds disc images (loose or one game per subfolder); it's read at once and at every start.", add_folder);
+    pe_menu_register_action(0, "Add a folder", "Pick a folder that holds disc images (loose or one game per subfolder). Adding one starts a scan.", add_folder);
     pe_menu_register_action(0, "Forget added folders", "Stop reading the added folders. Costumes already built stay.", forget_folders);
-    pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
+    pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. The first scan runs when you open Import.", scan_again);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
     pe_menu_page("Build by hand", "Any other model from your scanned discs, built as a costume.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
@@ -814,11 +820,6 @@ static int import_init(void) {
         pe_menu_register_info("Music", "Playback", "What's playing.", music_status);
     }
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
-    /* The game binds its discs before the mods start (main.c), so the first run starts now, on its
-     * thread, while the title loads; its results reach the Wardrobe on the first field frame, or
-     * at once on this page (the menu stops frames). */
-    s_started = 1;
-    start_job();
     return 0;
 }
 
