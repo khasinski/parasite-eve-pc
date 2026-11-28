@@ -141,7 +141,7 @@ static int pe_map_frame(void *ctx, void *user) {
         area->visits[room / 8] |= (uint8_t)(1u << (room % 8));
         pe_log("minimap", "discovered room=%d", area->rooms[room].id);
     }
-    if (!s_enabled || (g_FieldMoveLock & 1) || pe_mod_panel_open()) {
+    if (!s_enabled || (g_FieldMoveLock & 1)) {
         pe_map_hide();
         return 0;
     }
@@ -227,7 +227,8 @@ void pe_minimap_shutdown(void) {
 void pe_minimap_register(const char *mod_id) {
     static const PeSystemMenuRow row = { "Map", "Show or hide the minimap", pe_map_menu_shown, pe_map_open };
     if (pe_save_register(&s_save) != 0) return;
-    pe_menu_bind_setting("PE Enhancements/Map/Minimap", &s_enabled, 0, 1);
+    pe_menu_register_toggle("Map", "Minimap",
+        "Show explored rooms and Aya's current room in the Chinatown sewers.", &s_enabled, NULL);
     pe_system_menu_add(&row);
     pe_hook_add(PE_HOOK_FRAME_DRAWN, pe_map_frame, NULL, PE_PRIORITY_EARLY, mod_id);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_map_menu_help, NULL, PE_PRIORITY_LATE, mod_id);
