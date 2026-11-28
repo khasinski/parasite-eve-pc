@@ -1,0 +1,18 @@
+# mod-randomizer-battlestats (tools/battlestats.py checks the output). Every line runs the real mod (gate, one
+# seed) with the enemy ops on (stats). Plain lines: each room's own fight, whose setup must match
+# pe_rand_enemies.h. Forced lines: force=E<MNNN:F gives actor E the stat block of room MNNN's actor F.
+M013 0x0 0x0 win stats gate seed=123456,2 id=plain-theater-rat
+M034 0x0 0x0 win stats gate seed=123456,2 id=plain-sewer-alligator
+M123 0x0 0x0 win stats gate seed=123456,2 id=plain-nypd-sheeva
+M207 0x0 0x0 win stats gate seed=123456,2 id=plain-museum-dinosaur
+M232 0x0 0x0 win stats gate seed=123456,2 id=plain-museum-lizards
+M434 0x0 0x0 win stats gate seed=123456,2 id=plain-chrysler-cat
+M436 0x0 0x0 win stats gate seed=123456,2 id=plain-chrysler-armadillo
+# a Day 1 rat with a Day 5 dinosaur's numbers, and the other way round
+M013 0x0 0x0 win gate seed=123456,2 force=2<M207:4 id=theater-rat-as-dinosaur
+M207 0x0 0x0 win gate seed=123456,2 force=4<M013:2 id=museum-dinosaur-as-rat
+# three lizards of one formation, all with a Chrysler cat's numbers
+M232 0x0 0x0 win gate seed=123456,2 force=5<M434:4 id=museum-lizards-as-cat
+# one actor of two (the boss's other part keeps its own), and one of five
+M034 0x0 0x0 win gate seed=123456,2 force=3<M013:2 id=sewer-alligator-as-rat
+M123 0x0 0x0 win gate seed=123456,2 force=2<M436:4 id=nypd-sheeva-part-as-armadillo

@@ -1,6 +1,8 @@
 /* Wardrobe in Aya's menu: Bestiary-style owned outfit browser and an isolated model stage.
  * Cross only wears; this screen never purchases, unlocks or invokes a provider's gameplay loader.
  * Ownership, availability and deferred equipment changes remain in pe_wardrobe.c.
+ * L2 / R2 switch to weapons on view (pe_wardrobe_weapons.c): Aya's gun and imported weapons, to
+ * look at only (Cross does nothing there).
  */
 #include <stdio.h>
 #include <string.h>
@@ -21,9 +23,11 @@
 #define PE_GAP 4
 #define PE_PICTURE 128
 #define PE_GROUPS 258              /* one unique group per outfit, plus All outfits */
-#define PE_MAX 257                 /* wardrobe registry's 256, plus story clothes */
+#define PE_MAX 257                 /* wardrobe registry's 256, plus story clothes; weapons' 256 */
 #define PE_ICON_SHIFT_X 3
 #define PE_ICON_SHIFT_Y 2
+#define PE_L2 0x1u
+#define PE_R2 0x2u
 #define PE_L1 0x4u
 #define PE_R1 0x8u
 #define PE_LEFT 0x8000u
@@ -40,12 +44,22 @@ static u8 s_text[160];
 static char s_note[96];
 static const char *s_group[PE_GROUPS];
 static int s_groups, s_category, s_member[PE_MAX], s_members, s_cursor[PE_GROUPS];
-static int s_shown = -1, s_bank = -1, s_preview, s_paused;
+static int s_shown = -1, s_shown_mode, s_bank = -1, s_preview, s_paused;
+static int s_mode;                 /* 0 outfits, 1 weapons */
 static int s_tick, s_drawn_tick, s_note_tick = -1000;
 
 /* Index zero is always the story outfit; all other indices come from the owned-only registry. */
 static const PeCostume *pe_costume(int index) { return index > 0 ? pe_wardrobe_owned(index - 1) : NULL; }
 static const char *pe_group_name(const PeCostume *c) { return c && c->group && *c->group ? c->group : "Aya's outfits"; }
+static int pe_items(void) {
+    const int n = s_mode ? pe_ward_weapons_count() : pe_wardrobe_owned_count() + 1;
+    return n < PE_MAX ? n : PE_MAX;
+}
+static const char *pe_item_group(int i) { return s_mode ? pe_ward_weapon_group(i) : pe_group_name(pe_costume(i)); }
+static const char *pe_item_name(int i) {
+    const PeCostume *c = pe_costume(i);
+    return s_mode ? pe_ward_weapon_name(i) : c ? c->name : "Aya's own clothes";
+}
 static int pe_current(void) {
     int row = s_screen.list ? MenuWidget_GridCellIndex(s_screen.list) : -1;
     return row >= 0 && row < s_members ? s_member[row] : -1;
@@ -69,9 +83,9 @@ static void pe_print(const char *line, int width, unsigned cap) {
 
 static void pe_build_groups(void) {
     int i, g;
-    s_groups = 1; s_group[0] = "All outfits";
-    for (i = 0; i <= pe_wardrobe_owned_count() && i < PE_MAX; ++i) {
-        const char *name = pe_group_name(pe_costume(i));
+    s_groups = 1; s_group[0] = s_mode ? "All weapons" : "All outfits";
+    for (i = 0; i < pe_items(); ++i) {
+        const char *name = pe_item_group(i);
         for (g = 1; g < s_groups && strcmp(s_group[g], name); ++g) {}
         if (g == s_groups && s_groups < PE_GROUPS) s_group[s_groups++] = name;
     }
@@ -80,16 +94,16 @@ static void pe_build_groups(void) {
 static void pe_build_members(void) {
     int i;
     s_members = 0;
-    for (i = 0; i <= pe_wardrobe_owned_count() && i < PE_MAX; ++i)
-        if (!s_category || !strcmp(pe_group_name(pe_costume(i)), s_group[s_category])) s_member[s_members++] = i;
+    for (i = 0; i < pe_items(); ++i)
+        if (!s_category || !strcmp(pe_item_group(i), s_group[s_category])) s_member[s_members++] = i;
 }
 
 static void pe_row(int row) {
     const PeCostume *c;
     if (row < 0 || row >= s_members) return;
     c = pe_costume(s_member[row]);
-    if (pe_wardrobe_worn() == c) Draw_SetColor(0x408080);   /* worn outfit in the game's yellow */
-    pe_print(c ? c->name : "Aya's own clothes", s_screen.list->draw_state - 4, 16);
+    if (!s_mode && pe_wardrobe_worn() == c) Draw_SetColor(0x408080);   /* worn outfit in the game's yellow */
+    pe_print(pe_item_name(s_member[row]), s_screen.list->draw_state - 4, 16);
     Draw_SetColor(0x808080);
 }
 
@@ -98,9 +112,14 @@ static void pe_update_model(void) {
     const PeCostume *c = pe_costume(index);
     s_drawn_tick = s_tick;
     if (pe_confirm_open()) { pe_stage_hide(&s_stage); s_shown = -1; return; }
-    if (index != s_shown || bank != s_bank) {
+    if (s_mode && (index != s_shown || s_shown_mode != s_mode)) {   /* a weapon: its own loader */
+        PeModelSource src;
+        s_shown = index; s_shown_mode = s_mode;
+        s_preview = pe_ward_weapon_source(index, &src) && pe_stage_show(&s_stage, &src, 0);
+        if (!s_preview) pe_stage_show(&s_stage, NULL, 0);
+    } else if (!s_mode && (index != s_shown || bank != s_bank || s_shown_mode != s_mode)) {
         PeModelSource src = {0};
-        s_shown = index; s_bank = bank; s_preview = 0;
+        s_shown = index; s_shown_mode = s_mode; s_bank = bank; s_preview = 0;
         src.kind = PE_MODEL_SKIN;
         src.map = (uint16_t)(c && c->bank >= 0 ? c->bank : bank);
         if (c && c->bank < 0) src.folder = c->bundle;
@@ -126,8 +145,8 @@ static void pe_info_row(int row) {
     const char *line = "";
     if (index < 0) return;
     /* Costumes are cosmetic. Combat styles are their own mod (pe_styles). */
-    if (row == 0) line = c ? c->name : "Aya's own clothes";
-    if (row == 1) line = pe_wardrobe_worn() == c ? "Worn" : "X: Wear this outfit";
+    if (row == 0) line = pe_item_name(index);
+    if (row == 1) line = s_mode ? pe_ward_weapon_note(index) : pe_wardrobe_worn() == c ? "Worn" : "X: Wear this outfit";
     static const unsigned caps[3] = {28, 24, 20};
     pe_print(line, s_info->draw_state - 4, caps[row]);
 }
@@ -140,9 +159,21 @@ static void pe_set_group(int group) {
     pe_screen_rows(&s_screen, s_members ? s_members : 1, s_cursor[s_category]);
 }
 
+/* Outfits or weapons: the list starts over on the first group (outfits: on the one worn). */
+static void pe_set_mode(int mode) {
+    const PeCostume *worn = pe_wardrobe_worn();
+    int row = 0, k;
+    s_mode = mode;
+    pe_build_groups(); s_category = 0; pe_build_members();
+    memset(s_cursor, 0, sizeof s_cursor);
+    for (k = 0; !mode && worn && k < pe_wardrobe_owned_count(); ++k) if (pe_wardrobe_owned(k) == worn) row = k + 1;
+    pe_screen_rows(&s_screen, s_members ? s_members : 1, row);
+}
+
 static void pe_close(void) {
     pe_stage_fullscreen(&s_stage, 0);
     pe_stage_hide(&s_stage);
+    pe_ward_weapons_release();
     pe_screen_close(&s_screen);
     s_frame = s_info = NULL;
     s_shown = -1;
@@ -158,8 +189,9 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
     if (buttons & PE_MENU_CIRCLE) { pe_close(); Menu_PlayCancelSound(); return 1; }
 
     if (buttons & PE_PRESS) return 1;
+    if (buttons & (PE_L2 | PE_R2)) { pe_set_mode(!s_mode); Menu_PlayMoveSound(); return 1; }
     if (buttons & PE_MENU_CROSS) {
-        if (index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
+        if (s_mode || index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
         pe_wardrobe_wear_later(c);
         snprintf(s_note, sizeof s_note, pe_l10n_ui("%s when you close the menu"), c ? pe_l10n_ui("Wearing it") : pe_l10n_ui("Back to her own clothes"));
         s_note_tick = s_tick;
@@ -184,7 +216,9 @@ static int pe_on_help_text(void *ctx, void *user) {
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_tick - s_note_tick < 150) snprintf(line, sizeof line, "%s", s_note);
     else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Group   Left Right: Turn"));
-    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Wear   Square: Pause   Circle: Back"));
+    else if ((s_tick / 150) % 3 == 2)
+        snprintf(line, sizeof line, "%s", pe_l10n_ui(s_mode ? "L2 R2: Outfits   Square: Pause" : "L2 R2: Weapons   X: Wear"));
+    else if (s_mode) snprintf(line, sizeof line, pe_l10n_ui("%s   %d weapons"), pe_l10n_ui(s_group[s_category]), s_members);
     else snprintf(line, sizeof line, pe_l10n_ui("%s   %d outfits   X: Wear"), pe_l10n_ui(s_group[s_category]), s_members);
     pe_tr_ascii(s_text, sizeof s_text, line);
     n = 0;
@@ -204,10 +238,9 @@ static void pe_open(MenuWidgetNode *main_list) {
     const MenuWidgetSimpleDescriptor *d = MenuWidget_LookupSimpleDescriptor(1);
     const int x = d && d->x > 0 ? d->x : 28, y = d && d->y > 0 ? d->y : 24;
     const int width = d && d->width > 0 ? d->width : 252;
-    int ix, iy, iw, ih, bx, by, bw, bh, row = 0, k;
-    const PeCostume *worn = pe_wardrobe_worn();
-    pe_build_groups(); s_category = 0; pe_build_members();
-    for (k = 0; worn && k < pe_wardrobe_owned_count(); ++k) if (pe_wardrobe_owned(k) == worn) row = k + 1;
+    int ix, iy, iw, ih, bx, by, bw, bh;
+    pe_ward_weapons_refresh();
+    s_mode = 0; pe_build_groups(); s_category = 0; pe_build_members();
     s_note_tick = -1000; s_shown = -1; s_preview = s_paused = 0;
     pe_stage_fullscreen(&s_stage, 0);
     pe_screen_open(&s_screen, main_list, x, y, PE_LIST_W, PE_LIST_ROWS, pe_draw_list, pe_input);
@@ -220,10 +253,12 @@ static void pe_open(MenuWidgetNode *main_list) {
     if (bw > PE_PICTURE) bx += (bw - PE_PICTURE) / 2, bw = PE_PICTURE;
     if (bh > PE_PICTURE) by += (bh - PE_PICTURE) / 2, bh = PE_PICTURE;
     pe_stage_place(&s_stage, bx, by, bw, bh);
-    pe_screen_rows(&s_screen, s_members, row);
+    pe_set_mode(0);
 }
 
-static int pe_row_shown(void) { return pe_wardrobe_owned_count() > 0; }
+/* Once there's something to look at: an outfit owned, or a weapon imported (Aya's gun is always
+ * listed). */
+static int pe_row_shown(void) { return pe_wardrobe_owned_count() > 0 || pe_ward_weapons_count() > 1; }
 
 /* The Equip Armor icon twice, the one behind up and right; the pair centred on the icon's spot. */
 static void pe_icon(PeHookMainMenuIcon *icon) {
@@ -238,6 +273,7 @@ static const PeMainMenuRow s_row = { "Wardrobe", 0, pe_row_shown, pe_open, pe_ic
 
 void pe_wardrobe_menu_register(const char *mod_id) {
     pe_stage_init(&s_stage, 3, 0x101828u);  /* Bestiary owns slot 2; tools use 0 and 1 */
+    pe_ward_weapons_refresh();               /* whether there's a weapon to show the row for */
     pe_main_menu_add(&s_row, 30);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_NORMAL, mod_id);

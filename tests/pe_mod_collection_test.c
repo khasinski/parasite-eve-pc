@@ -14,6 +14,8 @@
 #include "pe_model.h"
 #include "pe_wardrobe.h"
 #include "pe1/game_state.h"
+#include "pe1/psyq_gpu.h"
+#include "pe1/render_prim.h"
 
 extern const PeMod pe_mod_pe_collection;
 extern const PeMod pe_mod_pe_wardrobe;
@@ -26,6 +28,19 @@ Pe1GameState g_GameState;
 GameStateBlock g_GameStateBlock;
 BattleEnemySlot g_BattleEnemySlots[7];
 struct FieldActor *g_FieldActorListHead;
+int g_ActiveDrawSlot;
+static RenderNativeTag s_ordering[8];
+static RenderSpritePacket s_glyphs[5];
+static unsigned s_glyph_count;
+
+u_short GetTPage(int tp, int abr, int x, int y) { (void)tp; (void)abr; (void)x; (void)y; return 0; }
+u_short GetClut(int x, int y) { (void)x; (void)y; return 0; }
+void Draw_InitDrawModeSprtPacket(void *packet, int page) { (void)packet; (void)page; }
+void AddPrim(void *ot, void *primitive) {
+    const RenderPagedSpritePacket *packet = primitive;
+    assert(ot == s_ordering + 4 && s_glyph_count < 5);
+    s_glyphs[s_glyph_count++] = packet->sprite;
+}
 static int s_room = 374;
 static char s_dir[512];
 static uint32_t s_junk = 1000;
@@ -65,7 +80,12 @@ int pe_mod_path(char *out, size_t size, const char *file) { snprintf(out, size, 
 void pe_mod_log(const char *m, const char *f, ...) { (void)m; (void)f; }
 void pe_log(const char *t, const char *f, ...) { (void)t; (void)f; }
 void pe_toast(const char *t) { (void)t; }
-int pe_menu_register_toggle(const char *s, const char *l, const char *d, int *f, PeMenuPerFrame p) { (void)s; (void)l; (void)d; (void)f; (void)p; return 0; }
+static int *s_kill_popups;
+int pe_menu_register_toggle(const char *s, const char *l, const char *d, int *f, PeMenuPerFrame p) {
+    (void)s; (void)d; (void)p;
+    if (!strcmp(l, "Kill progress popups")) s_kill_popups = f;
+    return 0;
+}
 static PeMenuAction unlock_costumes, lock_costumes, unlock_bestiary, reset_bestiary;
 static PeMenuAction reset_wardrobe, reset_collection;
 int pe_menu_register_action(const char *s, const char *l, const char *d, PeMenuAction a) {
@@ -353,7 +373,33 @@ int main(void) {
     }
     assert(b->map(999, 0x42, zombie));
     s_room = 999;
-    for (i = 0; i < 5; ++i) kill_once(0, 0x42);
+    {
+        BattleEntity enemy = {0};
+        enemy.core = (Combatant *)&g_BattleEnemySlots[0].combatant;
+        enemy.renderObject.projected_target_x = 160;
+        enemy.renderObject.projected_target_y = 110;
+        g_FieldActorListHead = (struct FieldActor *)&enemy;
+        g_GameState.render_buffers.ordering[0] = s_ordering;
+        for (i = 0; i < 4; ++i) kill_once(0, 0x42);
+        s_hook[PE_HOOK_BATTLE_HUD](NULL, NULL);
+        assert(s_glyph_count == 3 && s_glyphs[0].u == 4 * 8 && s_glyphs[1].u == 10 * 8 &&
+               s_glyphs[2].u == 5 * 8 && s_glyphs[0].y < 110);
+        assert(s_glyphs[0].color.bytes.r == s_glyphs[0].color.bytes.b);
+
+        kill_once(0, 0x42);
+        s_glyph_count = 0;
+        s_hook[PE_HOOK_BATTLE_HUD](NULL, NULL);
+        assert(s_glyph_count == 3 && s_glyphs[0].u == 5 * 8 &&
+               s_glyphs[0].color.bytes.r > s_glyphs[0].color.bytes.g &&
+               s_glyphs[0].color.bytes.g > s_glyphs[0].color.bytes.b);
+        assert(s_kill_popups && *s_kill_popups);
+        *s_kill_popups = 0;
+        s_glyph_count = 0;
+        s_hook[PE_HOOK_BATTLE_HUD](NULL, NULL);
+        assert(s_glyph_count == 0);
+        *s_kill_popups = 1;
+        g_FieldActorListHead = NULL;
+    }
     assert(b->kills(zombie) == 5 && (b->state(zombie) & 3u) == 3u);
     assert(s_unlock_events == 2);                    /* new entry, then weaknesses */
     assert(strcmp(last_filter("Area"), "Resident Evil 2") == 0);

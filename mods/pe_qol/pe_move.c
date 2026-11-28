@@ -51,6 +51,7 @@ static const char *const s_entry_names[] = { "Normal", "1.5x", "2x", "3x", "4x" 
 static const int32_t s_entry_factor[] = { 0x10000, 0x18000, 0x20000, 0x30000, 0x40000 };
 #define PE_ENTRY_CHOICES 5
 
+#define PE_QOL_ID "pe_qol"
 static int s_always_run = 1;
 static int s_run_choice = 3, s_walk_choice = 3;   /* 1.75x field movement by default */
 static int s_combat_choice = 0, s_entry_choice = 0;
@@ -223,8 +224,9 @@ void pe_move_register(const char *mod_id) {
 
     pe_hook_add(PE_HOOK_FRAME, pe_on_run_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_on_interact_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
-    pe_hook_add(PE_HOOK_PAD_READ, pe_on_pad_read, NULL, PE_PRIORITY_NORMAL, mod_id);
-    pe_hook_add(PE_HOOK_PAD_MAP, pe_on_pad_map, NULL, PE_PRIORITY_NORMAL, mod_id);
+    /* Always run is the one feature that goes on while the randomizer runs alone. */
+    pe_hook_add_beside(PE_HOOK_PAD_READ, pe_on_pad_read, NULL, PE_PRIORITY_NORMAL, mod_id);
+    pe_hook_add_beside(PE_HOOK_PAD_MAP, pe_on_pad_map, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_ACTOR_STEP, pe_on_actor_step, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_MOVE, pe_on_player_move, NULL, PE_PRIORITY_NORMAL, mod_id);
 }

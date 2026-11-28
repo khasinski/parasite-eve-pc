@@ -30,6 +30,7 @@
 #include "pe1/psyq_gpu.h"
 #include "pe1/render_camera.h"
 #include "pe1/render_prim.h"
+#include "pe1/render_setup.h"
 #include "pe1/render_shadow.h"
 #include "pe1/resident_tables.h"
 #include "pe1/room_drop_field.h"
@@ -1019,6 +1020,26 @@ static void SceneRoom_InstallAndResetScriptDescriptor(int room_number, unsigned 
     }
 }
 
+/* Script slots for the battle randomizer (an actor brought from another room): what a slot holds, a slot
+ * set back as it was, and another room's handler record installed the way that room's own load does it. */
+const void *SceneRoom_ScriptSlot(unsigned int slot)
+{
+    return slot < 85 ? (const void *)g_PmCmdHandlerTable[slot] : slot < 85 + 104 ? g_FieldFxTaskPrograms[slot - 85] : NULL;
+}
+
+void SceneRoom_SetScriptSlot(unsigned int slot, const void *native)
+{
+    if (slot < 85) g_PmCmdHandlerTable[slot] = (void *)native;
+    else if (slot < 85 + 104) g_FieldFxTaskPrograms[slot - 85] = (void *)native;
+}
+
+const void *SceneRoom_InstallRoomScript(int room_number, unsigned int slot, u32 address)
+{
+    const void *native = slot < 85 + 104 ? SceneRoom_ResolveScriptDescriptor(room_number, slot, address) : NULL;
+    if (native) SceneRoom_InstallAndResetScriptDescriptor(room_number, slot, native);
+    return native;
+}
+
 int Scene_LoadRoom(unsigned int roomId)
 {
     static GeomState *geometry_owner;
@@ -1547,7 +1568,6 @@ retry:
  * the entity texture banks, then the player's model and render object. */
 s32 Scene_InitEntityPlayer(s32 resume) {
     Pe1GameState *gameState = &g_GameState;
-    s8 *renderSetup;
     u32 area;
     u8 saved;
     int result;
@@ -1618,9 +1638,8 @@ s32 Scene_InitEntityPlayer(s32 resume) {
         }
         {
             FieldActor *player = g_PlayerEntity;
-            Render_SetupEntityPrims(&player->render_object, player->model_state.model_header,
-                                    (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 0x3C0, 0x100, 0,
-                                    0x1C0, 2, &renderSetup, 1);
+            Render_SetupPlayerModel(&player->render_object, player->model_state.model_header,
+                                    (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 1);
             PeModelTextures_Player(&player->render_object,g_GameState.loaded_entity_bank);
         }
         {

@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <instrumentation android:name="com.khasinski.parasiteeve.TouchControlsTest"
+        android:targetProcesses="com.khasinski.parasiteeve:game" />
+</manifest>

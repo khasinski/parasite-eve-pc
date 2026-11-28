@@ -105,6 +105,14 @@ typedef enum PeHookId {
     PE_HOOK_FIELD_CAMERA, /* PeHookFieldCamera: nonzero supplies a fixed view for native actor drawing */
     PE_HOOK_FIELD_MOVE, /* FieldActor *: after Aya integrates a movement step; positive consumes it
                          * in a preview and restores her host-room position */
+    PE_HOOK_ITEM_ACTIONS_READY, /* PeHookItemActions: custom actions and initial cursor are ready */
+    PE_HOOK_ITEM_ACTION_ROW, /* PeHookItemActionRow: remap or draw a popup row */
+    PE_HOOK_QUICK_SEND_STACK, /* PeHookQuickSendStack: optional storage stack transfer */
+    PE_HOOK_MIRROR_MODEL, /* FieldActor * reflected owner: return 1 to draw its current model. */
+    PE_HOOK_ENEMY_FIELD, /* PeHookEnemyField: Entity_WriteFieldByCmd entry (script ops 90 / 206 on an
+                          * actor); the value may be changed */
+    PE_HOOK_ENEMY_POWER, /* PeHookEnemyPower: an actor's script sets an attack's power (ops 112 / 183); the
+                          * power may be changed */
     PE_HOOK_AMMO_POOL, /* PeHookAmmoPool: which ammo pool record a weapon or ammo item uses
                         * (Inv_AmmoPoolIndex); a mod's ammo scheme may pick another; appended */
     PE_HOOK_SAVE_INVENTORY, /* int *: 0 before native card serialization, 1 after (including failure) */
@@ -333,6 +341,17 @@ typedef enum PeNewGameKind {
     PE_NEW_GAME_TUTORIAL = 3,  /* MenuCard_RunListScreen result 3 */
 } PeNewGameKind;
 
+typedef struct PeHookEnemyField {
+    struct FieldActor *actor;
+    int code;  /* field code, 0x28+ (battle/context.c) */
+    int value;
+} PeHookEnemyField;
+
+typedef struct PeHookEnemyPower {
+    struct FieldActor *actor;
+    int power;
+} PeHookEnemyPower;
+
 typedef enum PeTitleRequest {
     PE_TITLE_STAY = 0,
     PE_TITLE_CONTINUE = 1,
@@ -387,6 +406,17 @@ typedef struct PeHookItemActions {
     int context;                  /* g_MenuItemActionContext: 0 consumables, 1 and 2 others */
     int list_id, slot;            /* g_MenuActiveItemList (0 = Aya's bag), g_MenuActiveItemSlot */
 } PeHookItemActions;
+
+typedef struct PeHookItemActionRow {
+    struct MenuWidgetNode *list;
+    int row;
+} PeHookItemActionRow;
+
+typedef struct PeHookQuickSendStack {
+    int from_mode, from_index, vacancy;
+    int amount; /* zero queries, positive commits exactly that many */
+    int count, capacity, moved;
+} PeHookQuickSendStack;
 
 /* Removing the item on slot `index` of the active list (g_InvItemPtr). A handler that keeps the
  * slot (it took one copy off a stack) sets result to the item id it gave and returns nonzero. */

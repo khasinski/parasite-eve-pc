@@ -26,6 +26,9 @@ option(PE_MACOS_BUNDLE "Package the macOS application bundle" OFF)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+if(ANDROID)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 
 option(PE_ENABLE_COVERAGE "Measure execution coverage with Clang/LLVM" OFF)
 if(PE_ENABLE_COVERAGE)
@@ -39,6 +42,8 @@ endif()
 
 option(BUILD_TESTING "Build original game tests" OFF)
 include(CTest)
+
+option(PE_MELEE_PROTOTYPE "Build the experimental Melee Combat features" OFF)
 
 # Mod host (mods/). Off: the PE_HOOK lines compile to nothing.
 option(PE_MODS "Build with the mod host and the mods in mods/" OFF)
@@ -155,6 +160,43 @@ elseif(WIN32)
         URL_HASH SHA256=e8e74cdeefe5fb78b3ae6e90cd542babf788fa9480029cfcee6fd9ced42b7910 EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(pe_curl)
     target_link_libraries(pe_download_deps INTERFACE CURL::libcurl)
+elseif(ANDROID)
+    # Android has no system libcurl. Keep the same download and screenshot
+    # implementation, backed by native TLS and the device's system roots.
+    set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(pe_mbedtls
+        URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2
+        URL_HASH SHA256=a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6
+        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(pe_mbedtls)
+    set(MBEDTLS_INCLUDE_DIR "${pe_mbedtls_SOURCE_DIR}/include")
+    set(MBEDTLS_LIBRARY mbedtls)
+    set(MBEDX509_LIBRARY mbedx509)
+    set(MBEDCRYPTO_LIBRARY mbedcrypto)
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+    set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+    set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_GSSAPI OFF CACHE BOOL "" FORCE)
+    set(CURL_ZLIB OFF CACHE BOOL "" FORCE)
+    set(CURL_BROTLI OFF CACHE BOOL "" FORCE)
+    set(CURL_ZSTD OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+    set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+    set(CURL_CA_PATH /system/etc/security/cacerts CACHE STRING "Android trusted certificate directory")
+    FetchContent_Declare(pe_curl
+        URL https://github.com/curl/curl/releases/download/curl-8_23_0/curl-8.23.0.tar.gz
+        URL_HASH SHA256=e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49
+        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(pe_curl)
+    target_link_libraries(pe_download_deps INTERFACE CURL::libcurl)
 else()
     find_package(CURL REQUIRED)
     target_link_libraries(pe_download_deps INTERFACE CURL::libcurl)
@@ -165,7 +207,17 @@ else()
 endif()
 
 # The executable starts the original game and compiles its modules in place.
-add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
+if(ANDROID)
+    add_library(parasite-eve-pc SHARED src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
+    set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME main)
+    target_compile_definitions(parasite-eve-pc PRIVATE main=SDL_main)
+else()
+    add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
+    if(MINGW)
+        # The standalone Windows game must also work without MinGW runtime DLLs.
+        target_link_options(parasite-eve-pc PRIVATE -static)
+    endif()
+endif()
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
 set(PE_BUILD_ID "0.15-source")
@@ -447,6 +499,10 @@ add_library(parasite-eve-original OBJECT
     src/overlays/room_lib/timed_spawn.c
     src/overlays/room_lib/homing_projectile_seeds.c
     src/overlays/room_lib/script_args.c)
+if(PE_MELEE_PROTOTYPE)
+    target_sources(parasite-eve-original PRIVATE src/main/battle/melee.c)
+    target_compile_definitions(parasite-eve-original PRIVATE PE_MELEE_PROTOTYPE=1)
+endif()
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
 set_property(SOURCE src/main/boot/init.c src/main/boot/mouse_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
@@ -666,6 +722,11 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
     target_link_libraries(test-original-actor-animation PRIVATE psyz ${PE_COMMON_GAME_LIBS})
+    if(PE_MELEE_PROTOTYPE AND PE_MODS)
+        target_compile_definitions(test-original-actor-animation PRIVATE PE_MELEE_PROTOTYPE=1 PE_MODS=1)
+        add_test(NAME prototype-melee-damage-rules COMMAND test-original-actor-animation
+            --melee-rules ${CMAKE_BINARY_DIR}/melee-rules-evidence)
+    endif()
     add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
     set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)
@@ -721,6 +782,10 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        add_test(NAME original-game-chinatown-interpolation COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/chinatown_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-chinatown-interpolation PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;gpu")
         # Mouse support on the disc: the title, dialogue, the name entry, the Triangle and battle menus.
         add_test(NAME original-game-mouse COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/mouse_game.py $<TARGET_FILE:parasite-eve-pc>

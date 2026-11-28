@@ -190,6 +190,9 @@ void Battle_StepEnemyMovement(BattleEntity *entity)
             (*statusFlags) |= 0x01000000;
         }
     }
+#ifdef PE_MELEE_PROTOTYPE
+    damage = Battle_MeleeOnDamage(entity, damage);
+#endif
 #if defined(PE_MODS) && PE_MODS
     {
         PeHookEnemyDamage query = {.source = g_ActiveActor, .target = entity, .damage = &damage,

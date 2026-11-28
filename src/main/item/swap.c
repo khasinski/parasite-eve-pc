@@ -489,6 +489,63 @@ int Inv_IsSlotEquipped(int index) {
     return allowed;
 }
 
+/* Return a destination in the same coordinate space as the native Move
+ * callback. Storage's bag pane uses filtered row indices. */
+int Inv_FindQuickSendVacancy(int fromMode, int fromIndex, int toMode) {
+    enum { STORAGE_BAG = 0x33, STORAGE_LIST = 0x34 };
+    const int storage = (fromMode == STORAGE_BAG && toMode == STORAGE_LIST) ||
+                        (fromMode == STORAGE_LIST && toMode == STORAGE_BAG);
+    const int pending = (fromMode == LIST_AYA && toMode == LIST_ACTIVE) ||
+                        (fromMode == LIST_ACTIVE && toMode == LIST_AYA);
+    if (!storage && !pending) return -1;
+
+    const int fromBag = fromMode == STORAGE_BAG || fromMode == LIST_AYA;
+    s16 *other = storage ? g_InvActiveItemList : g_InvActiveListItems;
+    const int bagLimit = Inv_GetAyaSlotLimit();
+    const int otherLimit = storage ? g_InvActiveListSlotCount : g_InvActiveListCount;
+    const int bagRows = storage ? g_InvTransferItemCount : bagLimit;
+    if (!other || fromIndex < 0 || fromIndex >= (fromBag ? bagRows : otherLimit))
+        return -1;
+
+    const int sourceSlot = fromMode == STORAGE_BAG ? WayneSlot(fromIndex) : fromIndex;
+    if (fromBag && (sourceSlot < 0 || sourceSlot >= bagLimit)) return -1;
+    const int id = fromBag ? g_AyaInventoryItems[sourceSlot] : other[sourceSlot];
+    const ItemDataRecord *item = Inv_LookupItemRecord(id);
+    if (!item || (storage && !fromBag && item->kind >= 19 && item->kind < 22))
+        return -1;
+
+    s16 *savedItems = g_InvItemPtr;
+    const int savedLimit = g_InvSlotLimit;
+    int target = -1;
+    g_InvItemPtr = g_AyaInventoryItems;
+    g_InvSlotLimit = bagLimit;
+    if (fromBag) {
+        const int allowed = storage ? Inv_IsSlotEquipped(sourceSlot) :
+            Inv_IsSlotSelectable(sourceSlot) && !IsEquippedSlot(sourceSlot);
+        if (allowed && !Inv_IsAyaInventorySlotReserved(sourceSlot)) {
+            for (int slot = 0; slot < otherLimit; slot++) {
+                if (!other[slot]) {
+                    target = slot;
+                    break;
+                }
+            }
+        }
+    } else {
+        int firstSlot = bagLimit;
+        for (int row = 0; row < bagRows; row++) {
+            const int slot = storage ? WayneSlot(row) : row;
+            if (slot >= 0 && slot < firstSlot && !g_AyaInventoryItems[slot] &&
+                !IsEquippedSlot(slot) && !Inv_IsAyaInventorySlotReserved(slot)) {
+                firstSlot = slot;
+                target = row;
+            }
+        }
+    }
+    g_InvItemPtr = savedItems;
+    g_InvSlotLimit = savedLimit;
+    return target;
+}
+
 /* Historical name: swaps inventory/storage entries after eligibility checks. */
 int Inv_RebuildWithSlotLimit(int fromMode, int fromIndex, int toMode, int toIndex) {
     int success = 1;

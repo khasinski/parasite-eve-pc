@@ -25,7 +25,7 @@ Keep each CUE file next to its BIN file. A CHD is a single file (its first track
 
 **HD backgrounds:** open **Escape → Mods → Background pack** to download or update the optional artwork.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
-You can also [download the pack manually](https://pe.polanka.ovh/). Widescreen uses the artwork available for each room; some rooms still have black borders.
+You can also [download the pack manually](https://pe.polanka.ovh/). See [how to use the extracted pack](docs/MODS.md#using-a-manually-downloaded-hd-background-pack). Widescreen uses the artwork available for each room; some rooms still have black borders.
 
 **Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. Choose **Fast forward** there to assign a key or controller button: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Fast-forward button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
@@ -37,6 +37,15 @@ The game ships with no translations. Put a `.pelang` language pack in the `lang`
 Translators can try the [Simplified Chinese rendering pilot](localization/pilots/zh-Hans/README.md). It demonstrates Chinese fonts and dialogue; it is not a complete translation.
 
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
+
+On the desktop GPU renderer, you can supply your own upscaled movie frames. Set
+`PE_FMV_DIR` to the parent folder and use the movie's disc filename without its
+extension as the subfolder name. For example, `FMV001/000001.webp` replaces
+frame 1 of `FMV001.STR`. Use six-digit frame numbers matching the original STR
+and 4:3 WebP images up to 4096 pixels on each side. The original disc supplies
+the timing and audio. Missing frames use the disc image, and START still skips
+or pauses the movie as usual.
+
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
@@ -51,54 +60,20 @@ If the game crashes, it saves a report and shows where to find it. Attach that f
 Downloads include an optional mod host. When building from source, enable it with `-DPE_MODS=ON`. Without it, the
 `PE_HOOK(...)` lines in the game compile to nothing. In a mod build, **F1** opens the Mods panel;
 mods start only after **F1 → Manage mods → All mods** is turned on and the game restarted.
-Settings are saved in `pe_mods.ini`. [Built-in mods](docs/MODS.md) describes each mod, its F1 settings and defaults,
-and what the `mods` folder is for: the mods are built into the game, so that folder holds only the developer
-guide. See [the mod guide](mods/README.md) for writing a mod.
+Settings are saved in `pe_mods.ini`. The [mod directory](docs/MODS.md) lists available mods, where to find them, and which ones need extra files. See the [developer guide](mods/README.md) for writing a mod.
 
 ### PE Enhancements
 
-Open **F1 → PE Enhancements** to configure them.
+**In game, press F1 and open PE Enhancements.**
 
-- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, hold a button to skip dialogue, Always Run and configurable walk, run, combat and battle-entry speeds
-  (walking and running default to 1.75×).
-- **Encounters** (`pe_qol`): no random battles, or Normal, 2×, 4× or Every Check frequency. Story
-  and room rules still apply; this changes how often fights happen, not their size.
-- **Key-item pocket** (`pe_qol`): story keys and Chrysler elevator keys stay out of the bag but
-  still count for story checks; browse them through **Key Items** in Aya's main menu.
-- **Remembered sorting** (`pe_qol`): Auto keeps the game's own sort settings; moving items by hand
-  switches back to Manual. Square in the Use Item list opens sorting.
-- **Combat rules** (`pe_rebalance`): Vanilla, Rebalanced and Custom rules for gun and armor
-  effects: Heat/Frost, Rate of Fire, gun progression bonuses, Attack All crowd damage, status
-  chances, Critical Up, Quickdraw and armor tradeoffs; weapon DPS in the help text.
-- **Parasite Energy rules** (`pe_rebalance`): Vanilla, Rebalanced and Custom healing amounts and
-  power costs.
-- **Half-bar turns** (`pe_rebalance`): items, Quick PE powers and weapon changes on half a bar,
-  with a gauge indicator; attacks and other powers still need a full bar.
-- **Medicine combining and Panacea** (`pe_rebalance`): two Medicine 1/2/3 become the next tier;
-  Medicine 4 and Full Cure become Panacea (400 HP and cures ailments).
-- **Junk economy** (`pe_economy`): a shared Junk counter, battle and steal rewards, Super/Duper
-  Junk conversion, difficulty presets, rare drops with soft pity, a Junk counter beside the
-  bag's Quantity, and four economy armor effects (Bargain, Scavenger, Lucky Find, Salvager).
-- **Mod Catalog** (`pe_economy`): dismantle equipment to unlock effects, then install, remove or
-  replace them on equipped gear, from Aya's main menu or F1; Rebuild buys dismantled gear back.
-- **Requisition and Wayne's Workshop** (`pe_economy`): buy medicine, ammo, Smoke Grenades,
-  Revive and Tools with Junk, from F1 or Wayne's own menu (also Mod Permit Cards); Warner offers
-  storage and the Workshop where he stands guard on Day 4. Smoke Grenades escape ordinary battles.
-- **Bestiary** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk, kept across games
-  in `pe_collection.ini`.
-- **Wardrobe** (`pe_wardrobe`): Aya's outfits and character skins to unlock and wear. Skins are
-  built from your own disc with the decomp bridge tools and stay hidden until present. Unlocks are
-  kept across games in `pe_wardrobe.ini` (imported once from `pe_collection.ini`). Other mods can
-  register their own creatures and costumes.
-- **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
-  the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
-  are kept beside the preferences as `quicksave_<slot>.pec`; quick load also works from the title screen. Quick saves work during battles, events and movies.
-- **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
-  and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
-  writes nothing to the game state.
-- **Warp** (`pe_warp`): **F1 → Warp** — jump to any story checkpoint. It sets the story-progress
-  variable and runs the room transfer on the next free field frame, never during a battle, an
-  event, a room change or a movie.
+- [PE Enhancements player guide](docs/pe-enhancements/README.md) explains movement, combat,
+  inventory, shops, and collection features, including what’s enabled by default.
+- [Super Junk and Duper Junk](docs/pe-enhancements/economy.md#super-junk-and-duper-junk) explains
+  how to earn bundles, turn them into spendable Junk, and change the rules.
+
+- **Randomizer** (`pe_randomizer`): **F1 → Randomizer**, before New Game — shuffles items and keys
+  from a six-digit seed, with keys moved only where the key logic allows, and writes a spoiler file. It runs alone: with
+  it on, the other mods stay off until it is turned off and the game restarted.
 
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 

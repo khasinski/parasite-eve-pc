@@ -153,3 +153,19 @@ out exactly as before. A model on three pages is repacked:
 - each face's UVs move with its piece, and colours are read at the original position.
 
 A texture that doesn't fit even repacked is refused with that reason.
+
+## Showing an imported model
+
+A screen that only shows a model (no wearing, no fighting) doesn't need a builder:
+- `pe_model_from_imp` (host/pe_model_imp.h) turns a Model into the viewer's PeModel. The rest pose is
+  baked into one part, and the texture goes to a private VRAM addressed the way the import stores it.
+  Pass a part number to show only that part.
+- `pe_imp_weapon_part` (pe_imp_fit.h) names the weapon's part in a `<game>:weapon/...` Model: 11 for
+  RE2 and RE3, 14 for RE1. The rest of that Model is the player holding it.
+- Hand the result to a model stage through a `PE_MODEL_CALLBACK` source. The provider owns what it
+  returns; before freeing it, call `pe_model_forget` so the model cache drops its pointer.
+
+The Wardrobe's Weapons view (L2 / R2 on its screen, `pe_wardrobe/pe_wardrobe_weapons.c`) works this
+way. It fits each weapon for `PE_IMP_USE_PROP`, which drops faces outside the texture, then shows the
+weapon part alone. Parasite Eve's own held gun is listed beside the imports; the game draws one model
+for every weapon (`pe_model_decode_held_gun`).

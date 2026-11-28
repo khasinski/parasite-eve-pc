@@ -434,6 +434,36 @@ static int emit_anim(PeImpSink *sink, const char *low, const char *kind, const c
     return 0;
 }
 
+/* Weapon names: the item table's (pe_src_re3_items.c), whose numbers the PLW files use (PLxxW00 to
+ * W14 are items 0 to 0x14, by sight on the disc); 0 is the bare hand. */
+static const char *const k_weapon[] = {
+    "No weapon", "Combat Knife", "Handgun Sigpro", "Handgun Beretta", "Shotgun Benelli", "Magnum SW",
+    "Grenade Launcher (Burst)", "Grenade Launcher (Flame)", "Grenade Launcher (Acid)", "Grenade Launcher (Freeze)",
+    "Rocket Launcher", "Gatling Gun", "Mine Thrower", "Handgun Eagle", "Rifle M4A1 (Manual)", "Rifle M4A1 (Auto)",
+    "Shotgun M37", "Handgun Sigpro (Enhanced)", "Handgun Beretta (Enhanced)", "Shotgun Benelli (Enhanced)",
+    "Mine Thrower (Enhanced)"};
+static const struct { unsigned pl; const char *who; } k_who[] = {
+    {0x00, "Jill"}, {0x08, "Carlos"}, {0x09, "Mikhail"}, {0x0A, "Nikolai"}};
+
+/* "PLxxWyy" -> "<weapon> (<who>)": yy is the weapon's item number, xx the player
+ * (as the naming table names them); numbers past the tables keep their hex. */
+static void weapon_name(const char *stem, char *out, size_t n) {
+    char hex[3] = {0};
+    unsigned pl = 0xFFu, w = 0xFFu;
+    if (strlen(stem) == 7) {
+        hex[0] = stem[2], hex[1] = stem[3], pl = (unsigned)strtoul(hex, NULL, 16);
+        hex[0] = stem[5], hex[1] = stem[6], w = (unsigned)strtoul(hex, NULL, 16);
+    }
+    const char *who = NULL;
+    for (size_t i = 0; i < sizeof k_who / sizeof k_who[0]; i++) if (k_who[i].pl == pl) who = k_who[i].who;
+    char weapon[32], person[24];
+    if (w < sizeof k_weapon / sizeof k_weapon[0]) snprintf(weapon, sizeof weapon, "%s", k_weapon[w]);
+    else snprintf(weapon, sizeof weapon, "Weapon %02X", w);
+    if (who) snprintf(person, sizeof person, "%s", who);
+    else snprintf(person, sizeof person, "PL%02X", pl);
+    snprintf(out, n, "%s (%s)", weapon, person);
+}
+
 static int emit_player(const uint8_t *data, uint32_t size, const uint8_t *pld, uint32_t pld_size, const char *path,
                        PeImpSink *sink, char *why, size_t n) {
     const char *base = strrchr(path, '/');
@@ -461,7 +491,7 @@ static int emit_player(const uint8_t *data, uint32_t size, const uint8_t *pld, u
             swap_hand(m, 11, w);
             pe_imp_model_free(w), free(w), w = NULL;
             snprintf(id, sizeof id, "weapon/%s", low);
-            snprintf(name, sizeof name, "%s", stem);
+            weapon_name(stem, name, sizeof name);
             if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
                 if (a) pe_imp_animation_free(a), free(a);
                 snprintf(why, n, "could not catalog %s", id);
@@ -503,6 +533,6 @@ const PeImpReader g_re3_player_moves_ps1 = {
 const PeImpReader g_re3_weapons_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "ps1", .format = "plw",
-    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/PLD/PL??W??.PLW",
+    .version = 3, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/PLD/PL??W??.PLW",   /* 3: named */
     .tags = "weapon", .read_pair = read_weapon, .find_companion = find_pld
 };

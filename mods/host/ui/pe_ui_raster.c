@@ -68,6 +68,17 @@ static void pe_blend(PeSurface *s, int x, int y, PeColor c, float coverage) {
     p[3] = (uint8_t)(a * 255.0f + p[3] * keep + 0.5f);
 }
 
+/* Integer-aligned panel strips have full coverage at every pixel center. */
+void pe_ui_fill_rect(PeSurface *s, int x, int y, int w, int h, PeColor c) {
+    if (w <= 0 || h <= 0 || c.a <= 0.0f) return;
+    const int64_t right = (int64_t)x + w, bottom = (int64_t)y + h;
+    const int x1 = right < s->w ? (int)right : s->w;
+    const int y1 = bottom < s->h - 1 ? (int)bottom : s->h - 1;
+    for (int iy = y < 0 ? 0 : y; iy < y1; ++iy)
+        for (int ix = x < 0 ? 0 : x; ix < x1; ++ix)
+            pe_blend(s, ix, iy, c, 1.0f);
+}
+
 void pe_ui_fill_round_rect(PeSurface *s, float x, float y, float w, float h, float r, PeColor c) {
     int ix, iy;
     for (iy = (int)floorf(y) - 1; iy < (int)ceilf(y + h) + 1; iy++) {
