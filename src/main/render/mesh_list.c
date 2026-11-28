@@ -195,14 +195,7 @@ static struct {
     int camera_x;
 } s_FieldShift[2];
 
-static int s_WidescreenHudRight[2] = {280, 280};
-
-int Render_WidescreenHudRight(int slot) {
-    return s_WidescreenHudRight[slot];
-}
-
 void Render_CommitWidescreenPicture(int slot, int buffer_y) {
-    s_WidescreenHudRight[slot] = 280;
     if (buffer_y >= 0 && Psyz_VideoGetWidescreen()) {
         int left, right;
         Render_GetWidescreenPicture(slot, &left, &right);
@@ -212,14 +205,6 @@ void Render_CommitWidescreenPicture(int slot, int buffer_y) {
         if (s_WidescreenCover[slot].tiles && hd_available) {
             if(hd_left<left)left=hd_left;
             if(hd_right>right)right=hd_right;
-        }
-        /* PsyZ squeezes the 320-pixel picture by 3/4 around its centre.
-         * A wider room can shift the view right, moving that edge left
-         * in the buffer. Reserve the largest shift this span can use. */
-        if (right > 320) {
-            int shift = (right - left) / 2 - 160;
-            if (shift > 54 + left) shift = 54 + left;
-            if (shift > 0) s_WidescreenHudRight[slot] -= (3 * shift + 3) / 4;
         }
         if (s_FieldShift[slot].active)
             Psyz_VideoSetWidescreenPictureShifted(buffer_y, left, right, s_FieldShift[slot].dx,

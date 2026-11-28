@@ -38,5 +38,9 @@ int pe_ui_gpu_window_size(int *w, int *h);          /* pixels; 0 if no window */
 /* Show `s` at (x, y) in window pixels, the rest of the screen dimmed by `dim` (0..1). */
 int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim);
 void pe_ui_gpu_hide(void);
+/* A top-right game HUD image, composited below modal UI. Returns 0 when unavailable. */
+int pe_ui_gpu_show_hud(const uint8_t *rgba, int w, int h, float aspect);
+int pe_ui_gpu_hud_visible(void);
+void pe_ui_gpu_hide_hud(void);
 
 #endif

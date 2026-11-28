@@ -7,6 +7,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_present.h"
+#include "ui/pe_ui.h"
 #include "pe_save.h"
 #include "pe1/draw_state.h"
 #include "pe1/draw_buffers.h"
@@ -16,12 +17,18 @@
 #include "pe1/menu_draw_list.h"
 #include "pe1/menu_sound.h"
 #include "pe1/menu_widget.h"
-#include "pe1/render_packets.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/text.h"
 
-enum { MAP_W = 92, MAP_H = 64, MAP_INSET = 12, GRID_COLS = 11, GRID_ROWS = 5 };
+enum {
+    MAP_W = 92, MAP_H = 64,
+    MAP_INSET = 6, GRID_COLS = 11, GRID_ROWS = 5
+};
 enum { SEWER_GRID_ROW_VAR = 55, SEWER_GRID_COL_VAR = 56 };
+enum { SEWER_ENTRANCE_CELL = GRID_COLS + 6 };
+/* Right edge of the original 4:3 picture in the squeezed widescreen buffer.
+ * Camera-specific scenery past this edge does not move the HUD. */
+enum { MAP_WIDE_RIGHT = 280 };
 
 typedef struct MapRoom {
     uint16_t id;
@@ -47,7 +54,7 @@ enum {
     R174, R175, R176, R178, R179, R180, R181, SEWER_ROOMS
 };
 static const MapRoom s_sewer_rooms[SEWER_ROOMS] = {
-    [R166] = {166, 61,  4, 3, 2},
+    [R166] = { .id = 166 },
     [R167] = { .id = 167 }, [R168] = { .id = 168 },
     [R169] = { .id = 169 }, [R170] = { .id = 170 },
     [R171] = { .id = 171 }, [R172] = { .id = 172 },
@@ -83,7 +90,8 @@ static int s_enabled = 1;
 static const MapArea *s_shown_area;
 static int s_shown_room;
 static int s_shown_cell;
-static int s_shown_x, s_shown_y;
+static int s_shown_x, s_shown_y, s_shown_hud;
+static float s_shown_aspect;
 static PeScreen s_screen;
 static MenuWidgetNode *s_system_panel;
 static uint8_t s_pixels[MAP_W * MAP_H * 4];
@@ -133,28 +141,34 @@ static int pe_grid_visited(int cell) {
     return (s_grid_visits[cell / 8] & (1u << (cell % 8))) != 0;
 }
 
-static void pe_sewer_draw_grid(const MapArea *area, int active) {
+static int pe_grid_visible(int cell, int entrance) {
+    return pe_grid_visited(cell) || (entrance && cell == SEWER_ENTRANCE_CELL);
+}
+
+static void pe_sewer_draw_grid(const MapArea *area, unsigned room, int active) {
     const uint32_t corridor = 0x6d7a86;
+    const int entrance = pe_map_visited(area, R166);
     for (int row = 0; row < GRID_ROWS; row++) {
         for (int col = 0; col < GRID_COLS; col++) {
             const int cell = row * GRID_COLS + col;
-            if (!pe_grid_visited(cell)) continue;
+            if (!pe_grid_visible(cell, entrance)) continue;
             const int x = 5 + 8 * col, y = 9 + 6 * row;
-            if ((row & 1) && col + 1 < GRID_COLS && pe_grid_visited(cell + 1))
+            if ((row & 1) && col + 1 < GRID_COLS && pe_grid_visible(cell + 1, entrance))
                 pe_map_rect(x, y - 1, 9, 3, corridor);
             if ((col & 1) && row + 1 < GRID_ROWS && pe_grid_visited(cell + GRID_COLS))
                 pe_map_rect(x - 1, y, 3, 7, corridor);
-            if (row == 1 && (col == 5 || col == 7) && pe_map_visited(area, R166)) {
-                const MapRoom *entry = &area->rooms[R166];
-                const int left = x < entry->x ? x : entry->x;
-                const int right = x > entry->x ? x : entry->x;
-                pe_map_rect(x - 1, entry->y, 3, y - entry->y + 1, corridor);
-                pe_map_rect(left, entry->y, right - left + 1, 1, corridor);
-            }
             if (row == GRID_ROWS - 1 && pe_map_visited(area, R173))
                 pe_map_rect(x - 1, y, 3, 7, corridor);
-            pe_map_rect(x - 2, y - 2, 5, 5, cell == active ? 0xffef9b : 0x8b99a4);
-            pe_map_rect(x - 1, y - 1, 3, 3, cell == active ? 0xd1aa4b : 0x354755);
+            const int is_entrance = entrance && cell == SEWER_ENTRANCE_CELL;
+            const int selected = cell == active || (is_entrance && room == R166);
+            uint32_t outline = selected ? 0xffef9b : 0x8b99a4;
+            uint32_t fill = selected ? 0xd1aa4b : 0x354755;
+            if (is_entrance) {
+                outline = selected ? 0xdbffe7 : 0x7ad5ad;
+                fill = selected ? 0x7de3aa : 0x286552;
+            }
+            pe_map_rect(x - 2, y - 2, 5, 5, outline);
+            pe_map_rect(x - 1, y - 1, 3, 3, fill);
         }
     }
 }
@@ -162,7 +176,7 @@ static void pe_sewer_draw_grid(const MapArea *area, int active) {
 static void pe_map_draw(const MapArea *area, unsigned active, int cell) {
     pe_map_rect(0, 0, MAP_W, MAP_H, 0x687480);
     pe_map_rect(1, 1, MAP_W - 2, MAP_H - 2, 0x141c26);
-    pe_sewer_draw_grid(area, cell);
+    pe_sewer_draw_grid(area, active, cell);
     if (pe_map_visited(area, R176) && pe_map_visited(area, R180))
         pe_map_rect(area->rooms[R176].x, 61,
                     area->rooms[R180].x - area->rooms[R176].x + 1, 2, 0x6d7a86);
@@ -183,10 +197,6 @@ static void pe_map_draw(const MapArea *area, unsigned active, int cell) {
         const int w = 2 * room->half_w + 1, h = 2 * room->half_h + 1;
         uint32_t outline = i == active ? 0xffef9b : 0x8b99a4;
         uint32_t fill = i == active ? 0xd1aa4b : 0x354755;
-        if (i == R166) {
-            outline = i == active ? 0xdbffe7 : 0x7ad5ad;
-            fill = i == active ? 0x7de3aa : 0x286552;
-        }
         pe_map_rect(x, y, w, h, outline);
         pe_map_rect(x + 1, y + 1, w - 2, h - 2, fill);
         if (i == R173) {
@@ -199,6 +209,7 @@ static void pe_map_draw(const MapArea *area, unsigned active, int cell) {
 static void pe_map_hide(void) {
     if (!s_shown_area) return;
     pe_present_hide(PE_PRESENT_MAP_SLOT);
+    pe_ui_gpu_hide_hud();
     s_shown_area = NULL;
 }
 
@@ -237,23 +248,30 @@ static int pe_map_frame(void *ctx, void *user) {
     int top = display->y - frame->y;
     if (right <= 0 || right > frame->w) right = frame->w;
     if (top < 0 || top >= frame->h) top = 0;
-    if (Psyz_VideoGetWidescreen()) {
-        const int safe_right = Render_WidescreenHudRight(1 - slot);
-        if (right > safe_right) right = safe_right;
-    }
+    const int wide = Psyz_VideoGetWidescreen();
+    if (wide && right > MAP_WIDE_RIGHT)
+        right = MAP_WIDE_RIGHT;
     const int x = right - MAP_W - MAP_INSET, y = top + MAP_INSET;
+    const float aspect = wide ? 16.0f / 9.0f :
+        display->w > 0 && display->h > 0 ? (float)display->w / display->h : 320.0f / 224.0f;
     if (s_shown_area == area && s_shown_room == room && s_shown_cell == cell &&
-        s_shown_x == x && s_shown_y == y && !discovered && !discovered_cell) return 0;
+        s_shown_x == x && s_shown_y == y && s_shown_aspect == aspect &&
+        (!s_shown_hud || pe_ui_gpu_hud_visible()) &&
+        !discovered && !discovered_cell) return 0;
 
     pe_map_draw(area, (unsigned)room, cell);
     const PeImage image = { MAP_W, MAP_H, s_pixels };
-    if (pe_present_show(PE_PRESENT_MAP_SLOT, x, y,
-                        &image, PE_PRESENT_BOX, 0x141c26) == 0) {
+    const int hud = pe_ui_gpu_show_hud(s_pixels, MAP_W, MAP_H, aspect);
+    if (hud) pe_present_hide(PE_PRESENT_MAP_SLOT);
+    else pe_ui_gpu_hide_hud();
+    if (hud || pe_present_show(PE_PRESENT_MAP_SLOT, x, y, &image, PE_PRESENT_BOX, 0x141c26) == 0) {
         s_shown_area = area;
         s_shown_room = room;
         s_shown_cell = cell;
         s_shown_x = x;
         s_shown_y = y;
+        s_shown_aspect = aspect;
+        s_shown_hud = hud;
     } else {
         pe_map_hide();
     }

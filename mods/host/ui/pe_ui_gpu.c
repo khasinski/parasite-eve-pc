@@ -34,6 +34,10 @@ static SDL_GPUSampler *s_sampler;
 static SDL_GPUTexture *s_texture;
 static SDL_GPUBuffer *s_vertices;
 static int s_tex_w, s_tex_h, s_win_w, s_win_h, s_visible;
+static SDL_GPUTexture *s_hud_texture;
+static SDL_GPUBuffer *s_hud_vertices;
+static int s_hud_w, s_hud_h, s_hud_visible;
+static float s_hud_aspect;
 static PsyzOverlayInitCB_SDL3GPU s_prev_init;
 static PsyzOverlayRenderCB_SDL3GPU s_prev_render;
 static PsyzOverlayDestroyCB s_prev_destroy;
@@ -42,6 +46,8 @@ static void pe_release(void) {
     if (s_device) {
         if (s_texture) SDL_ReleaseGPUTexture(s_device, s_texture);
         if (s_vertices) SDL_ReleaseGPUBuffer(s_device, s_vertices);
+        if (s_hud_texture) SDL_ReleaseGPUTexture(s_device, s_hud_texture);
+        if (s_hud_vertices) SDL_ReleaseGPUBuffer(s_device, s_hud_vertices);
         if (s_sampler) SDL_ReleaseGPUSampler(s_device, s_sampler);
         if (s_pipeline) SDL_ReleaseGPUGraphicsPipeline(s_device, s_pipeline);
     }
@@ -50,6 +56,9 @@ static void pe_release(void) {
     s_sampler = NULL;
     s_pipeline = NULL;
     s_tex_w = s_tex_h = 0;
+    s_hud_texture = NULL;
+    s_hud_vertices = NULL;
+    s_hud_visible = 0;
 }
 
 static SDL_GPUShader *pe_shader(SDL_GPUShaderStage stage, const unsigned char *spv, size_t spv_size,
@@ -166,10 +175,9 @@ int pe_ui_gpu_window_size(int *w, int *h) {
     return *w > 0 && *h > 0;
 }
 
-int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
-    Vertex verts[12];
-    float w, h;
-    const Uint32 tex_bytes = (Uint32)((size_t)s->w * (size_t)s->h * 4u), vtx_bytes = sizeof verts;
+static int pe_upload(const uint8_t *rgba, int w, int h, SDL_GPUTexture *texture,
+                     SDL_GPUBuffer *vertices, const Vertex *verts, Uint32 vtx_bytes) {
+    const Uint32 tex_bytes = (Uint32)((size_t)w * (size_t)h * 4u);
     SDL_GPUTransferBufferCreateInfo ti;
     SDL_GPUTransferBuffer *transfer;
     SDL_GPUCommandBuffer *cmd;
@@ -180,30 +188,6 @@ int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
     SDL_GPUBufferRegion vdst;
     uint8_t *mapped;
 
-    if (!pe_ui_gpu_ready() || !s->pixels || !pe_ui_gpu_window_size(&s_win_w, &s_win_h) || !pe_pipeline()) return 0;
-    if (!s_texture || s_tex_w != s->w || s_tex_h != s->h) {
-        SDL_GPUTextureCreateInfo info;
-        if (s_texture) SDL_ReleaseGPUTexture(s_device, s_texture);
-        SDL_zero(info);
-        info.type = SDL_GPU_TEXTURETYPE_2D;
-        info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-        info.width = (Uint32)s->w;
-        info.height = (Uint32)s->h;
-        info.layer_count_or_depth = 1;
-        info.num_levels = 1;
-        s_texture = SDL_CreateGPUTexture(s_device, &info);
-        s_tex_w = s->w;
-        s_tex_h = s->h;
-        if (!s_texture) return 0;
-    }
-    w = (float)s_win_w;
-    h = (float)s_win_h;
-    pe_quad(verts, -1, 1, 1, -1, 0.5f / (float)s->w, ((float)s->h - 0.5f) / (float)s->h,
-            0.5f / (float)s->w, ((float)s->h - 0.5f) / (float)s->h, dim);          /* dimming: the solid texel */
-    pe_quad(verts + 6, (float)x / w * 2 - 1, 1 - (float)y / h * 2, (float)(x + s->w) / w * 2 - 1,
-            1 - (float)(y + s->h - 1) / h * 2, 0, 0, 1, (float)(s->h - 1) / (float)s->h, 1);
-
     SDL_zero(ti);
     ti.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     ti.size = tex_bytes + vtx_bytes;
@@ -212,7 +196,7 @@ int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
         SDL_ReleaseGPUTransferBuffer(s_device, transfer);
         return 0;
     }
-    memcpy(mapped, s->pixels, tex_bytes);
+    memcpy(mapped, rgba, tex_bytes);
     memcpy(mapped + tex_bytes, verts, vtx_bytes);
     SDL_UnmapGPUTransferBuffer(s_device, transfer);
     if (!(cmd = SDL_AcquireGPUCommandBuffer(s_device))) {
@@ -222,54 +206,130 @@ int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
     copy = SDL_BeginGPUCopyPass(cmd);
     SDL_zero(tsrc);
     tsrc.transfer_buffer = transfer;
-    tsrc.pixels_per_row = (Uint32)s->w;
-    tsrc.rows_per_layer = (Uint32)s->h;
+    tsrc.pixels_per_row = (Uint32)w;
+    tsrc.rows_per_layer = (Uint32)h;
     SDL_zero(tdst);
-    tdst.texture = s_texture;
-    tdst.w = (Uint32)s->w;
-    tdst.h = (Uint32)s->h;
+    tdst.texture = texture;
+    tdst.w = (Uint32)w;
+    tdst.h = (Uint32)h;
     tdst.d = 1;
-    SDL_UploadToGPUTexture(copy, &tsrc, &tdst, false);
+    SDL_UploadToGPUTexture(copy, &tsrc, &tdst, true);
     SDL_zero(vsrc);
     vsrc.transfer_buffer = transfer;
     vsrc.offset = tex_bytes;
     SDL_zero(vdst);
-    vdst.buffer = s_vertices;
+    vdst.buffer = vertices;
     vdst.size = vtx_bytes;
-    SDL_UploadToGPUBuffer(copy, &vsrc, &vdst, false);
+    SDL_UploadToGPUBuffer(copy, &vsrc, &vdst, true);
     SDL_EndGPUCopyPass(copy);
-    SDL_SubmitGPUCommandBuffer(cmd);
+    const bool submitted = SDL_SubmitGPUCommandBuffer(cmd);
     SDL_ReleaseGPUTransferBuffer(s_device, transfer);
+    return submitted;
+}
+
+static SDL_GPUTexture *pe_texture(int w, int h) {
+    const SDL_GPUTextureCreateInfo info = {
+        .type = SDL_GPU_TEXTURETYPE_2D, .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER, .width = (Uint32)w, .height = (Uint32)h,
+        .layer_count_or_depth = 1, .num_levels = 1
+    };
+    return SDL_CreateGPUTexture(s_device, &info);
+}
+
+int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
+    Vertex verts[12];
+    if (!pe_ui_gpu_ready() || !s->pixels || !pe_ui_gpu_window_size(&s_win_w, &s_win_h)) return 0;
+    if (!s_texture || s_tex_w != s->w || s_tex_h != s->h) {
+        if (s_texture) SDL_ReleaseGPUTexture(s_device, s_texture);
+        s_texture = pe_texture(s->w, s->h);
+        s_tex_w = s->w;
+        s_tex_h = s->h;
+        if (!s_texture) return 0;
+    }
+    const float w = (float)s_win_w, h = (float)s_win_h;
+    pe_quad(verts, -1, 1, 1, -1, 0.5f / (float)s->w, ((float)s->h - 0.5f) / (float)s->h,
+            0.5f / (float)s->w, ((float)s->h - 0.5f) / (float)s->h, dim);
+    pe_quad(verts + 6, (float)x / w * 2 - 1, 1 - (float)y / h * 2, (float)(x + s->w) / w * 2 - 1,
+            1 - (float)(y + s->h - 1) / h * 2, 0, 0, 1, (float)(s->h - 1) / (float)s->h, 1);
+    if (!pe_upload(s->pixels, s->w, s->h, s_texture, s_vertices, verts, sizeof verts)) return 0;
     s_visible = 1;
     return 1;
 }
 
 void pe_ui_gpu_hide(void) { s_visible = 0; }
 
-static void pe_render(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass) {
+int pe_ui_gpu_show_hud(const uint8_t *rgba, int w, int h, float aspect) {
+    Vertex verts[6];
+    if (!s_device || !s_window || !pe_pipeline()) return 0;
+    if (!s_hud_texture || s_hud_w != w || s_hud_h != h) {
+        if (s_hud_texture) SDL_ReleaseGPUTexture(s_device, s_hud_texture);
+        s_hud_texture = pe_texture(w, h);
+        s_hud_w = w;
+        s_hud_h = h;
+        if (!s_hud_texture) return 0;
+    }
+    if (!s_hud_vertices) {
+        const SDL_GPUBufferCreateInfo info = {
+            .usage = SDL_GPU_BUFFERUSAGE_VERTEX, .size = sizeof verts
+        };
+        s_hud_vertices = SDL_CreateGPUBuffer(s_device, &info);
+        if (!s_hud_vertices) return 0;
+    }
+    pe_quad(verts, -1, 1, 1, -1, 0, 0, 1, 1, 1);
+    if (!pe_upload(rgba, w, h, s_hud_texture, s_hud_vertices, verts, sizeof verts)) return 0;
+    s_hud_aspect = aspect;
+    s_hud_visible = 1;
+    return 1;
+}
+
+void pe_ui_gpu_hide_hud(void) { s_hud_visible = 0; }
+int pe_ui_gpu_hud_visible(void) { return s_hud_visible; }
+
+static void pe_draw_layer(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
+                          SDL_Rect rect, SDL_GPUTexture *texture, SDL_GPUBuffer *vertices, int count) {
     static const float kIdentity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     static const float kColorScale[4] = {1, 0, 0, 0};
-    SDL_GPUViewport viewport;
-    SDL_Rect scissor;
+    const SDL_GPUViewport viewport = {(float)rect.x, (float)rect.y, (float)rect.w, (float)rect.h, 0, 1};
     SDL_GPUTextureSamplerBinding tex;
     SDL_GPUBufferBinding vtx;
-    if (s_prev_render) s_prev_render(cmd, pass);
-    if (!s_visible || !s_pipeline || !s_texture || !s_vertices || s_win_w <= 0 || s_win_h <= 0) return;
-    viewport = (SDL_GPUViewport){0, 0, (float)s_win_w, (float)s_win_h, 0, 1};
-    scissor = (SDL_Rect){0, 0, s_win_w, s_win_h};
     SDL_SetGPUViewport(pass, &viewport);
-    SDL_SetGPUScissor(pass, &scissor);
+    SDL_SetGPUScissor(pass, &rect);
     SDL_BindGPUGraphicsPipeline(pass, s_pipeline);
     SDL_zero(tex);
-    tex.texture = s_texture;
+    tex.texture = texture;
     tex.sampler = s_sampler;
     SDL_BindGPUFragmentSamplers(pass, 0, &tex, 1);
     SDL_zero(vtx);
-    vtx.buffer = s_vertices;
+    vtx.buffer = vertices;
     SDL_BindGPUVertexBuffers(pass, 0, &vtx, 1);
     SDL_PushGPUVertexUniformData(cmd, 0, kIdentity, sizeof kIdentity);
     SDL_PushGPUFragmentUniformData(cmd, 0, kColorScale, sizeof kColorScale);
-    SDL_DrawGPUPrimitives(pass, 12, 1, 0, 0);
+    SDL_DrawGPUPrimitives(pass, count, 1, 0, 0);
+}
+
+static void pe_render(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass) {
+    int w, h;
+    if (s_hud_visible && pe_ui_gpu_window_size(&w, &h)) {
+        /* Fit the final game image, including any room-specific side bars. */
+        const int view_w = SDL_min(w, (int)(h * s_hud_aspect + 0.5f));
+        const int view_h = SDL_min(h, (int)(w / s_hud_aspect + 0.5f));
+        const float scale = SDL_min(view_w / 320.0f, view_h / 224.0f);
+        const int margin = (int)(6 * scale + 0.5f);
+        const int hud_w = (int)(s_hud_w * scale * 0.85f + 0.5f);
+        const int hud_h = (int)(s_hud_h * scale * 0.85f + 0.5f);
+        if (hud_w > 0 && hud_h > 0) {
+            const SDL_Rect rect = {(w - view_w) / 2 + view_w - margin - hud_w,
+                                   (h - view_h) / 2 + margin, hud_w, hud_h};
+            pe_draw_layer(cmd, pass, rect, s_hud_texture, s_hud_vertices, 6);
+            const SDL_GPUViewport full = {0, 0, (float)w, (float)h, 0, 1};
+            const SDL_Rect scissor = {0, 0, w, h};
+            SDL_SetGPUViewport(pass, &full);
+            SDL_SetGPUScissor(pass, &scissor);
+        }
+    }
+    if (s_prev_render) s_prev_render(cmd, pass);
+    if (s_visible && s_pipeline && s_texture && s_vertices && s_win_w > 0 && s_win_h > 0)
+        pe_draw_layer(cmd, pass, (SDL_Rect){0, 0, s_win_w, s_win_h}, s_texture, s_vertices, 12);
 }
 
 static void pe_init(SDL_Window *window, SDL_GPUDevice *device) {

@@ -83,8 +83,6 @@ typedef union RenderBufferSlotAddress {
  * buffer_y and starts the slot's next frame; buffer_y < 0 only discards it. */
 void Render_GetWidescreenPicture(int slot, int *left, int *right);
 void Render_CommitWidescreenPicture(int slot, int buffer_y);
-/* Right edge of the original 4:3 picture in the squeezed buffer, safe for HUD blits. */
-int Render_WidescreenHudRight(int slot);
 /* Draws the 2D layers, ordering-table entries top_entry down to 1, centred in
  * the 16:9 view instead of following the view's shift at a room's end, so a
  * menu or dialogue sits in the middle while the room keeps filling the view
