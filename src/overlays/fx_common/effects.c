@@ -1,4 +1,7 @@
 #include "common.h"
+#include <psyz/gpu.h>
+#include <psyz/video.h>
+#include "pe1/render_packets.h"
 #include "pe1/script_queue.h"
 
 #include "fx_common.h"
@@ -167,6 +170,7 @@ int FxCommon_RunFrameLoop(void)
     g_ActiveDrawSlot = 0;
     g_FxCommonResetRequested = 0;
     if(FxCommon_InitScene()<0)return -1;
+    Psyz_GpuResetInterpolation();
     FxCommon_SetAkao3dVolumeRange(g_FxCommonViewMode != 10);
     srand(VSync(-1));
     started = 0;
@@ -214,6 +218,11 @@ int FxCommon_RunFrameLoop(void)
         ResetGraph(1);
         PutDrawEnv(&((FxCommonFrame *)g_FxCommonActiveBuffer)->drawEnv);
         PutDispEnv(&((FxCommonFrame *)g_FxCommonActiveBuffer)->dispEnv);
+        /* This loop bypasses the field renderer's widescreen commit. Give
+         * each city-map buffer the same centred framing before drawing it. */
+        if (Psyz_VideoGetWidescreen())
+            Psyz_VideoSetWidescreenPicture(((FxCommonFrame *)g_FxCommonActiveBuffer)->drawEnv.clip.y,
+                                           -RENDER_WIDESCREEN_MARGIN, 320 + RENDER_WIDESCREEN_MARGIN);
         DrawOTag(&g_FxCommonActiveBuffer->allocation[0xFFF]);
         next = &g_FxCommonFrames[0].buffer;
         if (g_FxCommonActiveBuffer == next)
