@@ -9,6 +9,8 @@
 #include "pe1/inventory_slots.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_dialog.h"
+#include "pe1/menu_item_rows.h"
+#include "pe1/menu_sound.h"
 #include "pe1/render_prim.h"
 #include "pe1/text.h"
 #include "pe1/menu_scroll_cursor.h"
@@ -16,6 +18,8 @@
 #include "pe1/menu_widget.h"
 
 void Menu_DrawItemList(MenuWidgetNode *node);
+void Menu_DrawMainMenuItem(int row);
+int Menu_MainMenuInputHandler(MenuWidgetNode *node, u32 buttons);
 
 #define PE_HOST_ID      "host"
 #define PE_ROWS_MAX     8
@@ -323,7 +327,98 @@ void pe_confirm(const char *question, int default_yes, void (*answer)(int yes)) 
 
 int pe_confirm_open(void) { return s_confirm_choice && MenuWidget_GetCurrentNode() == s_confirm_choice; }
 
+/* SYS has four native settings. Route extension rows before native input can
+ * interpret those indices as debug actions. */
+#define PE_SYSTEM_NATIVE_ROWS 4
+static struct {
+    const PeSystemMenuRow *row;
+    const char *mod_id;
+} s_system_rows[PE_ROWS_MAX];
+static int s_system_count, s_system_base;
+static u8 s_system_text[64];
+
+void pe_system_menu_add(const PeSystemMenuRow *row) {
+    if (!row || !row->label || !row->open || s_system_count == PE_ROWS_MAX) return;
+    s_system_rows[s_system_count].row = row;
+    s_system_rows[s_system_count++].mod_id = pe_mod_current();
+}
+
+static const PeSystemMenuRow *pe_system_row_at(int index) {
+    int offset = index - PE_SYSTEM_NATIVE_ROWS;
+    if (offset < 0) return NULL;
+    for (int i = 0; i < s_system_count; i++) {
+        const PeSystemMenuRow *row = s_system_rows[i].row;
+        if (pe_mod_active(s_system_rows[i].mod_id) && (!row->shown || row->shown()) && offset-- == 0)
+            return row;
+    }
+    return NULL;
+}
+
+static void pe_system_item(int index) {
+    if (index < PE_SYSTEM_NATIVE_ROWS) {
+        Menu_DrawMainMenuItem(index);
+        return;
+    }
+    const PeSystemMenuRow *row = pe_system_row_at(index);
+    if (row) Draw_PrintCenteredTextInWidth(
+        pe_text_from_ascii(s_system_text, sizeof s_system_text, row->label), g_DrawTextPosX);
+}
+
+static void pe_system_draw(MenuWidgetNode *list) {
+    list->selected_base = pe_system_row_at(MenuWidget_GridCellIndex(list)) ? pe_screen_title_base() : s_system_base;
+    MenuWidget_DrawList(list, pe_system_item);
+}
+
+static int pe_system_input(MenuWidgetNode *panel, unsigned buttons) {
+    MenuWidgetNode *list = MenuWidget_GetChild(panel, 0);
+    if ((buttons & PE_MENU_CROSS) && list) {
+        const PeSystemMenuRow *row = pe_system_row_at(MenuWidget_GridCellIndex(list));
+        if (row) {
+            row->open(list);
+            Menu_PlayConfirmSound();
+            return 1;
+        }
+    }
+    return Menu_MainMenuInputHandler(panel, buttons);
+}
+
+static int pe_system_list_rows(void *ctx, void *user) {
+    (void)user;
+    PeHookListRows *args = ctx;
+    MenuWidgetNode *list = args->node;
+    if (!list || list->draw != (void (*)())Menu_DrawMainMenuList || !list->parent ||
+        list->parent->update != (int (*)())Menu_MainMenuInputHandler ||
+        *args->count != PE_SYSTEM_NATIVE_ROWS) return 0;
+    const PeSystemMenuRow *row;
+    int count = PE_SYSTEM_NATIVE_ROWS, width = list->draw_state;
+    while ((row = pe_system_row_at(count))) {
+        int need = Draw_MeasureTextWidth(pe_text_from_ascii(s_system_text, sizeof s_system_text, row->label)) + 12;
+        if (need > width) width = need;
+        count++;
+    }
+    if (count == PE_SYSTEM_NATIVE_ROWS) return 0;
+    s_system_base = list->selected_base;
+    list->parent->grid_width += width - list->draw_state;
+    list->draw_state = width;
+    list->draw = (void (*)())pe_system_draw;
+    list->parent->update = (int (*)())pe_system_input;
+    *args->count = count;
+    return 0;
+}
+
+static int pe_system_help(void *ctx, void *user) {
+    (void)user;
+    MenuWidgetNode *list = MenuWidget_GetCurrentNode();
+    if (list && list->draw == (void (*)())pe_system_draw) {
+        const PeSystemMenuRow *row = pe_system_row_at(MenuWidget_GridCellIndex(list));
+        if (row) *(u8 **)ctx = pe_text_from_ascii(s_system_text, sizeof s_system_text, row->help);
+    }
+    return 0;
+}
+
 void pe_main_menu_init(void) {
+    pe_hook_add(PE_HOOK_LIST_ROWS, pe_system_list_rows, NULL, PE_PRIORITY_NORMAL, PE_HOST_ID);
+    pe_hook_add(PE_HOOK_HELP_TEXT, pe_system_help, NULL, PE_PRIORITY_LATE, PE_HOST_ID);
     pe_hook_add(PE_HOOK_LIST_ROWS, pe_on_list_rows, NULL, PE_PRIORITY_NORMAL, PE_HOST_ID);
     pe_hook_add(PE_HOOK_MAIN_MENU_ICON, pe_on_icon, NULL, PE_PRIORITY_NORMAL, PE_HOST_ID);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_row_title, NULL, PE_PRIORITY_LATE, PE_HOST_ID);

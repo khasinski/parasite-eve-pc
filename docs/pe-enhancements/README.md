@@ -21,6 +21,11 @@ preferences folder. Bag sort and **No random battles** belong to the current sav
 
 ## Quality of life
 
+Open **Aya ? SYS ? Map** to toggle the Chinatown sewer minimap. It defaults to
+On when PE Enhancements is active. Aya's current room is highlighted. Entering a
+room reveals it even with the overlay off, and exploration is saved per save
+slot. The minimap disappears when Aya leaves the sewers.
+
 Manage mods name: **PE Enhancements: quality of life**.
 
 **Movement** page:
